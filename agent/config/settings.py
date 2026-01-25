@@ -23,12 +23,12 @@ class SettingsManager:
         Initialize settings manager.
         
         Args:
-            config_path: Path to config file (default: ~/.edgeguardian/config.yaml)
+            config_path: Path to config file (default: ~/.edge-pulse/config.yaml)
         """
         if config_path:
             self.config_path = config_path
         else:
-            config_dir = Path.home() / ".edgeguardian"
+            config_dir = Path.home() / ".edge-pulse"
             config_dir.mkdir(parents=True, exist_ok=True)
             self.config_path = str(config_dir / "config.yaml")
         

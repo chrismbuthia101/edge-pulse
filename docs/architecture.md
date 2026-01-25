@@ -1,14 +1,14 @@
-# EdgeGuardian Architecture
+# EdgePulse Architecture
 
 ## Overview
 
-EdgeGuardian is designed as an edge-first anomaly detection system for Windows 10+ enterprise devices. The architecture emphasizes offline capability, privacy preservation, and forensic-grade logging.
+EdgePulse is designed as an edge-first anomaly detection system for Windows 10+ enterprise devices. The architecture emphasizes offline capability, privacy preservation, and forensic-grade logging.
 
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    EdgeGuardian Agent                        │
+│                    EdgePulse Agent                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                               │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │

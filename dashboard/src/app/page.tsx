@@ -55,7 +55,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen p-8">
       <header className="mb-8">
-        <h1 className="text-4xl font-bold">EdgeGuardian Dashboard</h1>
+        <h1 className="text-4xl font-bold">EdgePulse Dashboard</h1>
         <p className="text-gray-600 mt-2">ML-Powered Edge Device Anomaly Detection</p>
       </header>
 

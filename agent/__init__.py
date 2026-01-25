@@ -1,5 +1,5 @@
 """
-EdgeGuardian Agent
+EdgePulse Agent
 
 Core monitoring agent for edge device anomaly detection.
 """

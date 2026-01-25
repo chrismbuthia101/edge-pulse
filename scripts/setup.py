@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for EdgeGuardian
+Setup script for EdgePulse
 
 Initializes directories and configuration.
 """
@@ -26,7 +26,7 @@ def setup_directories():
 
 def setup_config():
     """Create default configuration if it doesn't exist."""
-    config_dir = Path.home() / ".edgeguardian"
+    config_dir = Path.home() / ".edge-pulse"
     config_file = config_dir / "config.yaml"
     
     if not config_file.exists():
@@ -38,7 +38,7 @@ def setup_config():
 
 def main():
     """Main setup function."""
-    print("Setting up EdgeGuardian...")
+    print("Setting up EdgePulse...")
     setup_directories()
     setup_config()
     print("\nSetup complete!")

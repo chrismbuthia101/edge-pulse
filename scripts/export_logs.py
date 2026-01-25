@@ -19,7 +19,7 @@ def main():
     """Export logs."""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Export EdgeGuardian logs")
+    parser = argparse.ArgumentParser(description="Export EdgePulse logs")
     parser.add_argument("--device-id", default="default-device", help="Device ID")
     parser.add_argument("--output", default="forensic_export", help="Output directory")
     

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EdgeGuardian Dashboard',
+  title: 'EdgePulse Dashboard',
   description: 'ML-Powered Edge Device Anomaly Detection System',
 }
 

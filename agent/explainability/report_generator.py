@@ -214,7 +214,7 @@ class ReportGenerator:
         """
         lines = []
         lines.append("=" * 60)
-        lines.append("EDGEGUARDIAN ANOMALY ALERT")
+        lines.append("EDGEPULSE ANOMALY ALERT")
         lines.append("=" * 60)
         lines.append(f"Alert ID: {report['alert_id']}")
         lines.append(f"Timestamp: {report['timestamp']}")
@@ -277,7 +277,7 @@ class ReportGenerator:
         <!DOCTYPE html>
         <html>
         <head>
-            <title>EdgeGuardian Alert - {report['alert_id']}</title>
+            <title>EdgePulse Alert - {report['alert_id']}</title>
             <style>
                 body {{ font-family: Arial, sans-serif; margin: 20px; }}
                 .header {{ background-color: {color}; color: white; padding: 15px; border-radius: 5px; }}
@@ -288,7 +288,7 @@ class ReportGenerator:
         </head>
         <body>
             <div class="header">
-                <h1>EdgeGuardian Anomaly Alert</h1>
+                <h1>EdgePulse Anomaly Alert</h1>
                 <p>Alert ID: {report['alert_id']}</p>
                 <p>Timestamp: {report['timestamp']}</p>
                 <p>Device ID: {report['device_id']}</p>

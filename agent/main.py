@@ -1,5 +1,5 @@
 """
-EdgeGuardian Main Agent
+EdgePulse Main Agent
 
 Main orchestration script for the monitoring agent.
 """
@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('edgeguardian.log'),
+        logging.FileHandler('edge-pulse.log'),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -36,16 +36,16 @@ from agent.sync import SupabaseSync
 from agent.config import SettingsManager, PrivacyController
 
 
-class EdgeGuardianAgent:
+class EdgePulseAgent:
     """
-    Main orchestration class for EdgeGuardian agent.
+        Main orchestration class for EdgePulse agent.
     
     Coordinates all components and manages the main execution loop.
     """
 
     def __init__(self, device_id: str = "default-device"):
         """
-        Initialize the EdgeGuardian agent.
+        Initialize the EdgePulse agent.
         
         Args:
             device_id: Device identifier
@@ -141,17 +141,17 @@ class EdgeGuardianAgent:
 
     def initialize(self) -> None:
         """Initialize all components."""
-        logger.info("Initializing EdgeGuardian agent...")
+        logger.info("Initializing EdgePulse agent...")
         
         # Verify log integrity
         if not self.log_manager.verify_all_logs():
             logger.warning("Log integrity verification failed")
         
-        logger.info("EdgeGuardian agent initialized")
+        logger.info("EdgePulse agent initialized")
 
     def start(self) -> None:
         """Start the agent."""
-        logger.info("Starting EdgeGuardian agent...")
+        logger.info("Starting EdgePulse agent...")
         self.running = True
         
         # Register signal handlers
@@ -179,7 +179,7 @@ class EdgeGuardianAgent:
 
     def stop(self) -> None:
         """Stop the agent."""
-        logger.info("Stopping EdgeGuardian agent...")
+        logger.info("Stopping EdgePulse agent...")
         self.running = False
         
         # Save models and baselines
@@ -191,7 +191,7 @@ class EdgeGuardianAgent:
         # Enforce retention
         self.log_manager.enforce_retention()
         
-        logger.info("EdgeGuardian agent stopped")
+        logger.info("EdgePulse agent stopped")
 
     def handle_shutdown(self, signum, frame) -> None:
         """Handle shutdown signals."""
@@ -334,7 +334,7 @@ class EdgeGuardianAgent:
 
     def main_loop(self) -> None:
         """Main execution loop."""
-        logger.info("EdgeGuardian agent running...")
+        logger.info("EdgePulse agent running...")
         
         while self.running:
             try:
@@ -379,7 +379,7 @@ def main():
     
     device_id = os.getenv("DEVICE_ID", "default-device")
     
-    agent = EdgeGuardianAgent(device_id=device_id)
+    agent = EdgePulseAgent(device_id=device_id)
     agent.initialize()
     agent.start()
 

@@ -88,7 +88,7 @@ class LocalNotifier:
             timestamp = alert.get("timestamp", "")
             
             print("\n" + "=" * 60)
-            print(f"EDGEGUARDIAN ALERT - {severity}")
+            print(f"EDGEPULSE ALERT - {severity}")
             print("=" * 60)
             print(f"Alert ID: {alert_id}")
             print(f"Timestamp: {timestamp}")
@@ -118,7 +118,7 @@ class LocalNotifier:
             severity = alert.get("severity", "unknown").upper()
             alert_id = alert.get("alert_id", "unknown")
             
-            title = f"EdgeGuardian Alert - {severity}"
+            title = f"EdgePulse Alert - {severity}"
             message = (
                 f"Anomaly detected: {anomaly.get('anomaly_type', 'unknown')}\n"
                 f"Score: {anomaly.get('anomaly_score', 0.0):.2f}\n"

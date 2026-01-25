@@ -19,7 +19,7 @@ EdgePulse is a comprehensive anomaly detection system designed for enterprise Wi
 EdgePulse follows a modular, edge-first architecture:
 
 ```
-EdgeGuardian/
+EdgePulse/
 ├── agent/              # Core monitoring agent
 │   ├── collectors/     # Data collection (system, process, network)
 │   ├── features/       # Feature engineering
@@ -101,7 +101,7 @@ Access the dashboard at `http://localhost:3000`
 
 Configuration is managed through:
 - Environment variables (`.env` file)
-- YAML config file (`~/.edgeguardian/config.yaml`)
+- YAML config file (`~/.edge-pulse/config.yaml`)
 
 See `.env.example` for available configuration options.
 

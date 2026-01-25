@@ -47,7 +47,7 @@ def simulate_process_spawn():
 
 def main():
     """Main simulation function."""
-    print("EdgeGuardian Attack Simulation")
+    print("EdgePulse Attack Simulation")
     print("=" * 40)
     
     scenarios = [
