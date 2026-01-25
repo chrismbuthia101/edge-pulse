@@ -20,18 +20,29 @@ EdgePulse follows a modular, edge-first architecture:
 
 ```
 EdgePulse/
-├── agent/              # Core monitoring agent
-│   ├── collectors/     # Data collection (system, process, network)
-│   ├── features/       # Feature engineering
-│   ├── detection/      # ML anomaly detection
-│   ├── explainability/ # XAI explanations
-│   ├── logging/        # Secure logging
-│   ├── alerting/       # Alert management
-│   ├── sync/           # Cloud sync (optional)
-│   └── config/         # Configuration
-├── dashboard/          # Next.js analyst dashboard
-├── models/             # Trained ML models
-└── data/               # Local data storage
+├── edge-agent/         # Backend - Python monitoring agent
+│   ├── agent/          # Core agent modules
+│   │   ├── collectors/     # Data collection (system, process, network)
+│   │   ├── features/       # Feature engineering
+│   │   ├── detection/      # ML anomaly detection
+│   │   ├── explainability/ # XAI explanations
+│   │   ├── logging/        # Secure logging
+│   │   ├── alerting/       # Alert management
+│   │   ├── sync/           # Cloud sync (optional)
+│   │   └── config/         # Configuration
+│   ├── scripts/        # Utility scripts
+│   ├── data/           # Local data storage
+│   ├── models/         # Trained ML models
+│   ├── tests/          # Test suite
+│   └── requirements.txt # Python dependencies
+├── frontend/           # Frontend - Next.js analyst dashboard
+│   ├── src/
+│   │   ├── app/        # Next.js app router pages
+│   │   ├── components/ # React components
+│   │   ├── lib/        # Utilities (Supabase client, etc.)
+│   │   └── types/      # TypeScript types
+│   └── package.json    # Node.js dependencies
+└── docs/               # Documentation
 ```
 
 ## Installation
@@ -50,8 +61,9 @@ git clone <repository-url>
 cd edge-pulse
 ```
 
-2. Install Python dependencies:
+2. Install Python dependencies (backend):
 ```bash
+cd edge-agent
 pip install -r requirements.txt
 ```
 
@@ -61,23 +73,25 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. (Optional) Setup dashboard:
+4. (Optional) Setup frontend dashboard:
 ```bash
-cd dashboard
+cd frontend
 npm install
 ```
 
 ## Usage
 
-### Running the Agent
+### Running the Agent (Backend)
 
 ```bash
+cd edge-agent
 python -m agent.main
 ```
 
 Or:
 
 ```bash
+cd edge-agent
 python agent/main.py
 ```
 
@@ -88,10 +102,10 @@ The agent will:
 4. Generate alerts and notifications
 5. Log all events securely
 
-### Dashboard
+### Running the Dashboard (Frontend)
 
 ```bash
-cd dashboard
+cd frontend
 npm run dev
 ```
 
@@ -122,6 +136,7 @@ See `docs/architecture.md` for detailed architecture documentation.
 ### Testing
 
 ```bash
+cd edge-agent
 pytest tests/
 ```
 

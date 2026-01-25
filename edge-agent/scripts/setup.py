@@ -43,9 +43,10 @@ def main():
     setup_config()
     print("\nSetup complete!")
     print("\nNext steps:")
-    print("1. Copy .env.example to .env and configure")
+    print("1. Copy .env.example to .env in project root and configure")
     print("2. Install dependencies: pip install -r requirements.txt")
     print("3. Run the agent: python -m agent.main")
+    print("   (Run from edge-agent/ directory)")
 
 if __name__ == "__main__":
     main()

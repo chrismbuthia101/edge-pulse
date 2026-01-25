@@ -4,11 +4,25 @@
 
 EdgePulse is designed as an edge-first anomaly detection system for Windows 10+ enterprise devices. The architecture emphasizes offline capability, privacy preservation, and forensic-grade logging.
 
+## Project Structure
+
+```
+EdgePulse/
+├── edge-agent/         # Backend (Python)
+│   ├── agent/          # Core agent modules
+│   ├── scripts/        # Utility scripts
+│   ├── data/           # Data storage
+│   └── models/         # ML models
+├── frontend/           # Frontend (Next.js)
+│   └── src/            # Source code
+└── docs/               # Documentation
+```
+
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    EdgePulse Agent                        │
+│                    EdgePulse Agent (Backend)              │
 ├─────────────────────────────────────────────────────────────┤
 │                                                               │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │

@@ -25,6 +25,7 @@ def main():
     
     args = parser.parse_args()
     
+    # Path relative to edge-agent directory
     db_path = f"data/logs/{args.device_id}.db"
     
     if not os.path.exists(db_path):
