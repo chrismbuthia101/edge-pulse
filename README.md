@@ -1,8 +1,8 @@
-# EdgeGuardian
+# EdgePulse
 
 **ML-Powered Edge Device Anomaly Detection System**
 
-EdgeGuardian is a comprehensive anomaly detection system designed for enterprise Windows 10+ laptops and desktops. It operates edge-first with full offline capability, integrating machine learning-based detection, explainable AI, tamper-evident logging, and privacy-preserving design.
+EdgePulse is a comprehensive anomaly detection system designed for enterprise Windows 10+ laptops and desktops. It operates edge-first with full offline capability, integrating machine learning-based detection, explainable AI, tamper-evident logging, and privacy-preserving design.
 
 ## Features
 
