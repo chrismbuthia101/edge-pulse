@@ -16,7 +16,7 @@ EdgePulse is a comprehensive anomaly detection system designed for enterprise Wi
 
 ## Architecture
 
-EdgeGuardian follows a modular, edge-first architecture:
+EdgePulse follows a modular, edge-first architecture:
 
 ```
 EdgeGuardian/
