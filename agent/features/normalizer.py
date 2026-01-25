@@ -1,0 +1,288 @@
+"""
+Device Normalizer
+
+Per-device baseline learning and feature normalization.
+"""
+
+import logging
+import os
+import pickle
+from typing import Optional, Tuple
+import numpy as np
+from sklearn.preprocessing import StandardScaler, RobustScaler
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+class DeviceNormalizer:
+    """
+    Learns per-device baseline behavior and normalizes features.
+    
+    Supports incremental learning with concept drift detection.
+    """
+
+    def __init__(
+        self,
+        device_id: str,
+        baseline_path: Optional[str] = None,
+        use_robust_scaler: bool = True,
+        learning_period_hours: int = 24,
+        decay_factor: float = 0.95,
+    ):
+        """
+        Initialize the device normalizer.
+        
+        Args:
+            device_id: Unique device identifier
+            baseline_path: Path to save/load baseline (default: data/models/{device_id}_baseline.pkl)
+            use_robust_scaler: Use RobustScaler instead of StandardScaler (more robust to outliers)
+            learning_period_hours: Initial learning period in hours (default: 24)
+            decay_factor: Decay factor for incremental updates (default: 0.95)
+        """
+        self.device_id = device_id
+        self.use_robust_scaler = use_robust_scaler
+        self.learning_period_hours = learning_period_hours
+        self.decay_factor = decay_factor
+        
+        if baseline_path:
+            self.baseline_path = baseline_path
+        else:
+            # Default path
+            base_dir = Path("data/models")
+            base_dir.mkdir(parents=True, exist_ok=True)
+            self.baseline_path = str(base_dir / f"{device_id}_baseline.pkl")
+        
+        # Initialize scaler
+        if use_robust_scaler:
+            self.scaler = RobustScaler()
+        else:
+            self.scaler = StandardScaler()
+        
+        self.is_fitted = False
+        self.sample_count = 0
+        self.baseline_mean: Optional[np.ndarray] = None
+        self.baseline_std: Optional[np.ndarray] = None
+
+    def fit(self, features: np.ndarray) -> None:
+        """
+        Learn baseline statistics from features.
+        
+        Args:
+            features: Feature array (can be 1D or 2D)
+        """
+        if features.ndim == 1:
+            features = features.reshape(1, -1)
+        
+        try:
+            self.scaler.fit(features)
+            self.is_fitted = True
+            self.sample_count = len(features)
+            
+            # Store baseline statistics
+            if hasattr(self.scaler, 'mean_'):
+                self.baseline_mean = self.scaler.mean_.copy()
+            if hasattr(self.scaler, 'scale_'):
+                self.baseline_std = self.scaler.scale_.copy()
+            
+            logger.info(f"Fitted normalizer with {self.sample_count} samples")
+        except Exception as e:
+            logger.error(f"Error fitting normalizer: {e}")
+            raise
+
+    def transform(self, features: np.ndarray) -> np.ndarray:
+        """
+        Normalize features using learned baseline.
+        
+        Args:
+            features: Feature array (can be 1D or 2D)
+            
+        Returns:
+            Normalized feature array
+        """
+        if not self.is_fitted:
+            logger.warning("Normalizer not fitted, returning original features")
+            return features
+        
+        if features.ndim == 1:
+            features = features.reshape(1, -1)
+        
+        try:
+            normalized = self.scaler.transform(features)
+            return normalized
+        except Exception as e:
+            logger.error(f"Error transforming features: {e}")
+            return features
+
+    def fit_transform(self, features: np.ndarray) -> np.ndarray:
+        """
+        Fit and transform features in one step.
+        
+        Args:
+            features: Feature array (can be 1D or 2D)
+            
+        Returns:
+            Normalized feature array
+        """
+        self.fit(features)
+        return self.transform(features)
+
+    def update_baseline(self, features: np.ndarray) -> None:
+        """
+        Incrementally update baseline with new features (exponential decay).
+        
+        Args:
+            features: New feature array
+        """
+        if features.ndim == 1:
+            features = features.reshape(1, -1)
+        
+        if not self.is_fitted:
+            # First time: fit normally
+            self.fit(features)
+            return
+        
+        try:
+            # Calculate new statistics
+            new_mean = np.mean(features, axis=0)
+            new_std = np.std(features, axis=0)
+            
+            # Update with exponential decay
+            if self.baseline_mean is not None:
+                self.baseline_mean = (
+                    self.decay_factor * self.baseline_mean +
+                    (1 - self.decay_factor) * new_mean
+                )
+            else:
+                self.baseline_mean = new_mean
+            
+            if self.baseline_std is not None:
+                self.baseline_std = (
+                    self.decay_factor * self.baseline_std +
+                    (1 - self.decay_factor) * new_std
+                )
+            else:
+                self.baseline_std = new_std
+            
+            # Update scaler
+            if hasattr(self.scaler, 'mean_'):
+                self.scaler.mean_ = self.baseline_mean
+            if hasattr(self.scaler, 'scale_'):
+                self.scaler.scale_ = self.baseline_std
+            
+            self.sample_count += len(features)
+            
+            logger.debug(f"Updated baseline with {len(features)} new samples")
+        except Exception as e:
+            logger.error(f"Error updating baseline: {e}")
+
+    def detect_concept_drift(self, features: np.ndarray, threshold: float = 3.0) -> bool:
+        """
+        Detect concept drift (distribution shift).
+        
+        Args:
+            features: Feature array to check
+            threshold: Standard deviations threshold for drift detection
+            
+        Returns:
+            True if concept drift detected
+        """
+        if not self.is_fitted or self.baseline_mean is None or self.baseline_std is None:
+            return False
+        
+        if features.ndim == 1:
+            features = features.reshape(1, -1)
+        
+        try:
+            # Normalize features
+            normalized = self.transform(features)
+            
+            # Check if any feature exceeds threshold
+            max_deviation = np.max(np.abs(normalized))
+            
+            if max_deviation > threshold:
+                logger.warning(f"Concept drift detected: max deviation = {max_deviation}")
+                return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error detecting concept drift: {e}")
+            return False
+
+    def save_baseline(self, path: Optional[str] = None) -> None:
+        """
+        Save baseline statistics to disk.
+        
+        Args:
+            path: Path to save (default: self.baseline_path)
+        """
+        save_path = path or self.baseline_path
+        
+        try:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
+            baseline_data = {
+                "device_id": self.device_id,
+                "scaler": self.scaler,
+                "is_fitted": self.is_fitted,
+                "sample_count": self.sample_count,
+                "baseline_mean": self.baseline_mean,
+                "baseline_std": self.baseline_std,
+                "use_robust_scaler": self.use_robust_scaler,
+            }
+            
+            with open(save_path, 'wb') as f:
+                pickle.dump(baseline_data, f)
+            
+            logger.info(f"Saved baseline to {save_path}")
+        except Exception as e:
+            logger.error(f"Error saving baseline: {e}")
+            raise
+
+    def load_baseline(self, path: Optional[str] = None) -> bool:
+        """
+        Load baseline statistics from disk.
+        
+        Args:
+            path: Path to load (default: self.baseline_path)
+            
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        load_path = path or self.baseline_path
+        
+        if not os.path.exists(load_path):
+            logger.warning(f"Baseline file not found: {load_path}")
+            return False
+        
+        try:
+            with open(load_path, 'rb') as f:
+                baseline_data = pickle.load(f)
+            
+            self.device_id = baseline_data.get("device_id", self.device_id)
+            self.scaler = baseline_data.get("scaler", self.scaler)
+            self.is_fitted = baseline_data.get("is_fitted", False)
+            self.sample_count = baseline_data.get("sample_count", 0)
+            self.baseline_mean = baseline_data.get("baseline_mean")
+            self.baseline_std = baseline_data.get("baseline_std")
+            self.use_robust_scaler = baseline_data.get("use_robust_scaler", True)
+            
+            logger.info(f"Loaded baseline from {load_path} ({self.sample_count} samples)")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading baseline: {e}")
+            return False
+
+    def reset_baseline(self) -> None:
+        """Reset baseline to initial state."""
+        if self.use_robust_scaler:
+            self.scaler = RobustScaler()
+        else:
+            self.scaler = StandardScaler()
+        
+        self.is_fitted = False
+        self.sample_count = 0
+        self.baseline_mean = None
+        self.baseline_std = None
+        
+        logger.info("Baseline reset")

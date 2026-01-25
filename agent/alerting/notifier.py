@@ -1,0 +1,176 @@
+"""
+Local Notifier
+
+Delivers alerts to local user via multiple channels.
+"""
+
+import logging
+from typing import Dict, Optional
+from datetime import datetime, time
+
+logger = logging.getLogger(__name__)
+
+
+class LocalNotifier:
+    """
+    Delivers alerts to local user via multiple notification channels.
+    
+    Supports Windows system tray, console, and log file notifications.
+    """
+
+    def __init__(
+        self,
+        enable_console: bool = True,
+        enable_system_tray: bool = True,
+        enable_log_file: bool = True,
+        quiet_hours_start: Optional[time] = None,
+        quiet_hours_end: Optional[time] = None,
+    ):
+        """
+        Initialize the local notifier.
+        
+        Args:
+            enable_console: Enable console notifications (default: True)
+            enable_system_tray: Enable Windows system tray notifications (default: True)
+            enable_log_file: Enable log file notifications (default: True)
+            quiet_hours_start: Start of quiet hours (optional)
+            quiet_hours_end: End of quiet hours (optional)
+        """
+        self.enable_console = enable_console
+        self.enable_system_tray = enable_system_tray
+        self.enable_log_file = enable_log_file
+        self.quiet_hours_start = quiet_hours_start
+        self.quiet_hours_end = quiet_hours_end
+        
+        # Try to import win10toast-ng
+        self.toast_available = False
+        if enable_system_tray:
+            try:
+                from win10toast_ng import ToastNotifier
+                self.toaster = ToastNotifier()
+                self.toast_available = True
+            except ImportError:
+                logger.warning("win10toast-ng not available, system tray notifications disabled")
+                self.toast_available = False
+
+    def _is_quiet_hours(self) -> bool:
+        """
+        Check if current time is within quiet hours.
+        
+        Returns:
+            True if within quiet hours
+        """
+        if not self.quiet_hours_start or not self.quiet_hours_end:
+            return False
+        
+        now = datetime.now().time()
+        
+        # Handle quiet hours that span midnight
+        if self.quiet_hours_start <= self.quiet_hours_end:
+            return self.quiet_hours_start <= now <= self.quiet_hours_end
+        else:
+            return now >= self.quiet_hours_start or now <= self.quiet_hours_end
+
+    def notify_console(self, alert: Dict) -> None:
+        """
+        Send notification to console.
+        
+        Args:
+            alert: Alert dictionary
+        """
+        if not self.enable_console:
+            return
+        
+        try:
+            anomaly = alert.get("anomaly", {})
+            severity = alert.get("severity", "unknown").upper()
+            alert_id = alert.get("alert_id", "unknown")
+            timestamp = alert.get("timestamp", "")
+            
+            print("\n" + "=" * 60)
+            print(f"EDGEGUARDIAN ALERT - {severity}")
+            print("=" * 60)
+            print(f"Alert ID: {alert_id}")
+            print(f"Timestamp: {timestamp}")
+            print(f"Anomaly Score: {anomaly.get('anomaly_score', 0.0):.4f}")
+            print(f"Type: {anomaly.get('anomaly_type', 'unknown')}")
+            print(f"\n{anomaly.get('explanation', {}).get('summary', 'No explanation available')}")
+            print("=" * 60 + "\n")
+        except Exception as e:
+            logger.error(f"Error sending console notification: {e}")
+
+    def notify_system_tray(self, alert: Dict) -> None:
+        """
+        Send Windows system tray notification.
+        
+        Args:
+            alert: Alert dictionary
+        """
+        if not self.enable_system_tray or not self.toast_available:
+            return
+        
+        # Skip during quiet hours
+        if self._is_quiet_hours():
+            return
+        
+        try:
+            anomaly = alert.get("anomaly", {})
+            severity = alert.get("severity", "unknown").upper()
+            alert_id = alert.get("alert_id", "unknown")
+            
+            title = f"EdgeGuardian Alert - {severity}"
+            message = (
+                f"Anomaly detected: {anomaly.get('anomaly_type', 'unknown')}\n"
+                f"Score: {anomaly.get('anomaly_score', 0.0):.2f}\n"
+                f"ID: {alert_id[:8]}..."
+            )
+            
+            # Duration based on severity
+            duration_map = {
+                "critical": 10,
+                "high": 8,
+                "medium": 5,
+                "low": 3,
+            }
+            duration = duration_map.get(severity.lower(), 5)
+            
+            self.toaster.show_toast(
+                title=title,
+                msg=message,
+                duration=duration,
+                threaded=True,
+            )
+        except Exception as e:
+            logger.error(f"Error sending system tray notification: {e}")
+
+    def notify_log_file(self, alert: Dict) -> None:
+        """
+        Write notification to log file.
+        
+        Args:
+            alert: Alert dictionary
+        """
+        if not self.enable_log_file:
+            return
+        
+        try:
+            log_message = (
+                f"[ALERT] {alert.get('timestamp')} - "
+                f"Severity: {alert.get('severity')} - "
+                f"Alert ID: {alert.get('alert_id')} - "
+                f"Anomaly: {alert.get('anomaly', {}).get('anomaly_type', 'unknown')}"
+            )
+            logger.info(log_message)
+        except Exception as e:
+            logger.error(f"Error writing log file notification: {e}")
+
+    def notify_all(self, alert: Dict) -> None:
+        """
+        Send notification through all enabled channels.
+        
+        Args:
+            alert: Alert dictionary
+        """
+        self.notify_console(alert)
+        self.notify_system_tray(alert)
+        self.notify_log_file(alert)
