@@ -80,8 +80,12 @@ class DeviceNormalizer:
             self.sample_count = len(features)
             
             # Store baseline statistics
+            # RobustScaler uses 'center_' while StandardScaler uses 'mean_'
             if hasattr(self.scaler, 'mean_'):
                 self.baseline_mean = self.scaler.mean_.copy()
+            elif hasattr(self.scaler, 'center_'):
+                self.baseline_mean = self.scaler.center_.copy()
+            
             if hasattr(self.scaler, 'scale_'):
                 self.baseline_std = self.scaler.scale_.copy()
             
@@ -165,8 +169,12 @@ class DeviceNormalizer:
                 self.baseline_std = new_std
             
             # Update scaler
+            # RobustScaler uses 'center_' while StandardScaler uses 'mean_'
             if hasattr(self.scaler, 'mean_'):
                 self.scaler.mean_ = self.baseline_mean
+            elif hasattr(self.scaler, 'center_'):
+                self.scaler.center_ = self.baseline_mean
+            
             if hasattr(self.scaler, 'scale_'):
                 self.scaler.scale_ = self.baseline_std
             

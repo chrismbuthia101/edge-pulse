@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 import queue
+import numpy as np
 from typing import Optional
 from datetime import datetime
 

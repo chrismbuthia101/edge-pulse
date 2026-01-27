@@ -64,11 +64,13 @@ class LogManager:
                     type TEXT NOT NULL,
                     data_json TEXT NOT NULL,
                     hash TEXT,
-                    previous_hash TEXT,
-                    INDEX idx_timestamp (timestamp),
-                    INDEX idx_type (type)
+                    previous_hash TEXT
                 )
             """)
+            
+            # Create indexes separately (SQLite doesn't support inline INDEX)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)")
             
             # Anomalies table
             cursor.execute("""
@@ -78,11 +80,12 @@ class LogManager:
                     score REAL NOT NULL,
                     severity TEXT NOT NULL,
                     explanation_json TEXT,
-                    hash_ref TEXT,
-                    INDEX idx_timestamp (timestamp),
-                    INDEX idx_severity (severity)
+                    hash_ref TEXT
                 )
             """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_anomalies_timestamp ON anomalies(timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_anomalies_severity ON anomalies(severity)")
             
             # System state table
             cursor.execute("""
@@ -90,10 +93,11 @@ class LogManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
                     metrics_json TEXT NOT NULL,
-                    hash_ref TEXT,
-                    INDEX idx_timestamp (timestamp)
+                    hash_ref TEXT
                 )
             """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_system_state_timestamp ON system_state(timestamp)")
             
             # Alerts table
             cursor.execute("""
@@ -102,11 +106,12 @@ class LogManager:
                     timestamp TEXT NOT NULL,
                     alert_json TEXT NOT NULL,
                     acknowledged INTEGER DEFAULT 0,
-                    hash_ref TEXT,
-                    INDEX idx_timestamp (timestamp),
-                    INDEX idx_acknowledged (acknowledged)
+                    hash_ref TEXT
                 )
             """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged)")
             
             conn.commit()
             conn.close()

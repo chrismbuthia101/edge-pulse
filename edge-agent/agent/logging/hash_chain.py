@@ -42,9 +42,12 @@ class HashChainLogger:
         Returns:
             Hexadecimal hash string
         """
+        # Include all fields in hash computation for tamper detection
         hash_string = (
             str(entry.get("sequence_number", "")) +
             str(entry.get("timestamp", "")) +
+            str(entry.get("event_type", "")) +
+            str(entry.get("device_id", "")) +
             json.dumps(entry.get("event_data", {}), sort_keys=True) +
             str(entry.get("previous_hash", ""))
         )

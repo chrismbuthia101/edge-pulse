@@ -82,3 +82,6 @@ htmlcov/
 # Documentation builds
 docs/_build/
 docs/.doctrees/
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.cursor/rules/snyk_rules.mdc
