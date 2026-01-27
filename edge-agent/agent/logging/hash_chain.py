@@ -7,8 +7,13 @@ Tamper-evident logging using SHA-256 hash chains.
 import logging
 import hashlib
 import json
+import os
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+
+from agent.exceptions import LoggingError
+from agent.utils import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +23,27 @@ class HashChainLogger:
     Implements tamper-evident logging using SHA-256 hash chains.
     
     Each log entry is cryptographically linked to the previous one.
+    Persists chain to disk automatically.
     """
 
-    def __init__(self, device_id: str):
+    def __init__(self, device_id: str, path_manager: Optional[PathManager] = None):
         """
         Initialize the hash chain logger.
         
         Args:
             device_id: Device identifier
+            path_manager: Path manager instance (creates new if None)
         """
         self.device_id = device_id
+        self.path_manager = path_manager or PathManager()
+        self.chain_path = self.path_manager.get_hash_chain_path(device_id)
+        
         self.chain: List[Dict] = []
         self.sequence_number = 0
         self.genesis_hash: Optional[str] = None
+        
+        # Load existing chain if available
+        self._load_chain()
 
     def _compute_hash(self, entry: Dict) -> str:
         """
@@ -114,6 +127,9 @@ class HashChainLogger:
         
         if self.genesis_hash is None:
             self.genesis_hash = entry["current_hash"]
+        
+        # Persist to disk after each append
+        self._save_chain()
         
         return True
 
@@ -236,3 +252,66 @@ class HashChainLogger:
             except (ValueError, TypeError):
                 continue
         return entries
+
+    def _load_chain(self) -> None:
+        """Load chain from disk if it exists."""
+        if not self.chain_path.exists():
+            logger.debug(f"Hash chain file not found at {self.chain_path}, starting fresh")
+            return
+        
+        try:
+            with open(self.chain_path, 'r') as f:
+                import_data = json.load(f)
+            
+            self.device_id = import_data.get("device_id", self.device_id)
+            self.genesis_hash = import_data.get("genesis_hash")
+            self.chain = import_data.get("chain", [])
+            
+            if self.chain:
+                self.sequence_number = self.chain[-1].get("sequence_number", 0) + 1
+            else:
+                self.sequence_number = 0
+            
+            # Verify integrity
+            is_valid, tampered_index = self.verify_chain_integrity()
+            if not is_valid:
+                logger.error(f"Hash chain integrity check failed at index {tampered_index}")
+                raise LoggingError(f"Hash chain integrity violation at index {tampered_index}")
+            
+            logger.info(f"Loaded hash chain from {self.chain_path} ({len(self.chain)} entries)")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in hash chain file: {e}")
+            # Start fresh if file is corrupted
+            self.chain = []
+            self.sequence_number = 0
+            self.genesis_hash = None
+        except Exception as e:
+            logger.error(f"Error loading hash chain: {e}")
+            raise LoggingError(f"Failed to load hash chain: {e}") from e
+
+    def _save_chain(self) -> None:
+        """Save chain to disk."""
+        try:
+            # Ensure directory exists
+            self.chain_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            export_data = {
+                "device_id": self.device_id,
+                "genesis_hash": self.genesis_hash,
+                "chain_length": len(self.chain),
+                "last_updated": datetime.utcnow().isoformat(),
+                "chain": self.chain,
+            }
+            
+            # Write to temporary file first, then rename (atomic operation)
+            temp_path = self.chain_path.with_suffix('.tmp')
+            with open(temp_path, 'w') as f:
+                json.dump(export_data, f, indent=2)
+            
+            # Atomic rename
+            temp_path.replace(self.chain_path)
+            
+            logger.debug(f"Saved hash chain to {self.chain_path} ({len(self.chain)} entries)")
+        except Exception as e:
+            logger.error(f"Error saving hash chain: {e}")
+            raise LoggingError(f"Failed to save hash chain: {e}") from e

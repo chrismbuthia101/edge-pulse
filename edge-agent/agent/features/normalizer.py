@@ -5,12 +5,14 @@ Per-device baseline learning and feature normalization.
 """
 
 import logging
-import os
 import pickle
 from typing import Optional, Tuple
+from pathlib import Path
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from pathlib import Path
+
+from agent.exceptions import ModelError
+from agent.utils import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -25,33 +27,33 @@ class DeviceNormalizer:
     def __init__(
         self,
         device_id: str,
-        baseline_path: Optional[str] = None,
+        baseline_path: Optional[Path] = None,
         use_robust_scaler: bool = True,
         learning_period_hours: int = 24,
         decay_factor: float = 0.95,
+        path_manager: Optional[PathManager] = None,
     ):
         """
         Initialize the device normalizer.
         
         Args:
             device_id: Unique device identifier
-            baseline_path: Path to save/load baseline (default: data/models/{device_id}_baseline.pkl)
+            baseline_path: Path to save/load baseline (uses path_manager if None)
             use_robust_scaler: Use RobustScaler instead of StandardScaler (more robust to outliers)
             learning_period_hours: Initial learning period in hours (default: 24)
             decay_factor: Decay factor for incremental updates (default: 0.95)
+            path_manager: Path manager instance (creates new if None)
         """
         self.device_id = device_id
         self.use_robust_scaler = use_robust_scaler
         self.learning_period_hours = learning_period_hours
         self.decay_factor = decay_factor
+        self.path_manager = path_manager or PathManager()
         
         if baseline_path:
-            self.baseline_path = baseline_path
+            self.baseline_path = Path(baseline_path)
         else:
-            # Default path
-            base_dir = Path("data/models")
-            base_dir.mkdir(parents=True, exist_ok=True)
-            self.baseline_path = str(base_dir / f"{device_id}_baseline.pkl")
+            self.baseline_path = self.path_manager.get_baseline_path(device_id)
         
         # Initialize scaler
         if use_robust_scaler:
@@ -217,17 +219,17 @@ class DeviceNormalizer:
             logger.error(f"Error detecting concept drift: {e}")
             return False
 
-    def save_baseline(self, path: Optional[str] = None) -> None:
+    def save_baseline(self, path: Optional[Path] = None) -> None:
         """
         Save baseline statistics to disk.
         
         Args:
             path: Path to save (default: self.baseline_path)
         """
-        save_path = path or self.baseline_path
+        save_path = Path(path) if path else self.baseline_path
         
         try:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
             
             baseline_data = {
                 "device_id": self.device_id,
@@ -245,9 +247,9 @@ class DeviceNormalizer:
             logger.info(f"Saved baseline to {save_path}")
         except Exception as e:
             logger.error(f"Error saving baseline: {e}")
-            raise
+            raise ModelError(f"Failed to save baseline: {e}") from e
 
-    def load_baseline(self, path: Optional[str] = None) -> bool:
+    def load_baseline(self, path: Optional[Path] = None) -> bool:
         """
         Load baseline statistics from disk.
         
@@ -257,9 +259,9 @@ class DeviceNormalizer:
         Returns:
             True if loaded successfully, False otherwise
         """
-        load_path = path or self.baseline_path
+        load_path = Path(path) if path else self.baseline_path
         
-        if not os.path.exists(load_path):
+        if not load_path.exists():
             logger.warning(f"Baseline file not found: {load_path}")
             return False
         

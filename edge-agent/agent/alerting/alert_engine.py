@@ -81,14 +81,23 @@ class AlertEngine:
         Process an anomaly and generate an alert if appropriate.
         
         Args:
-            anomaly: Anomaly dictionary
+            anomaly: Anomaly dictionary (AlertReport structure)
             explanation: Explanation dictionary
             
         Returns:
             Alert dictionary or None if no alert generated
         """
-        anomaly_score = anomaly.get("anomaly_score", 0.0)
-        severity = anomaly.get("severity", "low")
+        # Handle both AlertReport structure and legacy structure
+        if isinstance(anomaly, dict):
+            anomaly_score = anomaly.get("anomaly_score", 0.0)
+            severity = anomaly.get("severity", "low")
+            alert_id = anomaly.get("alert_id")
+        else:
+            # If it's a Pydantic model
+            anomaly_score = getattr(anomaly, "anomaly_score", 0.0)
+            severity = getattr(anomaly, "severity", "low")
+            alert_id = getattr(anomaly, "alert_id", None)
+            anomaly = anomaly.model_dump() if hasattr(anomaly, "model_dump") else anomaly
         
         # Check if alert should be generated
         if not self.should_alert(anomaly_score, severity):
@@ -106,7 +115,7 @@ class AlertEngine:
         
         # Create alert
         alert = {
-            "alert_id": anomaly.get("alert_id"),
+            "alert_id": alert_id or anomaly.get("alert_id"),
             "timestamp": datetime.utcnow().isoformat(),
             "anomaly": anomaly,
             "explanation": explanation,
@@ -123,7 +132,7 @@ class AlertEngine:
         # Correlate with existing alerts
         correlated_alerts = self.correlate_alerts(self.correlation_window)
         if correlated_alerts:
-            alert["correlated_alerts"] = [a["alert_id"] for a in correlated_alerts]
+            alert["correlated_alerts"] = [a.get("alert_id") for a in correlated_alerts if a.get("alert_id")]
             alert["correlation_count"] = len(correlated_alerts)
         
         return alert

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from agent.exceptions import ValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +27,8 @@ class FeatureExtractor:
         window_1min: int = 60,
         window_5min: int = 300,
         window_15min: int = 900,
+        feature_dimension: int = 50,
+        history_retention_hours: int = 1,
     ):
         """
         Initialize the feature extractor.
@@ -33,10 +37,17 @@ class FeatureExtractor:
             window_1min: 1-minute window in seconds (default: 60)
             window_5min: 5-minute window in seconds (default: 300)
             window_15min: 15-minute window in seconds (default: 900)
+            feature_dimension: Target feature vector dimension (default: 50)
+            history_retention_hours: History retention period in hours (default: 1)
         """
         self.window_1min = window_1min
         self.window_5min = window_5min
         self.window_15min = window_15min
+        self.feature_dimension = feature_dimension
+        self.history_retention_hours = history_retention_hours
+        
+        if feature_dimension < 10 or feature_dimension > 1000:
+            raise ValidationError(f"Feature dimension must be between 10 and 1000, got {feature_dimension}")
         
         # Storage for time-series data
         self._cpu_history: List[Dict] = []
@@ -114,8 +125,8 @@ class FeatureExtractor:
         
         # Update history
         self._cpu_history.extend(metrics)
-        # Keep only recent history (last hour)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        # Keep only recent history
+        cutoff = datetime.utcnow() - timedelta(hours=self.history_retention_hours)
         self._cpu_history = [
             m for m in self._cpu_history
             if self._safe_parse_timestamp(m, datetime.min) >= cutoff
@@ -195,7 +206,7 @@ class FeatureExtractor:
         
         # Update history
         self._memory_history.extend(metrics)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = datetime.utcnow() - timedelta(hours=self.history_retention_hours)
         self._memory_history = [
             m for m in self._memory_history
             if self._safe_parse_timestamp(m, datetime.min) >= cutoff
@@ -265,7 +276,7 @@ class FeatureExtractor:
         
         # Update history
         self._process_history.extend(processes)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = datetime.utcnow() - timedelta(hours=self.history_retention_hours)
         self._process_history = [
             p for p in self._process_history
             if self._safe_parse_timestamp(p, datetime.min) >= cutoff
@@ -321,7 +332,7 @@ class FeatureExtractor:
         
         # Update history
         self._network_history.extend(connections)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = datetime.utcnow() - timedelta(hours=self.history_retention_hours)
         # Filter history with proper error handling for missing timestamps
         self._network_history = [
             c for c in self._network_history
@@ -391,7 +402,7 @@ class FeatureExtractor:
         
         # Update history
         self._disk_history.extend(metrics)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = datetime.utcnow() - timedelta(hours=self.history_retention_hours)
         self._disk_history = [
             m for m in self._disk_history
             if self._safe_parse_timestamp(m, datetime.min) >= cutoff
@@ -468,12 +479,12 @@ class FeatureExtractor:
             disk_metrics = [disk_metrics]
         features_dict.update(self.extract_disk_features(disk_metrics))
         
-        # Convert to fixed-length array (pad or truncate to 50 dimensions)
+        # Convert to fixed-length array (pad or truncate to configured dimension)
         feature_names = sorted(features_dict.keys())
         feature_values = [features_dict.get(name, 0.0) for name in feature_names]
         
-        # Ensure fixed length (50 dimensions)
-        target_length = 50
+        # Ensure fixed length (use configured dimension)
+        target_length = self.feature_dimension
         if len(feature_values) < target_length:
             feature_values.extend([0.0] * (target_length - len(feature_values)))
         elif len(feature_values) > target_length:

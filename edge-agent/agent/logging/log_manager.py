@@ -12,6 +12,8 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
 
+from agent.exceptions import LoggingError, ValidationError
+from agent.utils import PathManager
 from .hash_chain import HashChainLogger
 
 logger = logging.getLogger(__name__)
@@ -26,24 +28,31 @@ class LogManager:
 
     def __init__(
         self,
-        db_path: str,
-        device_id: str,
+        db_path: Optional[str] = None,
+        device_id: str = "default-device",
         retention_days: int = 90,
+        path_manager: Optional[PathManager] = None,
     ):
         """
         Initialize the log manager.
         
         Args:
-            db_path: Path to SQLite database
+            db_path: Path to SQLite database (uses path_manager if None)
             device_id: Device identifier
             retention_days: Data retention period in days (default: 90)
+            path_manager: Path manager instance (creates new if None)
         """
-        self.db_path = db_path
+        self.path_manager = path_manager or PathManager()
         self.device_id = device_id
         self.retention_days = retention_days
         
-        # Initialize hash chain
-        self.hash_chain = HashChainLogger(device_id)
+        if db_path:
+            self.db_path = Path(db_path)
+        else:
+            self.db_path = self.path_manager.get_log_db_path(device_id)
+        
+        # Initialize hash chain with path manager
+        self.hash_chain = HashChainLogger(device_id, self.path_manager)
         
         # Initialize database
         self.initialize_database()
@@ -51,10 +60,10 @@ class LogManager:
     def initialize_database(self) -> None:
         """Initialize the SQLite database with required tables."""
         try:
-            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
             
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
             
             # Events table
             cursor.execute("""
@@ -110,16 +119,15 @@ class LogManager:
                 )
             """)
             
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged)")
-            
-            conn.commit()
-            conn.close()
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged)")
+                
+                conn.commit()
             
             logger.info(f"Initialized database at {self.db_path}")
         except Exception as e:
             logger.error(f"Error initializing database: {e}")
-            raise
+            raise LoggingError(f"Failed to initialize database: {e}") from e
 
     def log_event(self, event_type: str, data: Dict) -> None:
         """
@@ -137,26 +145,26 @@ class LogManager:
                 return
             
             # Insert into database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO events (timestamp, type, data_json, hash, previous_hash)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                chain_entry["timestamp"],
-                event_type,
-                json.dumps(data),
-                chain_entry["current_hash"],
-                chain_entry["previous_hash"],
-            ))
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO events (timestamp, type, data_json, hash, previous_hash)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    chain_entry["timestamp"],
+                    event_type,
+                    json.dumps(data),
+                    chain_entry["current_hash"],
+                    chain_entry["previous_hash"],
+                ))
+                
+                conn.commit()
             
             logger.debug(f"Logged event: {event_type}")
         except Exception as e:
             logger.error(f"Error logging event: {e}")
+            raise LoggingError(f"Failed to log event: {e}") from e
 
     def log_anomaly(self, anomaly: Dict) -> None:
         """
@@ -173,26 +181,26 @@ class LogManager:
                 return
             
             # Insert into database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO anomalies (timestamp, score, severity, explanation_json, hash_ref)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                anomaly.get("timestamp", datetime.utcnow().isoformat()),
-                anomaly.get("anomaly_score", 0.0),
-                anomaly.get("severity", "low"),
-                json.dumps(anomaly.get("explanation", {})),
-                chain_entry["current_hash"],
-            ))
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO anomalies (timestamp, score, severity, explanation_json, hash_ref)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    anomaly.get("timestamp", datetime.utcnow().isoformat()),
+                    anomaly.get("anomaly_score", 0.0),
+                    anomaly.get("severity", "low"),
+                    json.dumps(anomaly.get("explanation", {})),
+                    chain_entry["current_hash"],
+                ))
+                
+                conn.commit()
             
             logger.info(f"Logged anomaly: {anomaly.get('alert_id')} (severity: {anomaly.get('severity')})")
         except Exception as e:
             logger.error(f"Error logging anomaly: {e}")
+            raise LoggingError(f"Failed to log anomaly: {e}") from e
 
     def log_alert(self, alert: Dict) -> None:
         """
@@ -209,25 +217,25 @@ class LogManager:
                 return
             
             # Insert into database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO alerts (timestamp, alert_json, acknowledged, hash_ref)
-                VALUES (?, ?, ?, ?)
-            """, (
-                alert.get("timestamp", datetime.utcnow().isoformat()),
-                json.dumps(alert),
-                0,  # Not acknowledged
-                chain_entry["current_hash"],
-            ))
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO alerts (timestamp, alert_json, acknowledged, hash_ref)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    alert.get("timestamp", datetime.utcnow().isoformat()),
+                    json.dumps(alert),
+                    0,  # Not acknowledged
+                    chain_entry["current_hash"],
+                ))
+                
+                conn.commit()
             
             logger.info(f"Logged alert: {alert.get('alert_id')}")
         except Exception as e:
             logger.error(f"Error logging alert: {e}")
+            raise LoggingError(f"Failed to log alert: {e}") from e
 
     def query_events(
         self,
@@ -247,29 +255,28 @@ class LogManager:
             List of event dictionaries
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            query = "SELECT timestamp, type, data_json, hash FROM events WHERE 1=1"
-            params = []
-            
-            if start_time:
-                query += " AND timestamp >= ?"
-                params.append(start_time.isoformat())
-            
-            if end_time:
-                query += " AND timestamp <= ?"
-                params.append(end_time.isoformat())
-            
-            if event_type:
-                query += " AND type = ?"
-                params.append(event_type)
-            
-            query += " ORDER BY timestamp DESC"
-            
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            conn.close()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                query = "SELECT timestamp, type, data_json, hash FROM events WHERE 1=1"
+                params = []
+                
+                if start_time:
+                    query += " AND timestamp >= ?"
+                    params.append(start_time.isoformat())
+                
+                if end_time:
+                    query += " AND timestamp <= ?"
+                    params.append(end_time.isoformat())
+                
+                if event_type:
+                    query += " AND type = ?"
+                    params.append(event_type)
+                
+                query += " ORDER BY timestamp DESC"
+                
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
             
             events = []
             for row in rows:
@@ -283,7 +290,7 @@ class LogManager:
             return events
         except Exception as e:
             logger.error(f"Error querying events: {e}")
-            return []
+            raise LoggingError(f"Failed to query events: {e}") from e
 
     def verify_all_logs(self) -> bool:
         """
@@ -344,28 +351,28 @@ class LogManager:
             cutoff_date = datetime.utcnow().timestamp() - (self.retention_days * 24 * 3600)
             cutoff_iso = datetime.fromtimestamp(cutoff_date).isoformat()
             
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Delete old events
-            cursor.execute("DELETE FROM events WHERE timestamp < ?", (cutoff_iso,))
-            events_deleted = cursor.rowcount
-            
-            # Delete old anomalies
-            cursor.execute("DELETE FROM anomalies WHERE timestamp < ?", (cutoff_iso,))
-            anomalies_deleted = cursor.rowcount
-            
-            # Delete old system state
-            cursor.execute("DELETE FROM system_state WHERE timestamp < ?", (cutoff_iso,))
-            state_deleted = cursor.rowcount
-            
-            # Delete old alerts
-            cursor.execute("DELETE FROM alerts WHERE timestamp < ? AND acknowledged = 1", (cutoff_iso,))
-            alerts_deleted = cursor.rowcount
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                # Delete old events
+                cursor.execute("DELETE FROM events WHERE timestamp < ?", (cutoff_iso,))
+                events_deleted = cursor.rowcount
+                
+                # Delete old anomalies
+                cursor.execute("DELETE FROM anomalies WHERE timestamp < ?", (cutoff_iso,))
+                anomalies_deleted = cursor.rowcount
+                
+                # Delete old system state
+                cursor.execute("DELETE FROM system_state WHERE timestamp < ?", (cutoff_iso,))
+                state_deleted = cursor.rowcount
+                
+                # Delete old alerts
+                cursor.execute("DELETE FROM alerts WHERE timestamp < ? AND acknowledged = 1", (cutoff_iso,))
+                alerts_deleted = cursor.rowcount
+                
+                conn.commit()
             
             logger.info(f"Retention policy enforced: deleted {events_deleted} events, {anomalies_deleted} anomalies, {state_deleted} state entries, {alerts_deleted} alerts")
         except Exception as e:
             logger.error(f"Error enforcing retention: {e}")
+            raise LoggingError(f"Failed to enforce retention: {e}") from e

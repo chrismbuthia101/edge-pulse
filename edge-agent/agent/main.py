@@ -10,9 +10,10 @@ import sys
 import time
 import threading
 import queue
-import numpy as np
 from typing import Optional
 from datetime import datetime
+
+import numpy as np
 
 # Configure logging
 logging.basicConfig(
@@ -29,17 +30,21 @@ logger = logging.getLogger(__name__)
 # Import all modules
 from agent.collectors import SystemMetricsCollector, ProcessMonitor, NetworkMonitor
 from agent.features import FeatureExtractor, DeviceNormalizer
-from agent.detection import IsolationForestDetector, EnsembleDetector
+from agent.detection import IsolationForestDetector, AutoencoderDetector, EnsembleDetector
 from agent.explainability import SHAPExplainer, ReportGenerator
 from agent.logging import LogManager
 from agent.alerting import AlertEngine, LocalNotifier
 from agent.sync import SupabaseSync
 from agent.config import SettingsManager, PrivacyController
+from agent.core import TrainingManager, DetectionPipeline
+from agent.exceptions import EdgePulseError
+from agent.utils import PathManager
+from agent.models import TelemetryData
 
 
 class EdgePulseAgent:
     """
-        Main orchestration class for EdgePulse agent.
+    Main orchestration class for EdgePulse agent.
     
     Coordinates all components and manages the main execution loop.
     """
@@ -54,45 +59,99 @@ class EdgePulseAgent:
         self.device_id = device_id
         self.running = False
         
+        # Initialize path manager
+        self.path_manager = PathManager()
+        
         # Initialize configuration
-        self.settings = SettingsManager()
+        self.settings = SettingsManager(path_manager=self.path_manager)
+        config = self.settings.get_config()
+        
+        # Initialize privacy controls
         self.privacy = PrivacyController(
-            data_retention_days=self.settings.get_setting("privacy.data_retention_days", 30),
-            anonymization_level=self.settings.get_setting("privacy.anonymization_level", "strict"),
-            collect_command_lines=self.settings.get_setting("privacy.collect_command_lines", False),
+            data_retention_days=config.privacy.data_retention_days,
+            anonymization_level=config.privacy.anonymization_level,
+            collect_command_lines=config.privacy.collect_command_lines,
         )
         
         # Initialize collectors
-        collection_interval = self.settings.get_setting("collection.interval", 5)
-        self.metrics_collector = SystemMetricsCollector(collection_interval=collection_interval)
+        self.metrics_collector = SystemMetricsCollector(
+            collection_interval=config.collection.interval
+        )
         self.process_monitor = ProcessMonitor()
         self.network_monitor = NetworkMonitor()
         
         # Initialize feature engineering
         self.feature_extractor = FeatureExtractor(
-            window_1min=self.settings.get_setting("collection.window_1min", 60),
-            window_5min=self.settings.get_setting("collection.window_5min", 300),
-            window_15min=self.settings.get_setting("collection.window_15min", 900),
+            window_1min=config.collection.window_1min,
+            window_5min=config.collection.window_5min,
+            window_15min=config.collection.window_15min,
+            feature_dimension=config.features.feature_dimension,
+            history_retention_hours=config.features.history_retention_hours,
         )
-        self.normalizer = DeviceNormalizer(device_id=device_id)
+        self.normalizer = DeviceNormalizer(
+            device_id=device_id,
+            path_manager=self.path_manager,
+        )
         
         # Try to load existing baseline
         self.normalizer.load_baseline()
         
-        # Initialize detection
+        # Initialize detection - Isolation Forest
         self.isolation_forest = IsolationForestDetector(
-            n_estimators=self.settings.get_setting("detection.isolation_forest.n_estimators", 100),
-            contamination=self.settings.get_setting("detection.isolation_forest.contamination", "auto"),
+            n_estimators=config.detection.isolation_forest.get("n_estimators", 100),
+            contamination=config.detection.isolation_forest.get("contamination", "auto"),
+            device_id=device_id,
+            path_manager=self.path_manager,
         )
         
         # Try to load existing model
         self.isolation_forest.load_model()
         
-        # Initialize ensemble (can add autoencoder later)
+        # Initialize detection - Autoencoder (if enabled)
+        self.autoencoder: Optional[AutoencoderDetector] = None
+        if config.detection.use_autoencoder:
+            autoencoder_config = config.detection.autoencoder
+            # Ensure autoencoder input_dim matches feature dimension
+            input_dim = autoencoder_config.get("input_dim", config.features.feature_dimension)
+            if input_dim != config.features.feature_dimension:
+                logger.warning(
+                    f"Autoencoder input_dim ({input_dim}) doesn't match feature_dimension "
+                    f"({config.features.feature_dimension}), using feature_dimension"
+                )
+                input_dim = config.features.feature_dimension
+            
+            self.autoencoder = AutoencoderDetector(
+                input_dim=input_dim,
+                encoding_dim=autoencoder_config.get("encoding_dim", 8),
+                hidden_layers=autoencoder_config.get("hidden_layers", [64, 32, 16]),
+                learning_rate=autoencoder_config.get("learning_rate", 0.001),
+                device_id=device_id,
+                path_manager=self.path_manager,
+            )
+            
+            # Try to load existing model
+            self.autoencoder.load_model()
+            
+            # Validate loaded model matches current feature dimension
+            if self.autoencoder.is_trained and self.autoencoder.input_dim != config.features.feature_dimension:
+                logger.warning(
+                    f"Loaded autoencoder input_dim ({self.autoencoder.input_dim}) doesn't match "
+                    f"current feature_dimension ({config.features.feature_dimension}), "
+                    f"will retrain on next training cycle"
+                )
+                self.autoencoder.is_trained = False
+        
+        # Initialize ensemble with available detectors
+        detectors = []
+        if self.isolation_forest.is_trained:
+            detectors.append(self.isolation_forest)
+        if self.autoencoder and self.autoencoder.is_trained:
+            detectors.append(self.autoencoder)
+        
         self.ensemble = EnsembleDetector(
-            detectors=[self.isolation_forest],
+            detectors=detectors,
             voting_strategy='weighted',
-            threshold=self.settings.get_setting("detection.threshold", 0.5),
+            threshold=config.detection.threshold,
         )
         
         # Initialize explainability
@@ -102,43 +161,55 @@ class EdgePulseAgent:
         self.report_generator = ReportGenerator(device_id=device_id)
         
         # Initialize logging
-        db_path = f"data/logs/{device_id}.db"
         self.log_manager = LogManager(
-            db_path=db_path,
             device_id=device_id,
-            retention_days=self.settings.get_setting("privacy.data_retention_days", 90),
+            retention_days=config.privacy.data_retention_days,
+            path_manager=self.path_manager,
         )
         
         # Initialize alerting
         self.alert_engine = AlertEngine(
-            correlation_window=self.settings.get_setting("alerting.correlation_window", 300),
-            rate_limit=self.settings.get_setting("alerting.rate_limit", 10),
-            rate_window=self.settings.get_setting("alerting.rate_window", 3600),
-            min_severity=self.settings.get_setting("alerting.min_severity", "medium"),
+            correlation_window=config.alerting.correlation_window,
+            rate_limit=config.alerting.rate_limit,
+            rate_window=config.alerting.rate_window,
+            min_severity=config.alerting.min_severity,
         )
         self.notifier = LocalNotifier()
         
         # Initialize sync (optional)
-        sync_enabled = self.settings.get_setting("sync.enabled", False)
-        if sync_enabled:
+        if config.sync.enabled:
             import os
             self.sync_client = SupabaseSync(
                 supabase_url=os.getenv("SUPABASE_URL", ""),
                 supabase_key=os.getenv("SUPABASE_KEY", ""),
-                enabled=sync_enabled,
+                enabled=config.sync.enabled,
             )
         else:
             self.sync_client = None
         
-        # Threading
-        self.collection_queue = queue.Queue()
-        self.detection_queue = queue.Queue()
-        self.alert_queue = queue.Queue()
+        # Initialize training manager (thread-safe)
+        self.training_manager = TrainingManager(
+            device_id=device_id,
+            training_period_hours=config.training.training_period_hours,
+            min_training_samples=config.training.min_training_samples,
+            max_training_samples=config.training.max_training_samples,
+            path_manager=self.path_manager,
+        )
         
-        # Training data collection
-        self.training_data = []
-        self.training_period_hours = 24
-        self.training_start_time = datetime.utcnow()
+        # Initialize detection pipeline
+        self.detection_pipeline = DetectionPipeline(
+            device_id=device_id,
+            feature_extractor=self.feature_extractor,
+            normalizer=self.normalizer,
+            ensemble=self.ensemble,
+            shap_explainer=self.shap_explainer,
+            report_generator=self.report_generator,
+            alert_engine=self.alert_engine,
+        )
+        
+        # Threading
+        self.collection_queue: queue.Queue = queue.Queue(maxsize=1000)
+        self.alert_queue: queue.Queue = queue.Queue(maxsize=1000)
 
     def initialize(self) -> None:
         """Initialize all components."""
@@ -186,6 +257,8 @@ class EdgePulseAgent:
         # Save models and baselines
         if self.isolation_forest.is_trained:
             self.isolation_forest.save_model()
+        if self.autoencoder and self.autoencoder.is_trained:
+            self.autoencoder.save_model()
         if self.normalizer.is_fitted:
             self.normalizer.save_baseline()
         
@@ -220,8 +293,12 @@ class EdgePulseAgent:
                 telemetry = self.privacy.apply_data_minimization(telemetry)
                 telemetry = self.privacy.anonymize_identifiers(telemetry)
                 
-                # Put in queue for detection
-                self.collection_queue.put(telemetry)
+                # Put in queue for detection (non-blocking with timeout)
+                try:
+                    self.collection_queue.put(telemetry, timeout=1)
+                except queue.Full:
+                    logger.warning("Collection queue full, dropping telemetry")
+                    continue
                 
                 # Log system state
                 self.log_manager.log_event("system_state", telemetry)
@@ -245,58 +322,40 @@ class EdgePulseAgent:
                 features = self.feature_extractor.extract_all_features(telemetry)
                 
                 # Check if in training period
-                hours_elapsed = (datetime.utcnow() - self.training_start_time).total_seconds() / 3600
-                if hours_elapsed < self.training_period_hours:
-                    # Collect training data
-                    self.training_data.append(features)
-                    logger.debug(f"Collecting training data ({len(self.training_data)} samples)")
+                if self.training_manager.is_in_training_period():
+                    # Collect training data (thread-safe)
+                    self.training_manager.add_training_sample(features)
                     
-                    # Update normalizer baseline
-                    if len(self.training_data) % 10 == 0:
-                        training_array = np.array(self.training_data)
-                        self.normalizer.update_baseline(training_array)
+                    # Update normalizer baseline incrementally
+                    sample_count = self.training_manager.get_training_data_count()
+                    if sample_count > 0 and sample_count % 10 == 0:
+                        training_array = self.training_manager.get_training_data()
+                        if len(training_array) > 0:
+                            self.normalizer.update_baseline(training_array)
                     
                     continue
                 
-                # Normalize features
-                normalized = self.normalizer.transform(features.reshape(1, -1))
+                # Process through detection pipeline
+                training_data = self.training_manager.get_training_data()
+                alert = self.detection_pipeline.process_telemetry(
+                    telemetry,
+                    training_data=training_data if len(training_data) > 0 else None,
+                )
                 
-                # Detect anomalies
-                if self.ensemble.detectors and self.isolation_forest.is_trained:
-                    label, score, detector_scores = self.ensemble.predict(normalized)
+                if alert:
+                    # Notify user
+                    self.notifier.notify_all(alert)
                     
-                    if label == 1:
-                        # Generate explanation
-                        explanation = self.shap_explainer.explain_prediction(
-                            normalized[0],
-                            background_data=np.array(self.training_data[-100:]) if self.training_data else None,
-                        )
-                        
-                        # Generate report
-                        anomaly_data = {
-                            "label": label,
-                            "score": score,
-                            "confidence": score,
-                        }
-                        report = self.report_generator.generate_alert_report(
-                            anomaly_data,
-                            explanation,
-                            context=telemetry,
-                        )
-                        
-                        # Process alert
-                        alert = self.alert_engine.process_anomaly(report, explanation)
-                        
-                        if alert:
-                            # Notify user
-                            self.notifier.notify_all(alert)
-                            
-                            # Log
-                            self.log_manager.log_anomaly(report)
-                            self.log_manager.log_alert(alert)
-                            
-                            # Put in sync queue
-                            self.alert_queue.put(alert)
+                    # Log
+                    report = alert.get("anomaly", {})
+                    self.log_manager.log_anomaly(report)
+                    self.log_manager.log_alert(alert)
+                    
+                    # Put in sync queue
+                    try:
+                        self.alert_queue.put(alert, timeout=1)
+                    except queue.Full:
+                        logger.warning("Alert queue full, dropping alert")
                 
             except Exception as e:
                 logger.error(f"Error in detection loop: {e}")
@@ -306,7 +365,8 @@ class EdgePulseAgent:
         if not self.sync_client:
             return
         
-        sync_interval = self.settings.get_setting("sync.interval", 3600)
+        config = self.settings.get_config()
+        sync_interval = config.sync.interval
         last_sync = time.time()
         
         while self.running:
@@ -339,34 +399,55 @@ class EdgePulseAgent:
         
         while self.running:
             try:
-                # Check if training period is complete
-                hours_elapsed = (datetime.utcnow() - self.training_start_time).total_seconds() / 3600
-                
-                if hours_elapsed >= self.training_period_hours and not self.isolation_forest.is_trained:
-                    # Train models
-                    if len(self.training_data) > 100:
-                        logger.info(f"Training models with {len(self.training_data)} samples...")
-                        training_array = np.array(self.training_data)
+                # Check if training should be performed
+                if self.training_manager.should_train():
+                    try:
+                        config = self.settings.get_config()
                         
-                        # Fit normalizer
-                        self.normalizer.fit(training_array)
-                        self.normalizer.save_baseline()
+                        # Prepare detectors to train
+                        detectors_to_train = [self.isolation_forest]
+                        if config.detection.use_autoencoder and self.autoencoder:
+                            detectors_to_train.append(self.autoencoder)
                         
-                        # Normalize training data
-                        normalized_training = self.normalizer.transform(training_array)
-                        
-                        # Train isolation forest
-                        self.isolation_forest.train(normalized_training)
-                        self.isolation_forest.save_model()
-                        
-                        # Update SHAP explainer
-                        self.shap_explainer = SHAPExplainer(
-                            model=self.isolation_forest.model,
+                        # Train all detectors
+                        self.training_manager.train_models(
+                            self.normalizer,
+                            detectors_to_train,
                         )
                         
-                        logger.info("Model training completed")
-                    else:
-                        logger.warning(f"Insufficient training data: {len(self.training_data)} samples")
+                        # Update ensemble with trained detectors
+                        trained_detectors = []
+                        if self.isolation_forest.is_trained:
+                            trained_detectors.append(self.isolation_forest)
+                        if self.autoencoder and self.autoencoder.is_trained:
+                            trained_detectors.append(self.autoencoder)
+                        
+                        self.ensemble = EnsembleDetector(
+                            detectors=trained_detectors,
+                            voting_strategy='weighted',
+                            threshold=config.detection.threshold,
+                        )
+                        
+                        # Update detection pipeline
+                        self.detection_pipeline = DetectionPipeline(
+                            device_id=self.device_id,
+                            feature_extractor=self.feature_extractor,
+                            normalizer=self.normalizer,
+                            ensemble=self.ensemble,
+                            shap_explainer=self.shap_explainer,
+                            report_generator=self.report_generator,
+                            alert_engine=self.alert_engine,
+                        )
+                        
+                        # Update SHAP explainer (use Isolation Forest as primary)
+                        if self.isolation_forest.is_trained:
+                            self.shap_explainer = SHAPExplainer(
+                                model=self.isolation_forest.model,
+                            )
+                        
+                        logger.info(f"Model training completed: {len(trained_detectors)} detector(s) trained")
+                    except Exception as e:
+                        logger.error(f"Error training models: {e}")
                 
                 time.sleep(10)  # Main loop check interval
             except Exception as e:

@@ -5,11 +5,13 @@ Secondary anomaly detector using autoencoder reconstruction error.
 """
 
 import logging
-import os
 from typing import Tuple, Optional
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
-from pathlib import Path
+
+from agent.exceptions import ModelError
+from agent.utils import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,11 @@ class AutoencoderDetector:
         self,
         input_dim: int = 50,
         encoding_dim: int = 8,
-        hidden_layers: list = None,
+        hidden_layers: Optional[list] = None,
         learning_rate: float = 0.001,
-        model_path: Optional[str] = None,
+        model_path: Optional[Path] = None,
+        device_id: Optional[str] = None,
+        path_manager: Optional[PathManager] = None,
     ):
         """
         Initialize the autoencoder detector.
@@ -37,19 +41,22 @@ class AutoencoderDetector:
             encoding_dim: Latent space dimension (default: 8)
             hidden_layers: List of hidden layer sizes (default: [64, 32, 16])
             learning_rate: Learning rate for optimizer (default: 0.001)
-            model_path: Path to save/load model (default: models/autoencoder.h5)
+            model_path: Path to save/load model (uses path_manager if None)
+            device_id: Device ID for device-specific models
+            path_manager: Path manager instance (creates new if None)
         """
         self.input_dim = input_dim
         self.encoding_dim = encoding_dim
         self.hidden_layers = hidden_layers or [64, 32, 16]
         self.learning_rate = learning_rate
+        self.path_manager = path_manager or PathManager()
         
         if model_path:
-            self.model_path = model_path
+            self.model_path = Path(model_path)
         else:
-            base_dir = Path("models")
-            base_dir.mkdir(parents=True, exist_ok=True)
-            self.model_path = str(base_dir / "autoencoder.h5")
+            # Autoencoder uses .h5 extension
+            base_path = self.path_manager.get_model_path("autoencoder", device_id)
+            self.model_path = base_path.with_suffix('.h5')
         
         self.model: Optional[tf.keras.Model] = None
         self.is_trained = False
@@ -90,7 +97,7 @@ class AutoencoderDetector:
     def train(
         self,
         features: np.ndarray,
-        epochs: int = 50,
+        epochs: Optional[int] = None,
         batch_size: int = 32,
         validation_split: float = 0.2,
         early_stopping: bool = True,
@@ -104,9 +111,21 @@ class AutoencoderDetector:
             batch_size: Batch size (default: 32)
             validation_split: Validation split ratio (default: 0.2)
             early_stopping: Use early stopping (default: True)
+            
+        Raises:
+            ModelError: If training fails or feature dimension mismatch
         """
         if features.ndim == 1:
             features = features.reshape(1, -1)
+        
+        # Validate feature dimension matches model input
+        if features.shape[1] != self.input_dim:
+            raise ModelError(
+                f"Feature dimension mismatch: expected {self.input_dim}, got {features.shape[1]}"
+            )
+        
+        if epochs is None:
+            epochs = 50  # Default epochs
         
         try:
             logger.info(f"Training Autoencoder with {len(features)} samples")
@@ -144,7 +163,7 @@ class AutoencoderDetector:
             logger.info(f"Autoencoder training completed")
         except Exception as e:
             logger.error(f"Error training Autoencoder: {e}")
-            raise
+            raise ModelError(f"Failed to train Autoencoder: {e}") from e
 
     def calculate_reconstruction_error(self, features: np.ndarray) -> float:
         """
@@ -195,7 +214,7 @@ class AutoencoderDetector:
         
         return (label, normalized_score)
 
-    def save_model(self, path: Optional[str] = None) -> None:
+    def save_model(self, path: Optional[Path] = None) -> None:
         """
         Save the trained model to disk.
         
@@ -206,15 +225,15 @@ class AutoencoderDetector:
             logger.warning("No trained model to save")
             return
         
-        save_path = path or self.model_path
+        save_path = Path(path) if path else self.model_path
         
         try:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            self.model.save(save_path)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            self.model.save(str(save_path))
             
-            metadata_path = save_path.replace('.h5', '_metadata.npz')
+            metadata_path = save_path.with_suffix('').with_suffix('_metadata.npz')
             np.savez(
-                metadata_path,
+                str(metadata_path),
                 is_trained=self.is_trained,
                 training_samples=self.training_samples,
                 reconstruction_threshold=self.reconstruction_threshold,
@@ -225,9 +244,9 @@ class AutoencoderDetector:
             logger.info(f"Saved Autoencoder model to {save_path}")
         except Exception as e:
             logger.error(f"Error saving model: {e}")
-            raise
+            raise ModelError(f"Failed to save model: {e}") from e
 
-    def load_model(self, path: Optional[str] = None) -> bool:
+    def load_model(self, path: Optional[Path] = None) -> bool:
         """
         Load a trained model from disk.
         
@@ -237,18 +256,18 @@ class AutoencoderDetector:
         Returns:
             True if loaded successfully, False otherwise
         """
-        load_path = path or self.model_path
+        load_path = Path(path) if path else self.model_path
         
-        if not os.path.exists(load_path):
+        if not load_path.exists():
             logger.warning(f"Model file not found: {load_path}")
             return False
         
         try:
-            self.model = tf.keras.models.load_model(load_path)
+            self.model = tf.keras.models.load_model(str(load_path))
             
-            metadata_path = load_path.replace('.h5', '_metadata.npz')
-            if os.path.exists(metadata_path):
-                metadata = np.load(metadata_path, allow_pickle=True)
+            metadata_path = load_path.with_suffix('').with_suffix('_metadata.npz')
+            if metadata_path.exists():
+                metadata = np.load(str(metadata_path), allow_pickle=True)
                 self.is_trained = bool(metadata['is_trained'])
                 self.training_samples = int(metadata['training_samples'])
                 self.reconstruction_threshold = float(metadata['reconstruction_threshold'])

@@ -88,12 +88,13 @@ class PrivacyController:
                 minimized["processes"].append(proc_min)
         
         # Network: only connection metadata (preserve timestamp for feature extraction)
+        # Note: IP anonymization happens in anonymize_identifiers(), not here
         if "network_connections" in telemetry:
             minimized["network_connections"] = [
                 {
                     "timestamp": c.get("timestamp"),  # Preserve timestamp for time-windowed features
                     "local_port": c.get("local_port"),
-                    "remote_address": self.anonymize_ip(c.get("remote_address")),
+                    "remote_address": c.get("remote_address"),  # Will be anonymized later
                     "remote_port": c.get("remote_port"),
                     "status": c.get("status"),
                 }
