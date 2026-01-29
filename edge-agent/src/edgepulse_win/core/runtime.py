@@ -5,7 +5,7 @@ Runtime management for EdgePulse
 import threading
 import time
 from typing import Optional
-from edgepulse_win.pipeline import Pipeline
+from edgepulse_win.core.pipeline import Pipeline
 
 
 class Runtime:

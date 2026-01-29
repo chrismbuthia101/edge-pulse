@@ -11,7 +11,7 @@ pip install -e .
 ## Usage
 
 ```bash
-python -m edgepulse --config config.yaml
+python -m edgepulse_win --config config.yaml
 ```
 
 ## Development

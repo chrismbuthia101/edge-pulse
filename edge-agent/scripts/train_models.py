@@ -10,10 +10,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from edgepulse.core.trainer import Trainer
-from edgepulse.detectors.isolation_forest import IsolationForestDetector
-from edgepulse.detectors.autoencoder import AutoencoderDetector
-from edgepulse.utils.paths import PathManager
+from edgepulse_win.core.trainer import Trainer
+from edgepulse_win.detectors.isolation_forest import IsolationForestDetector
+from edgepulse_win.detectors.autoencoder import AutoencoderDetector
+from edgepulse_win.utils.paths import PathManager
 
 
 def load_training_data(data_path: Path) -> np.ndarray:

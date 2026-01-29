@@ -28,6 +28,8 @@ win10toast-ng>=0.1.4
 
 # Utilities
 python-dateutil>=2.8.2
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # Development (optional)
 pytest>=7.4.0
