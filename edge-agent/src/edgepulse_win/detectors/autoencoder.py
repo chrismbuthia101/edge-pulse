@@ -11,7 +11,7 @@ import numpy as np
 import tensorflow as tf
 
 from edgepulse_win.exceptions import ModelError
-from edgepulse_win.utils import PathManager
+from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)
 

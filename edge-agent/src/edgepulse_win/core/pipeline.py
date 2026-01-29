@@ -6,7 +6,7 @@ from typing import List, Any
 from edgepulse_win.collectors.base import BaseCollector
 from edgepulse_win.features.extractor import FeatureExtractor
 from edgepulse_win.detectors.base import BaseDetector
-from edgepulse_win.alerts.engine import AlertEngine
+from edgepulse_win.alerts.alert_engine import AlertEngine
 
 
 class Pipeline:

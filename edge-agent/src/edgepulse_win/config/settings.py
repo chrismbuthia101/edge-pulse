@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from edgepulse_win.exceptions import ConfigurationError
 from edgepulse_win.models.config import AgentConfig
-from edgepulse_win.utils import PathManager
+from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)
 

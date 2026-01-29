@@ -1,23 +1,23 @@
 """Pydantic models for data structures."""
 
-from edgepulse_win.telemetry import (
+from edgepulse_win.models.telemetry import (
     SystemMetrics,
     ProcessInfo,
     NetworkConnection,
     TelemetryData,
 )
-from edgepulse_win.detection import (
+from edgepulse_win.models.detection import (
     AnomalyResult,
     DetectorScore,
     EnsembleResult,
 )
-from edgepulse_win.alerts import (
+from edgepulse_win.models.alerts import (
     Alert,
     AlertReport,
     Explanation,
     ContributingFactor,
 )
-from edgepulse_win.config import (
+from edgepulse_win.models.config import (
     DetectionConfig,
     CollectionConfig,
     FeatureConfig,

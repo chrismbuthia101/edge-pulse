@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from edgepulse_win.exceptions import LoggingError, ValidationError
-from edgepulse_win.utils import PathManager
-from edgepulse_win.chain import HashChain
-from edgepulse_win.db_utils import initialize_database, enforce_retention
-from edgepulse_win.sanitizer import sanitize
+from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.storage.chain import HashChain
+from edgepulse_win.storage.db_utils import initialize_database, enforce_retention
+from edgepulse_win.storage.sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 

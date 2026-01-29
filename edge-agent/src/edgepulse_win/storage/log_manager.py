@@ -9,9 +9,9 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
 
-from edgepulse_win.utils import PathManager
-from edgepulse_win.writer import LogWriter
-from edgepulse_win.chain import HashChain
+from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.storage.writer import LogWriter
+from edgepulse_win.storage.chain import HashChain
 
 logger = logging.getLogger(__name__)
 

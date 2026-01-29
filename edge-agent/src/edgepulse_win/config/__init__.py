@@ -4,8 +4,8 @@ Configuration Modules
 Settings management and privacy controls.
 """
 
-from edgepulse_win.settings import SettingsManager
-from edgepulse_win.privacy import PrivacyController
+from edgepulse_win.config.settings import SettingsManager
+from edgepulse_win.config.privacy import PrivacyController
 
 __all__ = [
     "SettingsManager",

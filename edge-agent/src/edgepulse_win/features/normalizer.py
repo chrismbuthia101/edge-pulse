@@ -12,7 +12,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
 
 from edgepulse_win.exceptions import ModelError
-from edgepulse_win.utils import PathManager
+from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)
 
