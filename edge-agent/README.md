@@ -1,57 +1,35 @@
-# EdgePulse Agent (Backend)
+# EdgePulse Agent
 
-The EdgePulse agent is the core Python backend that runs on edge devices to monitor system behavior and detect anomalies.
+Edge security monitoring agent for anomaly detection and threat intelligence.
 
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
-
-## Configuration
-
-Copy `.env.example` to `.env` in the project root and configure your settings.
 
 ## Usage
 
-### Run the Agent
+```bash
+python -m edgepulse --config config.yaml
+```
+
+## Development
 
 ```bash
-python -m agent.main
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Format code
+black src/
 ```
 
-### Setup Script
+## Structure
 
-```bash
-python scripts/setup.py
-```
-
-### Export Logs
-
-```bash
-python scripts/export_logs.py --device-id <device-id> --output <output-dir>
-```
-
-### Simulate Attacks
-
-```bash
-python scripts/simulate_attack.py
-```
-
-## Project Structure
-
-```
-edge-agent/
-├── agent/              # Core agent modules
-│   ├── collectors/     # Data collection
-│   ├── features/       # Feature engineering
-│   ├── detection/      # ML detection
-│   ├── explainability/ # XAI
-│   ├── logging/        # Secure logging
-│   ├── alerting/       # Alerting
-│   ├── sync/           # Cloud sync
-│   └── config/         # Configuration
-├── scripts/            # Utility scripts
-├── data/               # Data storage
-└── models/             # ML models
-```
+- `src/edgepulse/` - Main package source code
+- `tests/` - Test suite
+- `scripts/` - Utility scripts
+- `docs/` - Documentation

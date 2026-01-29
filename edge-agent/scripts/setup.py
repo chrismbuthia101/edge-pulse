@@ -45,7 +45,7 @@ def main():
     print("\nNext steps:")
     print("1. Copy .env.example to .env in project root and configure")
     print("2. Install dependencies: pip install -r requirements.txt")
-    print("3. Run the agent: python -m agent.main")
+    print("3. Run the agent: python -m edgepulse_win.cli")
     print("   (Run from edge-agent/ directory)")
 
 if __name__ == "__main__":

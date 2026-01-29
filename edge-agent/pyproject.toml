@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Edge device anomaly detection agent"
 authors = ["EdgePulse Team"]
 readme = "README.md"
-packages = [{include = "agent"}]
+packages = [{include = "edgepulse_win", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
