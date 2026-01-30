@@ -2,8 +2,7 @@ import logging
 import signal
 import sys
 import threading
-import queue
-from typing import Optional
+from typing import Optional, Any, List, Union
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +11,6 @@ from edgepulse_win.collectors.process import ProcessMonitor
 from edgepulse_win.collectors.network import NetworkMonitor
 from edgepulse_win.features.extractor import FeatureExtractor
 from edgepulse_win.features.baseline import DeviceNormalizer
-from edgepulse_win.exceptions import ValidationError
 from edgepulse_win.detectors.isolation_forest import IsolationForestDetector
 from edgepulse_win.detectors.autoencoder import AutoencoderDetector
 from edgepulse_win.detectors.ensemble import EnsembleDetector
@@ -26,22 +24,21 @@ from edgepulse_win.config.settings import SettingsManager
 from edgepulse_win.config.privacy import PrivacyController
 from edgepulse_win.core.runtime import Runtime
 from edgepulse_win.core.pipeline import Pipeline
-
+from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.exceptions import EdgePulseError
 
 class EdgePulseAgent:
-    def __init__(self, settings=None, device_id: str = "default-device"):
+    def __init__(self, settings: Optional[Any] = None, device_id: str = "default-device") -> None:
         # Accept either settings object or device_id for backward compatibility
         if settings is not None:
             self.settings = settings
-            self.device_id = settings.device_id if hasattr(settings, 'device_id') else device_id
+            self.device_id = getattr(settings, 'device_id', device_id)
         else:
             self.device_id = device_id
             self.running = False
 
             self._model_lock = threading.RLock()
             self._training_lock = threading.RLock()
-
-            from edgepulse_win.utils.paths import PathManager
 
             self.path_manager = PathManager()
 
@@ -52,7 +49,6 @@ class EdgePulseAgent:
         self._training_lock = threading.RLock()
         
         if not hasattr(self, 'path_manager'):
-            from edgepulse_win.utils.paths import PathManager
             self.path_manager = PathManager()
         config = self.settings.get_config()
 
@@ -121,17 +117,17 @@ class EdgePulseAgent:
                 )
                 self.autoencoder.is_trained = False
 
-        detectors = []
-        if self.isolation_forest.is_trained:
-            detectors.append(self.isolation_forest)
-        if self.autoencoder and self.autoencoder.is_trained:
-            detectors.append(self.autoencoder)
+            detectors: List[Union[IsolationForestDetector, AutoencoderDetector]] = []
+            if self.isolation_forest.is_trained:
+                detectors.append(self.isolation_forest)
+            if self.autoencoder and self.autoencoder.is_trained:
+                detectors.append(self.autoencoder)
 
-        self.ensemble = EnsembleDetector(
-            detectors=detectors,
-            voting_strategy="weighted",
-            threshold=config.detection.threshold,
-        )
+            self.ensemble = EnsembleDetector(
+                detectors=detectors,
+                voting_strategy="weighted",
+                threshold=config.detection.threshold,
+            )
 
         self.shap_explainer = SHAPExplainer(
             model=self.isolation_forest.model if self.isolation_forest.is_trained else None,
@@ -167,11 +163,11 @@ class EdgePulseAgent:
                     enabled=config.sync.enabled,
                 )
         else:
-            self.sync_client = None
+            self.sync_client: Optional[SupabaseSync] = None
 
         # Create simple pipeline for runtime
-        collectors = [self.metrics_collector, self.process_monitor, self.network_monitor]
-        detectors = []
+        collectors: List[Union[SystemMetricsCollector, ProcessMonitor, NetworkMonitor]] = [self.metrics_collector, self.process_monitor, self.network_monitor]
+        detectors: List[Union[IsolationForestDetector, AutoencoderDetector]] = []
         if self.isolation_forest.is_trained:
             detectors.append(self.isolation_forest)
         if self.autoencoder and self.autoencoder.is_trained:
@@ -190,8 +186,10 @@ class EdgePulseAgent:
     def initialize(self) -> None:
         logger.info("Initializing EdgePulse agent...")
 
-        from edgepulse_win.exceptions import EdgePulseError
+        
 
+        is_valid: bool
+        errors: List[str]
         is_valid, errors = self.settings.validate_config()
         if not is_valid:
             raise EdgePulseError(f"Invalid configuration: {', '.join(errors)}")
@@ -243,7 +241,7 @@ class EdgePulseAgent:
         self.initialize()
         self.start()
 
-    def handle_shutdown(self, signum, frame) -> None:
+    def handle_shutdown(self, signum: int, frame: Any) -> None:
         logger.info(f"Received signal {signum}, shutting down...")
         self.stop()
         sys.exit(0)

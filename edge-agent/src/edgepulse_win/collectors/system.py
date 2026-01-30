@@ -1,54 +1,44 @@
-"""
-System Metrics Collector
-
-Collects CPU, memory, disk, and network metrics using psutil.
-"""
+# System Metrics Collector
+# Collects CPU, memory, disk, and network metrics using psutil.
 
 import time
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime
 import psutil
+from edgepulse_win.collectors.base import BaseCollector
 
 logger = logging.getLogger(__name__)
 
 
-class SystemMetricsCollector:
-    """
-    Collects system-level metrics including CPU, memory, disk, and network I/O.
-    
-    Privacy: No file contents or network payloads are collected - metrics only.
-    """
+class SystemMetricsCollector(BaseCollector):
+    """System metrics collector for Windows systems"""
 
-    def __init__(self, collection_interval: int = 5):
-        """
-        Initialize the system metrics collector.
-        
-        Args:
-            collection_interval: Time in seconds between collections (default: 5)
-        """
+    def __init__(self, collection_interval: int = 5) -> None:
         self.collection_interval = collection_interval
-        self._last_disk_io = None
-        self._last_network_io = None
+        self._last_disk_io: Optional[Any] = None
+        self._last_network_io: Optional[Any] = None
+        self._running = False
 
-    def collect_cpu_metrics(self) -> Dict:
-        """
-        Collect CPU usage metrics.
-        
-        Returns:
-            Dictionary containing CPU metrics with timestamp
-        """
+    def start(self) -> None:
+        self._running = True
+        logger.info("System metrics collector started")
+
+    def stop(self) -> None:
+        self._running = False
+        logger.info("System metrics collector stopped")
+
+    def collect(self) -> List[Any]:
+        if not self._running:
+            return []
+        return [self.collect_all()]
+
+    def collect_cpu_metrics(self) -> Dict[str, Any]:
         try:
-            # Per-core CPU usage
             per_cpu = psutil.cpu_percent(interval=0.1, percpu=True)
-            
-            # Total CPU usage
             total_cpu = psutil.cpu_percent(interval=0.1)
-            
-            # CPU count
             cpu_count = psutil.cpu_count()
-            
-            # CPU frequency (if available)
+
             try:
                 cpu_freq = psutil.cpu_freq()
                 current_freq = cpu_freq.current if cpu_freq else None
@@ -73,13 +63,7 @@ class SystemMetricsCollector:
                 "error": str(e),
             }
 
-    def collect_memory_metrics(self) -> Dict:
-        """
-        Collect memory usage metrics.
-        
-        Returns:
-            Dictionary containing memory metrics with timestamp
-        """
+    def collect_memory_metrics(self) -> Dict[str, Any]:
         try:
             memory = psutil.virtual_memory()
             swap = psutil.swap_memory()
@@ -105,13 +89,7 @@ class SystemMetricsCollector:
                 "error": str(e),
             }
 
-    def collect_disk_metrics(self) -> Dict:
-        """
-        Collect disk I/O metrics.
-        
-        Returns:
-            Dictionary containing disk metrics with timestamp
-        """
+    def collect_disk_metrics(self) -> Dict[str, Any]:
         try:
             disk_io = psutil.disk_io_counters()
             
@@ -124,7 +102,6 @@ class SystemMetricsCollector:
                     "disk_write_count": 0,
                 }
             
-            # Calculate deltas if we have previous data
             read_bytes_delta = 0
             write_bytes_delta = 0
             read_count_delta = 0
@@ -139,7 +116,7 @@ class SystemMetricsCollector:
             self._last_disk_io = disk_io
             
             # Disk usage for all partitions
-            disk_usage = {}
+            disk_usage: Dict[str, Dict[str, Any]] = {}
             try:
                 partitions = psutil.disk_partitions()
                 for partition in partitions:
@@ -177,13 +154,7 @@ class SystemMetricsCollector:
                 "error": str(e),
             }
 
-    def collect_network_metrics(self) -> Dict:
-        """
-        Collect network I/O metrics.
-        
-        Returns:
-            Dictionary containing network metrics with timestamp
-        """
+    def collect_network_metrics(self) -> Dict[str, Any]:
         try:
             network_io = psutil.net_io_counters()
             
@@ -234,13 +205,7 @@ class SystemMetricsCollector:
                 "error": str(e),
             }
 
-    def collect_uptime(self) -> Dict:
-        """
-        Collect system uptime.
-        
-        Returns:
-            Dictionary containing uptime information
-        """
+    def collect_uptime(self) -> Dict[str, Any]:
         try:
             boot_time = psutil.boot_time()
             uptime_seconds = time.time() - boot_time
@@ -258,13 +223,9 @@ class SystemMetricsCollector:
                 "error": str(e),
             }
 
-    def collect_all(self) -> Dict:
-        """
-        Collect all system metrics.
+    def collect_all(self) -> Dict[str, Any]:
+        """Collect all system metrics"""
         
-        Returns:
-            Dictionary containing all collected metrics
-        """
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "cpu": self.collect_cpu_metrics(),

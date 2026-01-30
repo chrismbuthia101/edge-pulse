@@ -1,59 +1,42 @@
-"""
-Process Monitor
-
-Monitors process lifecycle and metadata with privacy-preserving command line hashing.
-"""
+# Process Monitor
 
 import hashlib
 import logging
-from typing import Dict, List, Optional, Generator
+from typing import Dict, List, Optional, Generator, Any
 from datetime import datetime
 import psutil
+from edgepulse_win.collectors.base import BaseCollector
 
 logger = logging.getLogger(__name__)
 
-
-class ProcessMonitor:
-    """
-    Monitors process lifecycle and metadata.
-    
-    Privacy: Command lines are hashed (SHA-256) before storage.
-    Security: Read-only operations, handles permission errors gracefully.
-    """
-
-    def __init__(self):
-        """Initialize the process monitor."""
-        self._process_snapshots: Dict[int, Dict] = {}
+class ProcessMonitor(BaseCollector):
+    def __init__(self) -> None:
+        self._process_snapshots: Dict[int, Dict[str, Any]] = {}
         self._last_check_time = datetime.utcnow()
+        self._running = False
+
+    def start(self) -> None:
+        self._running = True
+        logger.info("Process monitor started")
+
+    def stop(self) -> None:
+        self._running = False
+        logger.info("Process monitor stopped")
+
+    def collect(self) -> List[Any]:
+        if not self._running:
+            return []
+        return [self.get_process_statistics()]
 
     def hash_command_line(self, cmdline: str) -> str:
-        """
-        Hash a command line string using SHA-256 for privacy.
-        
-        Args:
-            cmdline: Command line string to hash
-            
-        Returns:
-            SHA-256 hash in hexadecimal format
-        """
         if not cmdline:
             return ""
         return hashlib.sha256(cmdline.encode('utf-8')).hexdigest()
 
-    def get_process_details(self, pid: int) -> Optional[Dict]:
-        """
-        Get detailed information about a specific process.
-        
-        Args:
-            pid: Process ID
-            
-        Returns:
-            Dictionary with process details or None if process not found
-        """
+    def get_process_details(self, pid: int) -> Optional[Dict[str, Any]]:
         try:
             process = psutil.Process(pid)
             
-            # Get command line (may fail due to permissions)
             try:
                 cmdline = " ".join(process.cmdline())
                 cmdline_hash = self.hash_command_line(cmdline)
@@ -61,19 +44,16 @@ class ProcessMonitor:
                 cmdline = ""
                 cmdline_hash = ""
             
-            # Get parent process
             try:
                 parent_pid = process.ppid()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 parent_pid = None
             
-            # Get creation time
             try:
                 create_time = datetime.fromtimestamp(process.create_time())
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 create_time = None
-            
-            # Get CPU and memory usage
+
             try:
                 cpu_percent = process.cpu_percent(interval=0.1)
                 memory_info = process.memory_info()
@@ -83,19 +63,17 @@ class ProcessMonitor:
                 memory_info = None
                 memory_percent = None
             
-            # Get username
             try:
                 username = process.username()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 username = None
             
-            # Get status
             try:
                 status = process.status()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 status = None
             
-            return {
+            process_details: Dict[str, Any] = {
                 "pid": pid,
                 "name": process.name(),
                 "parent_pid": parent_pid,
@@ -109,6 +87,7 @@ class ProcessMonitor:
                 "status": status,
                 "timestamp": datetime.utcnow().isoformat(),
             }
+            return process_details
         except psutil.NoSuchProcess:
             return None
         except psutil.AccessDenied:
@@ -118,15 +97,9 @@ class ProcessMonitor:
             logger.error(f"Error getting process details for PID {pid}: {e}")
             return None
 
-    def get_running_processes(self) -> List[Dict]:
-        """
-        Get information about all currently running processes.
-        
-        Returns:
-            List of dictionaries containing process information
-        """
-        processes = []
-        current_pids = set()
+    def get_running_processes(self) -> List[Dict[str, Any]]:
+        processes: List[Dict[str, Any]] = []
+        current_pids: set[int] = set()
         
         try:
             for proc in psutil.process_iter(['pid', 'name', 'ppid', 'create_time']):
@@ -147,21 +120,14 @@ class ProcessMonitor:
         except Exception as e:
             logger.error(f"Error iterating processes: {e}")
         
-        # Remove terminated processes from snapshots
         terminated_pids = set(self._process_snapshots.keys()) - current_pids
         for pid in terminated_pids:
             del self._process_snapshots[pid]
         
         return processes
 
-    def watch_for_new_processes(self) -> Generator[Dict, None, None]:
-        """
-        Generator that yields new processes as they are created.
-        
-        Yields:
-            Dictionary containing new process information
-        """
-        current_pids = set()
+    def watch_for_new_processes(self) -> Generator[Dict[str, Any], None, None]:
+        current_pids: set[int] = set()
         
         try:
             for proc in psutil.process_iter(['pid']):
@@ -169,7 +135,6 @@ class ProcessMonitor:
                     pid = proc.info['pid']
                     current_pids.add(pid)
                     
-                    # Check if this is a new process
                     if pid not in self._process_snapshots:
                         process_details = self.get_process_details(pid)
                         if process_details:
@@ -180,24 +145,14 @@ class ProcessMonitor:
         except Exception as e:
             logger.error(f"Error watching for new processes: {e}")
         
-        # Update snapshots
         self._process_snapshots = {
             pid: self._process_snapshots[pid]
             for pid in current_pids
             if pid in self._process_snapshots
         }
 
-    def get_process_tree(self, root_pid: int) -> Dict:
-        """
-        Get process tree starting from a root PID.
-        
-        Args:
-            root_pid: Root process ID
-            
-        Returns:
-            Dictionary representing the process tree
-        """
-        def build_tree(pid: int, visited: set) -> Optional[Dict]:
+    def get_process_tree(self, root_pid: int) -> Dict[str, Any]:
+        def build_tree(pid: int, visited: set[int]) -> Optional[Dict[str, Any]]:
             if pid in visited:
                 return None
             visited.add(pid)
@@ -206,7 +161,7 @@ class ProcessMonitor:
             if not process_details:
                 return None
             
-            children = []
+            children: List[Dict[str, Any]] = []
             try:
                 process = psutil.Process(pid)
                 for child in process.children(recursive=False):
@@ -219,16 +174,10 @@ class ProcessMonitor:
             process_details["children"] = children
             return process_details
         
-        visited = set()
+        visited: set[int] = set()
         return build_tree(root_pid, visited)
 
-    def get_process_statistics(self) -> Dict:
-        """
-        Get aggregate statistics about running processes.
-        
-        Returns:
-            Dictionary with process statistics
-        """
+    def get_process_statistics(self) -> Dict[str, Any]:
         processes = self.get_running_processes()
         
         if not processes:

@@ -1,8 +1,8 @@
-"""Feature extraction from telemetry with validation."""
+# Feature extraction from telemetry with validation.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Any
 
 import numpy as np
 
@@ -36,9 +36,9 @@ class FeatureExtractor:
         self.feature_dimension = feature_dimension
         self.history_retention_hours = history_retention_hours
 
-        self._history: List[Dict] = []
+        self._history: List[Dict[str, Any]] = []
 
-    def _validate_telemetry(self, telemetry: Dict) -> None:
+    def _validate_telemetry(self, telemetry: Dict[str, Any]) -> None:
         """Validate telemetry structure."""
         if not isinstance(telemetry, dict):
             raise ValidationError("Telemetry must be a dictionary")

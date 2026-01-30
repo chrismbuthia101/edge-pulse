@@ -1,18 +1,18 @@
-"""Network feature extraction."""
+# Network feature extraction.
 
-from typing import Dict, List
+from typing import Dict, List, Any
 import numpy as np
 
 from edgepulse_win.history_utils import get_window_data, trim_history
 
 
 class NetworkFeatureExtractor:
-    def __init__(self, window_1min: int, retention_hours: int):
+    def __init__(self, window_1min: int, retention_hours: int) -> None:
         self.window_1min = window_1min
         self.retention_hours = retention_hours
-        self._history: List[Dict] = []
+        self._history: List[Dict[str, Any]] = []
 
-    def extract(self, connections: List[Dict]) -> Dict:
+    def extract(self, connections: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not connections:
             return {
                 "network_entropy_1min": 0.0,

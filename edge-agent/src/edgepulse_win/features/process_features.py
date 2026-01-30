@@ -1,17 +1,16 @@
-"""Process feature extraction."""
+# Process feature extraction.
 
-from typing import Dict, List
-
+from typing import Dict, List, Any
 from edgepulse_win.history_utils import get_window_data, trim_history
 
 
 class ProcessFeatureExtractor:
-    def __init__(self, window_1min: int, retention_hours: int):
+    def __init__(self, window_1min: int, retention_hours: int) -> None:
         self.window_1min = window_1min
         self.retention_hours = retention_hours
-        self._history: List[Dict] = []
+        self._history: List[Dict[str, Any]] = []
 
-    def extract(self, processes: List[Dict]) -> Dict:
+    def extract(self, processes: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not processes:
             return {
                 "process_spawn_frequency_1min": 0.0,

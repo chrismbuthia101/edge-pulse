@@ -1,6 +1,4 @@
-"""
-Core modules for EdgePulse
-"""
+# Core modules for EdgePulse
 
 from edgepulse_win.core.agent import EdgePulseAgent
 from edgepulse_win.core.pipeline import Pipeline

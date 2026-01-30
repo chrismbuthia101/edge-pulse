@@ -1,8 +1,7 @@
-"""Hash chain core: persistence and integrity verification."""
+# Hash chain core: persistence and integrity verification.
 
 import json
 import logging
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class HashChain:
-    """Immutable hash chain with persistence and verification."""
 
     def __init__(self, device_id: str, path_manager: Optional[PathManager] = None) -> None:
         self.device_id = device_id
@@ -28,7 +26,6 @@ class HashChain:
 
     @staticmethod
     def compute_hash(entry: Dict) -> str:
-        """Compute SHA-256 hash of a log entry."""
         import hashlib
         hash_string = (
             str(entry.get("sequence_number", "")) +
@@ -41,7 +38,6 @@ class HashChain:
         return hashlib.sha256(hash_string.encode("utf-8")).hexdigest()
 
     def create_entry(self, event_type: str, event_data: Dict) -> Dict:
-        """Create a new log entry with hash."""
         previous_hash = self.get_head() or "0" * 64
         entry = {
             "sequence_number": self.sequence_number,
@@ -56,7 +52,6 @@ class HashChain:
         return entry
 
     def append(self, entry: Dict) -> bool:
-        """Append entry if integrity checks pass."""
         expected_previous = self.get_head() or "0" * 64
         if entry.get("previous_hash") != expected_previous:
             logger.error("Hash chain integrity violation: previous hash mismatch")
@@ -77,7 +72,6 @@ class HashChain:
         return self.chain[-1].get("current_hash") if self.chain else None
 
     def verify(self) -> Tuple[bool, Optional[int]]:
-        """Verify the integrity of the entire chain."""
         if not self.chain:
             return True, None
 
@@ -124,7 +118,7 @@ class HashChain:
             logger.info(f"Imported and verified hash chain from {path} ({len(self.chain)} entries)")
             return True
         except Exception as exc:
-            logger.error(f"Error importing hash chain: {s}")
+            logger.error(f"Error importing hash chain: {exc}")
             return False
 
     def _load_chain(self) -> None:

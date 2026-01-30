@@ -1,24 +1,18 @@
-"""
-Runtime management for EdgePulse
-"""
+# Runtime management for EdgePulse
 
 import threading
 import time
 from typing import Optional
 from edgepulse_win.core.pipeline import Pipeline
 
-
 class Runtime:
-    """Runtime manager for EdgePulse agent"""
-    
-    def __init__(self, pipeline: Pipeline, interval: float = 1.0):
+    def __init__(self, pipeline: Pipeline, interval: float = 1.0) -> None:
         self.pipeline = pipeline
         self.interval = interval
         self.running = False
         self.thread: Optional[threading.Thread] = None
         
     def start(self) -> None:
-        """Start the runtime"""
         if self.running:
             return
             
@@ -28,13 +22,11 @@ class Runtime:
         self.thread.start()
         
     def stop(self) -> None:
-        """Stop the runtime"""
         self.running = False
         if self.thread:
             self.thread.join()
             
     def _run_loop(self) -> None:
-        """Main runtime loop"""
         while self.running:
             try:
                 self.pipeline.process()

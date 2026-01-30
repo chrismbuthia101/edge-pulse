@@ -1,52 +1,49 @@
-"""
-Network Monitor
+# Network Monitor
 
-Monitors network behavior patterns including connections, ports, and entropy.
-Privacy: NO packet payloads or DNS content - metadata only.
-"""
+# Monitors network behavior patterns including connections, ports, and entropy.
+# Privacy: NO packet payloads or DNS content - metadata only.
 
 import logging
 import math
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Any
 from collections import Counter, defaultdict
 from datetime import datetime
 import psutil
+from edgepulse_win.collectors.base import BaseCollector
 
 logger = logging.getLogger(__name__)
 
 
-class NetworkMonitor:
-    """
-    Monitors network behavior patterns.
-    
-    Privacy: NO packet payloads, NO DNS query content, connection metadata only.
-    """
+class NetworkMonitor(BaseCollector):
+    """Network connection monitor for Windows systems"""
 
-    def __init__(self, rare_port_threshold: int = 5):
-        """
-        Initialize the network monitor.
-        
-        Args:
-            rare_port_threshold: Minimum occurrences for a port to be considered common
-        """
+    def __init__(self, rare_port_threshold: int = 5) -> None:
         self.rare_port_threshold = rare_port_threshold
-        self._connection_history: List[Dict] = []
-        self._port_frequency: Counter = Counter()
-        self._destination_frequency: Counter = Counter()
+        self._connection_history: List[Dict[str, Any]] = []
+        self._port_frequency: Counter[int] = Counter()
+        self._destination_frequency: Counter[str] = Counter()
+        self._running = False
+
+    def start(self) -> None:
+        self._running = True
+        logger.info("Network monitor started")
+
+    def stop(self) -> None:
+        self._running = False
+        logger.info("Network monitor stopped")
+
+    def collect(self) -> List[Any]:
+        if not self._running:
+            return []
+        return [self.get_connection_statistics()]
 
     def get_active_connections(self) -> List[Dict]:
-        """
-        Get all active network connections.
-        
-        Returns:
-            List of dictionaries containing connection information
-        """
         connections = []
         
         try:
             for conn in psutil.net_connections(kind='inet'):
                 try:
-                    conn_info = {
+                    conn_info: Dict[str, Any] = {
                         "timestamp": datetime.utcnow().isoformat(),
                         "family": str(conn.family),
                         "type": str(conn.type),
@@ -79,20 +76,13 @@ class NetworkMonitor:
             logger.warning("Access denied when getting network connections")
         except Exception as e:
             logger.error(f"Error getting active connections: {e}")
-        
-        # Limit history size (keep last 1000 connections)
+    
         if len(self._connection_history) > 1000:
             self._connection_history = self._connection_history[-1000:]
         
         return connections
 
-    def get_connection_statistics(self) -> Dict:
-        """
-        Get aggregate statistics about network connections.
-        
-        Returns:
-            Dictionary with connection statistics
-        """
+    def get_connection_statistics(self) -> Dict[str, Any]:
         connections = self.get_active_connections()
         
         if not connections:
@@ -105,8 +95,8 @@ class NetworkMonitor:
                 "unique_ports": 0,
             }
         
-        status_counter = Counter(conn["status"] for conn in connections)
-        type_counter = Counter(conn["type"] for conn in connections)
+        status_counter: Counter[str] = Counter(conn["status"] for conn in connections)
+        type_counter: Counter[str] = Counter(conn["type"] for conn in connections)
         
         unique_destinations = len(set(
             conn["remote_address"]
@@ -114,7 +104,7 @@ class NetworkMonitor:
             if conn["remote_address"]
         ))
         
-        all_ports = set()
+        all_ports: set[int] = set()
         for conn in connections:
             if conn["local_port"]:
                 all_ports.add(conn["local_port"])
@@ -131,12 +121,6 @@ class NetworkMonitor:
         }
 
     def detect_rare_ports(self) -> List[int]:
-        """
-        Detect ports that are rarely used (potential indicators of unusual activity).
-        
-        Returns:
-            List of rare port numbers
-        """
         if not self._port_frequency:
             return []
         
@@ -148,17 +132,7 @@ class NetworkMonitor:
         
         return sorted(rare_ports)
 
-    def calculate_connection_entropy(self, connections: Optional[List[Dict]] = None) -> float:
-        """
-        Calculate entropy of connection distribution.
-        Higher entropy indicates more diverse/random connection patterns.
-        
-        Args:
-            connections: List of connections (if None, uses active connections)
-            
-        Returns:
-            Entropy value (bits)
-        """
+    def calculate_connection_entropy(self, connections: Optional[List[Dict[str, Any]]] = None) -> float:
         if connections is None:
             connections = self.get_active_connections()
         
@@ -166,7 +140,7 @@ class NetworkMonitor:
             return 0.0
         
         # Count connections by destination
-        destination_counts = Counter(
+        destination_counts: Counter[str] = Counter(
             conn["remote_address"]
             for conn in connections
             if conn["remote_address"]
@@ -188,19 +162,13 @@ class NetworkMonitor:
         
         return entropy
 
-    def get_destination_statistics(self) -> Dict:
-        """
-        Get statistics about connection destinations.
-        
-        Returns:
-            Dictionary with destination statistics
-        """
+    def get_destination_statistics(self) -> Dict[str, Any]:
         connections = self.get_active_connections()
         
-        destination_stats = defaultdict(lambda: {
+        destination_stats: defaultdict[str, Dict[str, Any]] = defaultdict(lambda: {
             "count": 0,
-            "ports": set(),
-            "statuses": Counter(),
+            "ports": set[int](),
+            "statuses": Counter[str](),
         })
         
         for conn in connections:
@@ -231,20 +199,10 @@ class NetworkMonitor:
             "total_unique_destinations": len(result),
         }
 
-    def detect_burst_patterns(self, window_seconds: int = 60) -> List[Dict]:
-        """
-        Detect burst patterns in network connections.
-        
-        Args:
-            window_seconds: Time window in seconds to analyze
-            
-        Returns:
-            List of detected burst patterns
-        """
+    def detect_burst_patterns(self, window_seconds: int = 60) -> List[Dict[str, Any]]:
         if not self._connection_history:
             return []
         
-        # Filter connections within time window with safe timestamp parsing
         cutoff_time = datetime.utcnow().timestamp() - window_seconds
         recent_connections = []
         for conn in self._connection_history:
@@ -255,14 +213,13 @@ class NetworkMonitor:
                     if conn_time > cutoff_time:
                         recent_connections.append(conn)
             except (ValueError, TypeError, KeyError):
-                # Skip connections with invalid or missing timestamps
                 continue
         
         if len(recent_connections) < 10:  # Need minimum connections for burst detection
             return []
         
         # Group by destination
-        destination_counts = Counter(
+        destination_counts: Counter[str] = Counter(
             conn["remote_address"]
             for conn in recent_connections
             if conn["remote_address"]
@@ -274,7 +231,7 @@ class NetworkMonitor:
             sum((count - mean_count) ** 2 for count in destination_counts.values()) / len(destination_counts)
         ) if destination_counts and len(destination_counts) > 1 else 0
         
-        threshold = mean_count + 2 * std_count  # 2 standard deviations
+        threshold = mean_count + 2 * std_count
         
         bursts = []
         for dest, count in destination_counts.items():
@@ -288,8 +245,7 @@ class NetworkMonitor:
         
         return bursts
 
-    def reset_baseline(self):
-        """Reset connection history and frequency counters."""
+    def reset_baseline(self) -> None:
         self._connection_history = []
         self._port_frequency = Counter()
         self._destination_frequency = Counter()

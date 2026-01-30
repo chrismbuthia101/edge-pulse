@@ -1,18 +1,18 @@
-"""Disk feature extraction."""
+# Disk feature extraction.
 
-from typing import Dict, List
+from typing import Dict, List, Any
 import numpy as np
 
 from edgepulse_win.history_utils import get_window_data, trim_history
 
 
 class DiskFeatureExtractor:
-    def __init__(self, window_1min: int, retention_hours: int):
+    def __init__(self, window_1min: int, retention_hours: int) -> None:
         self.window_1min = window_1min
         self.retention_hours = retention_hours
-        self._history: List[Dict] = []
+        self._history: List[Dict[str, Any]] = []
 
-    def extract(self, metrics: List[Dict]) -> Dict:
+    def extract(self, metrics: List[Dict[str, Any]]) -> Dict[str, float]:
         if not metrics:
             return {
                 "disk_write_burst_1min": 0.0,

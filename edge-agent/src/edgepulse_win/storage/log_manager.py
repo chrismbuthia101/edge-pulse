@@ -1,11 +1,7 @@
-"""
-Log Manager
-
-Manages all system logs in SQLite database with hash chain integration.
-"""
+# Log Manager
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from datetime import datetime
 from pathlib import Path
 
@@ -17,28 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class LogManager:
-    """
-    Manages system logs in SQLite database with cryptographic integrity.
-    
-    Integrates with hash chain for tamper-evident logging.
-    """
-
     def __init__(
         self,
-        db_path: Optional[str] = None,
+        db_path: Optional[Union[str, Path]] = None,
         device_id: str = "default-device",
         retention_days: int = 90,
         path_manager: Optional[PathManager] = None,
-    ):
-        """
-        Initialize the log manager.
-        
-        Args:
-            db_path: Path to SQLite database (uses path_manager if None)
-            device_id: Device identifier
-            retention_days: Data retention period in days (default: 90)
-            path_manager: Path manager instance (creates new if None)
-        """
+    ) -> None:
         self.path_manager = path_manager or PathManager()
         self.device_id = device_id
         self.retention_days = retention_days
