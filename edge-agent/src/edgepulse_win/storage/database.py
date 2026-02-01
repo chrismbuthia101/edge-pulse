@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from edgepulse_win.exceptions import LoggingError
+from edgepulse_win.utils.exception_handler import LoggingError
 
 
 class DatabaseManager:

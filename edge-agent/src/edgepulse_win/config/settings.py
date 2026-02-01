@@ -1,40 +1,23 @@
-"""
-Settings Manager
-
-Centralized configuration management with Pydantic validation.
-"""
+# Settings Manager
+# Centralized configuration management with Pydantic validation.
 
 import logging
-import os
 import yaml
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from pathlib import Path
 
 from pydantic import ValidationError as PydanticValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from edgepulse_win.exceptions import ConfigurationError
-from edgepulse_win.models.config import AgentConfig
+from edgepulse_win.utils.exception_handler import ConfigurationError
+from edgepulse_win.schemas.config import AgentConfig
 from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)
 
 
 class SettingsManager:
-    """
-    Manages system configuration with validation and persistence.
-    
-    Uses Pydantic models for type safety and validation.
-    """
 
     def __init__(self, config_path: Optional[Path] = None, path_manager: Optional[PathManager] = None):
-        """
-        Initialize settings manager.
-        
-        Args:
-            config_path: Path to config file (uses path_manager if None)
-            path_manager: Path manager instance (creates new if None)
-        """
         self.path_manager = path_manager or PathManager()
         
         if config_path:
@@ -46,15 +29,6 @@ class SettingsManager:
         self.load_config()
 
     def load_config(self, path: Optional[Path] = None) -> AgentConfig:
-        """
-        Load configuration from file.
-        
-        Args:
-            path: Config file path (default: self.config_path)
-            
-        Returns:
-            AgentConfig instance
-        """
         load_path = path or self.config_path
         
         if not load_path.exists():
@@ -83,13 +57,6 @@ class SettingsManager:
             return self.config
 
     def save_config(self, config: Optional[AgentConfig] = None, path: Optional[Path] = None) -> None:
-        """
-        Save configuration to file.
-        
-        Args:
-            config: AgentConfig instance (default: self.config)
-            path: Config file path (default: self.config_path)
-        """
         save_config = config or self.config
         save_path = path or self.config_path
         
@@ -109,16 +76,6 @@ class SettingsManager:
             raise ConfigurationError(f"Failed to save config: {e}") from e
 
     def get_setting(self, key: str, default: Any = None) -> Any:
-        """
-        Get a setting value.
-        
-        Args:
-            key: Setting key (supports dot notation, e.g., "detection.threshold")
-            default: Default value if not found
-            
-        Returns:
-            Setting value
-        """
         keys = key.split('.')
         value = self.config.model_dump()
         
@@ -134,13 +91,6 @@ class SettingsManager:
         return value if value is not None else default
 
     def set_setting(self, key: str, value: Any) -> None:
-        """
-        Set a setting value.
-        
-        Args:
-            key: Setting key (supports dot notation)
-            value: Setting value
-        """
         keys = key.split('.')
         config_dict = self.config.model_dump()
         config = config_dict
@@ -160,12 +110,6 @@ class SettingsManager:
             raise ConfigurationError(f"Invalid configuration value: {e}") from e
 
     def validate_config(self) -> tuple[bool, list[str]]:
-        """
-        Validate current configuration.
-        
-        Returns:
-            Tuple of (is_valid, list_of_errors)
-        """
         errors = []
         
         try:
@@ -184,10 +128,4 @@ class SettingsManager:
         logger.info("Reset config to defaults")
 
     def get_config(self) -> AgentConfig:
-        """
-        Get the current configuration.
-        
-        Returns:
-            AgentConfig instance
-        """
         return self.config

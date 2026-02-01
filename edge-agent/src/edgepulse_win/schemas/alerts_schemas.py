@@ -1,4 +1,4 @@
-"""Alert and report models."""
+# Alert and report models.
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -49,7 +49,7 @@ class AlertReport(BaseModel):
 
     @field_validator("timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> datetime:
         """Parse timestamp from string if needed."""
         if isinstance(v, str):
             return datetime.fromisoformat(v)
@@ -72,7 +72,7 @@ class Alert(BaseModel):
 
     @field_validator("timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> datetime:
         """Parse timestamp from string if needed."""
         if isinstance(v, str):
             return datetime.fromisoformat(v)

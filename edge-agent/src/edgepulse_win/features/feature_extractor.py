@@ -6,7 +6,7 @@ from typing import Dict, List, Any
 
 import numpy as np
 
-from edgepulse_win.exceptions import ValidationError
+from edgepulse_win.utils.exception_handler import ValidationError
 
 logger = logging.getLogger(__name__)
 

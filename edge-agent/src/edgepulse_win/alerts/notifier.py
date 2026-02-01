@@ -1,8 +1,5 @@
-"""
-Local Notifier
-
-Delivers alerts to local user via multiple channels.
-"""
+# Local Notifier
+# Delivers alerts to local user via multiple channels.
 
 import logging
 from typing import Dict, Optional
@@ -12,11 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class LocalNotifier:
-    """
-    Delivers alerts to local user via multiple notification channels.
-    
-    Supports Windows system tray, console, and log file notifications.
-    """
 
     def __init__(
         self,
@@ -26,16 +18,6 @@ class LocalNotifier:
         quiet_hours_start: Optional[time] = None,
         quiet_hours_end: Optional[time] = None,
     ):
-        """
-        Initialize the local notifier.
-        
-        Args:
-            enable_console: Enable console notifications (default: True)
-            enable_system_tray: Enable Windows system tray notifications (default: True)
-            enable_log_file: Enable log file notifications (default: True)
-            quiet_hours_start: Start of quiet hours (optional)
-            quiet_hours_end: End of quiet hours (optional)
-        """
         self.enable_console = enable_console
         self.enable_system_tray = enable_system_tray
         self.enable_log_file = enable_log_file
@@ -54,12 +36,6 @@ class LocalNotifier:
                 self.toast_available = False
 
     def _is_quiet_hours(self) -> bool:
-        """
-        Check if current time is within quiet hours.
-        
-        Returns:
-            True if within quiet hours
-        """
         if not self.quiet_hours_start or not self.quiet_hours_end:
             return False
         
@@ -72,12 +48,6 @@ class LocalNotifier:
             return now >= self.quiet_hours_start or now <= self.quiet_hours_end
 
     def notify_console(self, alert: Dict) -> None:
-        """
-        Send notification to console.
-        
-        Args:
-            alert: Alert dictionary
-        """
         if not self.enable_console:
             return
         
@@ -100,12 +70,6 @@ class LocalNotifier:
             logger.error(f"Error sending console notification: {e}")
 
     def notify_system_tray(self, alert: Dict) -> None:
-        """
-        Send Windows system tray notification.
-        
-        Args:
-            alert: Alert dictionary
-        """
         if not self.enable_system_tray or not self.toast_available:
             return
         
@@ -144,12 +108,6 @@ class LocalNotifier:
             logger.error(f"Error sending system tray notification: {e}")
 
     def notify_log_file(self, alert: Dict) -> None:
-        """
-        Write notification to log file.
-        
-        Args:
-            alert: Alert dictionary
-        """
         if not self.enable_log_file:
             return
         
@@ -165,12 +123,6 @@ class LocalNotifier:
             logger.error(f"Error writing log file notification: {e}")
 
     def notify_all(self, alert: Dict) -> None:
-        """
-        Send notification through all enabled channels.
-        
-        Args:
-            alert: Alert dictionary
-        """
         self.notify_console(alert)
         self.notify_system_tray(alert)
         self.notify_log_file(alert)

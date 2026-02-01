@@ -3,7 +3,7 @@
 
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 import psutil
 from edgepulse_win.collectors.base import BaseCollector
@@ -28,7 +28,7 @@ class SystemMetricsCollector(BaseCollector):
         self._running = False
         logger.info("System metrics collector stopped")
 
-    def collect(self) -> List[Any]:
+    def collect(self) -> List[Dict[str, Any]]:
         if not self._running:
             return []
         return [self.collect_all()]

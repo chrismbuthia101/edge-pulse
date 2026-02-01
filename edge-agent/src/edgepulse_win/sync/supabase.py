@@ -1,11 +1,6 @@
-"""
-Supabase Sync Client
-
-Optional cloud synchronization for centralized monitoring.
-"""
+# Supabase Sync Client
 
 import logging
-import time
 from typing import Dict, List, Optional
 from supabase import create_client, Client
 
@@ -13,11 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class SupabaseSync:
-    """
-    Minimal cloud synchronization for processed alerts.
-    
-    Offline-first design with bandwidth optimization.
-    """
 
     def __init__(
         self,
@@ -25,14 +15,7 @@ class SupabaseSync:
         supabase_key: str,
         enabled: bool = True,
     ):
-        """
-        Initialize Supabase sync client.
         
-        Args:
-            supabase_url: Supabase project URL
-            supabase_key: Supabase anon key
-            enabled: Enable sync (default: True)
-        """
         self.supabase_url = supabase_url
         self.supabase_key = supabase_key
         self.enabled = enabled
@@ -44,12 +27,6 @@ class SupabaseSync:
             self.connect()
 
     def connect(self) -> bool:
-        """
-        Connect to Supabase.
-        
-        Returns:
-            True if connected successfully
-        """
         if not self.enabled:
             return False
         
@@ -64,12 +41,6 @@ class SupabaseSync:
             return False
 
     def is_online(self) -> bool:
-        """
-        Check if online and connected.
-        
-        Returns:
-            True if online
-        """
         if not self.enabled or not self.client:
             return False
         
@@ -83,22 +54,10 @@ class SupabaseSync:
             return False
 
     def sync_alert(self, alert: Dict) -> bool:
-        """
-        Sync an alert to Supabase.
-        
-        Args:
-            alert: Alert dictionary
-            
-        Returns:
-            True if synced successfully
-        """
         if not self.enabled or not self.is_online():
             return False
         
         try:
-            # Extract explanation from the correct location
-            # The alert structure has: alert["anomaly"]["explanation"] (from report_generator)
-            # and alert["explanation"] (raw SHAP explanation)
             anomaly = alert.get("anomaly", {})
             explanation = anomaly.get("explanation", {})
             
@@ -134,15 +93,6 @@ class SupabaseSync:
             return False
 
     def sync_health_summary(self, summary: Dict) -> bool:
-        """
-        Sync system health summary.
-        
-        Args:
-            summary: Health summary dictionary
-            
-        Returns:
-            True if synced successfully
-        """
         if not self.enabled or not self.is_online():
             return False
         

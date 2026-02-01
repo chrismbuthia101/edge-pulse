@@ -1,6 +1,4 @@
-"""
-Main entry point for EdgePulse agent
-"""
+# Main entry point for EdgePulse agent
 
 import sys
 from edgepulse_win.cli import main

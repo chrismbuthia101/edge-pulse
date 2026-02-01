@@ -1,11 +1,9 @@
-"""
-EdgePulse - Edge Security Monitoring Agent
-"""
+# EdgePulse - Edge Security Monitoring Agent
 
 __version__ = "0.1.0"
-__author__ = "EdgePulse Team"
+__author__ = "cipher_101"
 
-from edgepulse_win.exceptions import EdgePulseError
+from edgepulse_win.utils.exception_handler import EdgePulseError
 
 __all__ = [
     "EdgePulseError"

@@ -1,4 +1,4 @@
-"""Telemetry data models."""
+# Telemetry data models.
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -31,7 +31,7 @@ class SystemMetrics(BaseModel):
 
     @field_validator("timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> datetime:
         """Parse timestamp from string if needed."""
         if isinstance(v, str):
             return datetime.fromisoformat(v)
@@ -56,7 +56,7 @@ class ProcessInfo(BaseModel):
 
     @field_validator("timestamp", "create_time", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> Optional[datetime]:
         """Parse timestamp from string if needed."""
         if v is None:
             return None
@@ -80,7 +80,7 @@ class NetworkConnection(BaseModel):
 
     @field_validator("timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> datetime:
         """Parse timestamp from string if needed."""
         if isinstance(v, str):
             return datetime.fromisoformat(v)
@@ -97,7 +97,7 @@ class TelemetryData(BaseModel):
 
     @field_validator("timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
+    def parse_timestamp(cls, v: Any) -> datetime:
         """Parse timestamp from string if needed."""
         if isinstance(v, str):
             return datetime.fromisoformat(v)

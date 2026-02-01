@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-from edgepulse_win.exceptions import ModelError
+from edgepulse_win.utils.exception_handler import ModelError
 from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)

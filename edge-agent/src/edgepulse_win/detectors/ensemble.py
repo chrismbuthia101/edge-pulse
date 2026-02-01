@@ -1,8 +1,5 @@
-"""
-Ensemble Detector
-
-Combines multiple anomaly detectors with voting/weighting strategies.
-"""
+#Ensemble Detector
+# Combines multiple anomaly detectors with voting/weighting strategies.
 
 import logging
 from typing import Tuple, Dict, List, Optional
@@ -12,27 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 class BaseDetector:
-    """Base interface for anomaly detectors."""
     
     def predict(self, features: np.ndarray) -> Tuple[int, float]:
-        """
-        Predict anomaly label and score.
-        
-        Args:
-            features: Feature array
-            
-        Returns:
-            Tuple of (anomaly_label, anomaly_score)
-        """
         raise NotImplementedError
 
 
 class EnsembleDetector:
-    """
-    Combines multiple anomaly detectors with voting/weighting.
-    
-    Reduces false positives through consensus.
-    """
 
     def __init__(
         self,
@@ -41,15 +23,6 @@ class EnsembleDetector:
         voting_strategy: str = 'weighted',
         threshold: float = 0.5,
     ):
-        """
-        Initialize the ensemble detector.
-        
-        Args:
-            detectors: List of detector instances
-            weights: Dictionary mapping detector names to weights (default: equal weights)
-            voting_strategy: 'majority', 'weighted', or 'confidence' (default: 'weighted')
-            threshold: Final decision threshold (default: 0.5)
-        """
         self.detectors = detectors
         self.voting_strategy = voting_strategy
         self.threshold = threshold
@@ -69,12 +42,6 @@ class EnsembleDetector:
             self.weights = {k: v / total_weight for k, v in self.weights.items()}
 
     def set_weights(self, weights: Dict[str, float]) -> None:
-        """
-        Update detector weights.
-        
-        Args:
-            weights: Dictionary mapping detector names to weights
-        """
         self.weights = weights
         # Normalize
         total_weight = sum(self.weights.values())
@@ -82,18 +49,6 @@ class EnsembleDetector:
             self.weights = {k: v / total_weight for k, v in self.weights.items()}
 
     def predict(self, features: np.ndarray) -> Tuple[int, float, Dict]:
-        """
-        Predict using ensemble of detectors.
-        
-        Args:
-            features: Feature array
-            
-        Returns:
-            Tuple of (final_label, confidence, detector_scores)
-            - final_label: 0 (normal) or 1 (anomaly)
-            - confidence: 0 to 1 (higher = more confident)
-            - detector_scores: Dictionary with individual detector results
-        """
         if not self.detectors:
             logger.warning("No detectors in ensemble")
             return (0, 0.0, {})
@@ -168,13 +123,6 @@ class EnsembleDetector:
         return (final_label, float(final_score), detector_scores)
 
     def calibrate_threshold(self, validation_data: np.ndarray, target_fpr: float = 0.05) -> None:
-        """
-        Calibrate detection threshold based on validation data.
-        
-        Args:
-            validation_data: Validation feature array
-            target_fpr: Target false positive rate (default: 0.05)
-        """
         if validation_data.ndim == 1:
             validation_data = validation_data.reshape(1, -1)
         

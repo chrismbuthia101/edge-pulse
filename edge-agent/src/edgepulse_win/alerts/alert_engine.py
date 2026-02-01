@@ -1,8 +1,6 @@
-"""
-Alert Engine
+# Alert Engine
 
-Intelligent alert generation, correlation, and deduplication.
-"""
+# Intelligent alert generation, correlation, and deduplication.
 
 import logging
 from typing import Dict, List, Optional
@@ -13,12 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class AlertEngine:
-    """
-    Generates and manages alerts from anomaly detections.
-    
-    Implements correlation, deduplication, and rate limiting.
-    """
-
     def __init__(
         self,
         correlation_window: int = 300,
@@ -27,16 +19,6 @@ class AlertEngine:
         rate_window: int = 3600,
         min_severity: str = "medium",
     ):
-        """
-        Initialize the alert engine.
-        
-        Args:
-            correlation_window: Time window for correlation in seconds (default: 300)
-            deduplication_threshold: Similarity threshold for deduplication (default: 0.8)
-            rate_limit: Maximum alerts per time window (default: 10)
-            rate_window: Rate limiting window in seconds (default: 3600)
-            min_severity: Minimum severity to generate alert (default: "medium")
-        """
         self.correlation_window = correlation_window
         self.deduplication_threshold = deduplication_threshold
         self.rate_limit = rate_limit
@@ -56,16 +38,6 @@ class AlertEngine:
         }
 
     def should_alert(self, anomaly_score: float, severity: str) -> bool:
-        """
-        Determine if an alert should be generated.
-        
-        Args:
-            anomaly_score: Anomaly score
-            severity: Severity level
-            
-        Returns:
-            True if alert should be generated
-        """
         # Check severity threshold
         if self.severity_levels.get(severity, 0) < self.severity_levels.get(self.min_severity, 0):
             return False
@@ -77,16 +49,7 @@ class AlertEngine:
         anomaly: Dict,
         explanation: Dict,
     ) -> Optional[Dict]:
-        """
-        Process an anomaly and generate an alert if appropriate.
-        
-        Args:
-            anomaly: Anomaly dictionary (AlertReport structure)
-            explanation: Explanation dictionary
-            
-        Returns:
-            Alert dictionary or None if no alert generated
-        """
+
         # Handle both AlertReport structure and legacy structure
         if isinstance(anomaly, dict):
             anomaly_score = anomaly.get("anomaly_score", 0.0)
@@ -138,15 +101,6 @@ class AlertEngine:
         return alert
 
     def correlate_alerts(self, timeframe: int = None) -> List[Dict]:
-        """
-        Correlate related alerts within a timeframe.
-        
-        Args:
-            timeframe: Time window in seconds (default: self.correlation_window)
-            
-        Returns:
-            List of correlated alerts
-        """
         if timeframe is None:
             timeframe = self.correlation_window
         
@@ -160,15 +114,6 @@ class AlertEngine:
         return correlated
 
     def deduplicate_alerts(self, new_anomaly: Dict) -> bool:
-        """
-        Check if an alert is a duplicate of an existing one.
-        
-        Args:
-            new_anomaly: New anomaly dictionary
-            
-        Returns:
-            True if duplicate, False otherwise
-        """
         if not self.alert_history:
             return False
         
@@ -190,16 +135,6 @@ class AlertEngine:
         return False
 
     def _calculate_similarity(self, anomaly1: Dict, anomaly2: Dict) -> float:
-        """
-        Calculate similarity between two anomalies.
-        
-        Args:
-            anomaly1: First anomaly dictionary
-            anomaly2: Second anomaly dictionary
-            
-        Returns:
-            Similarity score (0 to 1)
-        """
         # Compare anomaly types
         type_match = 1.0 if anomaly1.get("anomaly_type") == anomaly2.get("anomaly_type") else 0.0
         
@@ -227,12 +162,6 @@ class AlertEngine:
         return similarity
 
     def _check_rate_limit(self) -> bool:
-        """
-        Check if rate limit is exceeded.
-        
-        Returns:
-            True if within rate limit, False otherwise
-        """
         cutoff_time = datetime.utcnow() - timedelta(seconds=self.rate_window)
         
         recent_count = sum(
@@ -243,21 +172,9 @@ class AlertEngine:
         return recent_count < self.rate_limit
 
     def get_active_alerts(self) -> List[Dict]:
-        """
-        Get all active (unacknowledged) alerts.
-        
-        Returns:
-            List of active alert dictionaries
-        """
         return self.active_alerts.copy()
 
     def detect_attack_patterns(self) -> List[Dict]:
-        """
-        Detect known attack patterns from correlated alerts.
-        
-        Returns:
-            List of detected attack patterns
-        """
         patterns = []
         
         # Get recent alerts

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from edgepulse_win.exceptions import LoggingError, ValidationError
+from edgepulse_win.utils.exception_handler import LoggingError, ValidationError
 from edgepulse_win.utils.paths import PathManager
 from edgepulse_win.storage.chain import HashChain
 from edgepulse_win.storage.database import DatabaseManager, initialize_database, enforce_retention

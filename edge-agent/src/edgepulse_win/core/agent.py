@@ -6,26 +6,26 @@ from typing import Optional, Any, List, Union
 
 logger = logging.getLogger(__name__)
 
-from edgepulse_win.collectors.system import SystemMetricsCollector
-from edgepulse_win.collectors.process import ProcessMonitor
-from edgepulse_win.collectors.network import NetworkMonitor
-from edgepulse_win.features.extractor import FeatureExtractor
-from edgepulse_win.features.baseline import DeviceNormalizer
+from edgepulse_win.collectors.system_collector import SystemMetricsCollector
+from edgepulse_win.collectors.process_collector import ProcessMonitor
+from edgepulse_win.collectors.network_collector import NetworkMonitor
+from edgepulse_win.features.feature_extractor import FeatureExtractor
+from edgepulse_win.features.feature_normalizer import DeviceNormalizer
 from edgepulse_win.detectors.isolation_forest import IsolationForestDetector
 from edgepulse_win.detectors.autoencoder import AutoencoderDetector
 from edgepulse_win.detectors.ensemble import EnsembleDetector
-from edgepulse_win.analysis.explainer import SHAPExplainer
-from edgepulse_win.analysis.reporter import ReportGenerator
+from edgepulse_win.analysis.shap_explainer import SHAPExplainer
+from edgepulse_win.analysis.report_generator import ReportGenerator
 from edgepulse_win.storage.log_manager import LogManager
 from edgepulse_win.alerts.alert_engine import AlertEngine
 from edgepulse_win.alerts.notifier import LocalNotifier
 from edgepulse_win.sync.supabase import SupabaseSync
 from edgepulse_win.config.settings import SettingsManager
 from edgepulse_win.config.privacy import PrivacyController
-from edgepulse_win.core.runtime import Runtime
-from edgepulse_win.core.pipeline import Pipeline
-from edgepulse_win.utils.paths import PathManager
-from edgepulse_win.exceptions import EdgePulseError
+from edgepulse_win.core.runtime_manager import Runtime
+from edgepulse_win.core.pipeline_manager import Pipeline
+from edgepulse_win.utils.path_manager import PathManager
+from edgepulse_win.utils.exception_handler import EdgePulseError
 
 class EdgePulseAgent:
     def __init__(self, settings: Optional[Any] = None, device_id: str = "default-device") -> None:

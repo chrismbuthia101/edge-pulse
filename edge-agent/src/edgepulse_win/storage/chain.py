@@ -5,7 +5,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from edgepulse_win.exceptions import LoggingError
+from edgepulse_win.utils.exception_handler import LoggingError
 from edgepulse_win.utils.paths import PathManager
 
 logger = logging.getLogger(__name__)

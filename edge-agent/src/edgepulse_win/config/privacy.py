@@ -1,23 +1,15 @@
-"""
-Privacy Controller
-
-Enforces privacy-by-design principles and GDPR compliance.
-"""
+# Privacy Controller
+# Enforces privacy-by-design principles and GDPR compliance.
 
 import logging
 import hashlib
-from typing import Dict, Any
+from typing import Dict
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 
 class PrivacyController:
-    """
-    Enforces privacy-by-design principles.
-    
-    GDPR-compliant data handling.
-    """
 
     def __init__(
         self,
@@ -25,31 +17,14 @@ class PrivacyController:
         anonymization_level: str = "strict",
         collect_command_lines: bool = False,
     ):
-        """
-        Initialize privacy controller.
-        
-        Args:
-            data_retention_days: Data retention period (default: 30)
-            anonymization_level: 'basic', 'strict', or 'maximum' (default: 'strict')
-            collect_command_lines: Allow command line collection (default: False)
-        """
+  
         self.data_retention_days = data_retention_days
         self.anonymization_level = anonymization_level
         self.collect_command_lines = collect_command_lines
 
     def apply_data_minimization(self, telemetry: Dict) -> Dict:
-        """
-        Apply data minimization principles.
-        
-        Args:
-            telemetry: Raw telemetry data
-            
-        Returns:
-            Minimized telemetry data
-        """
         minimized = {}
         
-        # Only keep necessary metrics
         if "system_metrics" in telemetry:
             # Preserve disk metrics structure - feature extractor expects dict with delta keys
             disk_metrics = telemetry["system_metrics"].get("disk", {})
@@ -88,7 +63,6 @@ class PrivacyController:
                 minimized["processes"].append(proc_min)
         
         # Network: only connection metadata (preserve timestamp for feature extraction)
-        # Note: IP anonymization happens in anonymize_identifiers(), not here
         if "network_connections" in telemetry:
             minimized["network_connections"] = [
                 {
@@ -104,15 +78,6 @@ class PrivacyController:
         return minimized
 
     def anonymize_identifiers(self, data: Dict) -> Dict:
-        """
-        Anonymize personally identifiable information.
-        
-        Args:
-            data: Data dictionary
-            
-        Returns:
-            Anonymized data dictionary (deep copy to avoid mutating original)
-        """
         import copy
         # Use deep copy to avoid mutating the original data structure
         anonymized = copy.deepcopy(data)
@@ -132,15 +97,6 @@ class PrivacyController:
         return anonymized
 
     def anonymize_ip(self, ip_address: str) -> str:
-        """
-        Anonymize IP address based on anonymization level.
-        
-        Args:
-            ip_address: IP address string
-            
-        Returns:
-            Anonymized IP or hash
-        """
         if not ip_address:
             return ""
         
@@ -158,29 +114,11 @@ class PrivacyController:
             return ip_address
 
     def hash_string(self, value: str) -> str:
-        """
-        Hash a string value.
-        
-        Args:
-            value: String to hash
-            
-        Returns:
-            SHA-256 hash
-        """
         if not value:
             return ""
         return hashlib.sha256(value.encode('utf-8')).hexdigest()
 
     def should_collect(self, data_type: str) -> bool:
-        """
-        Check if data type should be collected.
-        
-        Args:
-            data_type: Type of data
-            
-        Returns:
-            True if should collect
-        """
         # Command lines require explicit permission
         if data_type == "command_line" and not self.collect_command_lines:
             return False
@@ -188,35 +126,14 @@ class PrivacyController:
         return True
 
     def set_retention_policy(self, days: int) -> None:
-        """
-        Set data retention policy.
-        
-        Args:
-            days: Retention period in days
-        """
         self.data_retention_days = days
         logger.info(f"Set retention policy to {days} days")
 
     def enforce_retention(self, data_timestamp: datetime) -> bool:
-        """
-        Check if data should be retained.
-        
-        Args:
-            data_timestamp: Data timestamp
-            
-        Returns:
-            True if should retain
-        """
         cutoff = datetime.utcnow() - timedelta(days=self.data_retention_days)
         return data_timestamp >= cutoff
 
     def export_privacy_report(self) -> Dict:
-        """
-        Export privacy compliance report.
-        
-        Returns:
-            Privacy report dictionary
-        """
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "data_retention_days": self.data_retention_days,

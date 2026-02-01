@@ -1,8 +1,5 @@
-"""
-Report Generator
-
-Generates comprehensive, human-readable anomaly reports.
-"""
+# Report Generator
+# Generates comprehensive, human-readable anomaly reports.
 
 import logging
 import uuid
@@ -13,31 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class ReportGenerator:
-    """
-    Generates comprehensive anomaly reports.
-    
-    Combines ML predictions with XAI explanations.
-    """
 
     def __init__(self, device_id: str):
-        """
-        Initialize the report generator.
-        
-        Args:
-            device_id: Device identifier
-        """
         self.device_id = device_id
 
     def assign_severity(self, anomaly_score: float) -> str:
-        """
-        Assign severity level based on anomaly score.
-        
-        Args:
-            anomaly_score: Anomaly score (0 to 1)
-            
-        Returns:
-            Severity level: 'low', 'medium', 'high', or 'critical'
-        """
         if anomaly_score > 0.9:
             return "critical"
         elif anomaly_score > 0.7:
@@ -55,17 +32,7 @@ class ReportGenerator:
         explanation: Dict,
         context: Optional[Dict] = None,
     ) -> Dict:
-        """
-        Generate comprehensive alert report.
-        
-        Args:
-            anomaly_data: Dictionary with anomaly detection results
-            explanation: Dictionary with XAI explanation
-            context: Additional context (processes, network, system state)
-            
-        Returns:
-            Complete alert report dictionary
-        """
+    
         anomaly_score = anomaly_data.get("score", 0.0)
         anomaly_label = anomaly_data.get("label", 0)
         
@@ -109,16 +76,7 @@ class ReportGenerator:
         top_features: list,
         context: Optional[Dict],
     ) -> str:
-        """
-        Determine the type of anomaly based on features and context.
         
-        Args:
-            top_features: List of top contributing features
-            context: Additional context
-            
-        Returns:
-            Anomaly type string
-        """
         feature_names = [f.get("feature", "") for f in top_features]
         
         # Check for specific patterns
@@ -155,17 +113,7 @@ class ReportGenerator:
         anomaly_type: str,
         top_features: list,
     ) -> list:
-        """
-        Generate recommended actions based on severity and type.
-        
-        Args:
-            severity: Severity level
-            anomaly_type: Type of anomaly
-            top_features: Top contributing features
-            
-        Returns:
-            List of recommended action strings
-        """
+       
         actions = []
         
         if severity == "critical":
@@ -203,15 +151,6 @@ class ReportGenerator:
         return actions
 
     def format_as_text(self, report: Dict) -> str:
-        """
-        Format report as plain text.
-        
-        Args:
-            report: Report dictionary
-            
-        Returns:
-            Formatted text string
-        """
         lines = []
         lines.append("=" * 60)
         lines.append("EDGEPULSE ANOMALY ALERT")

@@ -1,8 +1,5 @@
-"""
-SHAP Explainer
-
-Generates feature-level explanations using SHAP values.
-"""
+# SHAP Explainer
+# Generates feature-level explanations using SHAP values.
 
 import logging
 from typing import Dict, List, Tuple, Optional
@@ -13,20 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class SHAPExplainer:
-    """
-    Generates feature-level explanations using SHAP.
-    
-    Identifies which features triggered anomaly detection.
-    """
 
     def __init__(self, model, feature_names: Optional[List[str]] = None):
-        """
-        Initialize the SHAP explainer.
-        
-        Args:
-            model: Trained model (Isolation Forest or compatible)
-            feature_names: List of feature names (default: feature_0, feature_1, ...)
-        """
         self.model = model
         self.feature_names = feature_names
         
@@ -35,7 +20,6 @@ class SHAPExplainer:
         self._initialize_explainer()
 
     def _initialize_explainer(self) -> None:
-        """Initialize the appropriate SHAP explainer for the model."""
         try:
             # Check if model is tree-based (Isolation Forest)
             if hasattr(self.model, 'estimators_'):
@@ -56,17 +40,7 @@ class SHAPExplainer:
         feature_names: Optional[List[str]] = None,
         background_data: Optional[np.ndarray] = None,
     ) -> Dict:
-        """
-        Explain a prediction by computing SHAP values.
-        
-        Args:
-            features: Feature array (can be 1D or 2D)
-            feature_names: Feature names (overrides default)
-            background_data: Background data for model-agnostic explainers
-            
-        Returns:
-            Dictionary with explanation data
-        """
+
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -119,17 +93,7 @@ class SHAPExplainer:
         feature_names: List[str],
         n: int = 5,
     ) -> List[Dict]:
-        """
-        Get top N contributing features.
         
-        Args:
-            shap_values: SHAP values array
-            feature_names: List of feature names
-            n: Number of top features to return (default: 5)
-            
-        Returns:
-            List of dictionaries with feature information
-        """
         if shap_values.ndim > 1:
             shap_values = shap_values[0]  # Take first sample
         
@@ -167,16 +131,7 @@ class SHAPExplainer:
         shap_values: np.ndarray,
         feature_names: List[str],
     ) -> str:
-        """
-        Generate human-readable explanation text.
         
-        Args:
-            shap_values: SHAP values array
-            feature_names: List of feature names
-            
-        Returns:
-            Natural language explanation string
-        """
         if shap_values.ndim > 1:
             shap_values = shap_values[0]
         
@@ -206,16 +161,7 @@ class SHAPExplainer:
         features: np.ndarray,
         feature_names: List[str],
     ) -> Dict:
-        """
-        Fallback explanation when SHAP is unavailable.
         
-        Args:
-            features: Feature array
-            feature_names: Feature names
-            
-        Returns:
-            Dictionary with basic explanation
-        """
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -247,15 +193,7 @@ class SHAPExplainer:
         feature_names: List[str],
         save_path: Optional[str] = None,
     ) -> None:
-        """
-        Visualize SHAP explanation (optional).
         
-        Args:
-            shap_values: SHAP values array
-            features: Original feature array
-            feature_names: Feature names
-            save_path: Path to save visualization (optional)
-        """
         try:
             import matplotlib.pyplot as plt
             
