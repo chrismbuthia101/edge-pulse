@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
 
 from edgepulse_win.utils.error_handler import ModelError
-from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.utils.path_manager import PathManager
 
 logger = logging.getLogger(__name__)
 

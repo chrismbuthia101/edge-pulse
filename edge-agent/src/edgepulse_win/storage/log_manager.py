@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 from datetime import datetime
 from pathlib import Path
 
-from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.storage.log_writer import LogWriter
 from edgepulse_win.storage.chain import HashChain
 

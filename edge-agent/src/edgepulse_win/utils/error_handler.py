@@ -6,30 +6,9 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Union
 from functools import wraps
 
-from edgepulse_win.utils.log_handler import get_logger
+from edgepulse_win.utils.log_handler import get_logger, EdgePulseError, ConfigurationError, LoggingError
 
 logger = get_logger(__name__)
-
-
-# Custom exceptions for EdgePulse Agent
-class EdgePulseError(Exception):
-    """Base exception for all EdgePulse errors."""
-
-    def __init__(self, message: str, details: Optional[dict] = None) -> None:
-        super().__init__(message)
-        self.message = message
-        self.details = details or {}
-
-    def __str__(self) -> str:
-        if self.details:
-            return f"{self.message} (Details: {self.details})"
-        return self.message
-
-
-class ConfigurationError(EdgePulseError):
-    """Raised when configuration is invalid or missing."""
-    pass
-
 
 class ModelError(EdgePulseError):
     """Raised when model operations fail."""
@@ -38,11 +17,6 @@ class ModelError(EdgePulseError):
 
 class DetectionError(EdgePulseError):
     """Raised when detection operations fail."""
-    pass
-
-
-class LoggingError(EdgePulseError):
-    """Raised when logging operations fail."""
     pass
 
 

@@ -1,7 +1,7 @@
 # Shared data schemas for EdgePulse components.
 
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Literal
 from pydantic import BaseModel, Field, validator
 from enum import Enum
 
@@ -53,7 +53,7 @@ class BaseEvent(BaseModel):
 
 class AlertEvent(BaseEvent):
     """Standard alert event schema"""
-    event_type: EventType = Field(default=EventType.ALERT, const=True)
+    event_type: Literal[EventType.ALERT] = Field(default=EventType.ALERT, description="Type of event")
     severity: SeverityLevel = Field(..., description="Alert severity level")
     anomaly_score: float = Field(..., ge=0.0, le=1.0, description="Anomaly score between 0 and 1")
     alert_type: str = Field(..., description="Type of alert")
@@ -70,7 +70,7 @@ class AlertEvent(BaseEvent):
 
 class TelemetryEvent(BaseEvent):
     """Standard telemetry event schema"""
-    event_type: EventType = Field(default=EventType.TELEMETRY, const=True)
+    event_type: Literal[EventType.TELEMETRY] = Field(default=EventType.TELEMETRY, description="Type of event")
     cpu_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0, description="CPU usage percentage")
     memory_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0, description="Memory usage percentage")
     disk_usage: Optional[float] = Field(default=None, ge=0.0, le=100.0, description="Disk usage percentage")
@@ -84,7 +84,7 @@ class TelemetryEvent(BaseEvent):
 
 class DetectionEvent(BaseEvent):
     """Standard detection event schema"""
-    event_type: EventType = Field(default=EventType.DETECTION, const=True)
+    event_type: Literal[EventType.DETECTION] = Field(default=EventType.DETECTION, description="Type of event")
     detector_name: str = Field(..., description="Name of the detector")
     label: int = Field(..., description="Detection label (0=normal, 1=anomaly)")
     anomaly_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Anomaly score")

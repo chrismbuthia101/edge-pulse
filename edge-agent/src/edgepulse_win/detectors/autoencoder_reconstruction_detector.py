@@ -5,10 +5,27 @@ import logging
 from typing import Tuple, Optional
 from pathlib import Path
 import numpy as np
-import tensorflow as tf
+
+try:
+    import tensorflow as tf
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    tf = None
+
+try:
+    from tflite_runtime.interpreter import Interpreter
+    TFLITE_AVAILABLE = True
+except ImportError:
+    try:
+        import tensorflow as tf
+        Interpreter = tf.lite.Interpreter
+        TFLITE_AVAILABLE = True
+    except ImportError:
+        TFLITE_AVAILABLE = False
 
 from edgepulse_win.utils.error_handler import ModelError
-from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.detectors.base import BaseDetector
 
 logger = logging.getLogger(__name__)
@@ -25,26 +42,34 @@ class AutoencoderDetector(BaseDetector):
         model_path: Optional[Path] = None,
         device_id: Optional[str] = None,
         path_manager: Optional[PathManager] = None,
+        use_tflite: bool = False,
     ):
         self.input_dim = input_dim
         self.encoding_dim = encoding_dim
         self.hidden_layers = hidden_layers or [64, 32, 16]
         self.learning_rate = learning_rate
         self.path_manager = path_manager or PathManager()
+        self.use_tflite = use_tflite
         
         if model_path:
             self.model_path = Path(model_path)
         else:
-            # Autoencoder uses .h5 extension
+            # Use different extensions for TF vs TFLite
             base_path = self.path_manager.get_model_path("autoencoder", device_id)
-            self.model_path = base_path.with_suffix('.h5')
+            self.model_path = base_path.with_suffix('.tflite' if use_tflite else '.h5')
         
-        self.model: Optional[tf.keras.Model] = None
+        self.model = None
+        self.interpreter = None
+        self.input_details = None
+        self.output_details = None
         self.is_trained = False
         self.training_samples = 0
         self.reconstruction_threshold = 0.1
 
     def _build_model(self) -> tf.keras.Model:
+        if not TENSORFLOW_AVAILABLE:
+            raise ModelError("TensorFlow is required for training models")
+            
         input_layer = tf.keras.layers.Input(shape=(self.input_dim,))
         
         x = input_layer
@@ -68,6 +93,71 @@ class AutoencoderDetector(BaseDetector):
         )
         
         return autoencoder
+
+    def _convert_to_tflite(self, model_path: Path) -> Path:
+        """Convert trained TensorFlow model to TensorFlow Lite format"""
+        if not TFLITE_AVAILABLE:
+            raise ModelError("TensorFlow Lite is not available")
+            
+        tflite_path = model_path.with_suffix('.tflite')
+        
+        try:
+            # Create TFLite converter
+            converter = tf.lite.TFLiteConverter.from_keras_model(self.model)
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            
+            # Convert model
+            tflite_model = converter.convert()
+            
+            # Save TFLite model
+            with open(tflite_path, 'wb') as f:
+                f.write(tflite_model)
+                
+            logger.info(f"Converted model to TensorFlow Lite format: {tflite_path}")
+            return tflite_path
+            
+        except Exception as e:
+            logger.error(f"Error converting to TFLite: {e}")
+            raise ModelError(f"Failed to convert model to TFLite: {e}") from e
+    
+    def _load_tflite_model(self, model_path: Path) -> None:
+        """Load TensorFlow Lite model"""
+        if not TFLITE_AVAILABLE:
+            raise ModelError("TensorFlow Lite is not available")
+            
+        try:
+            self.interpreter = Interpreter(model_path=str(model_path))
+            self.interpreter.allocate_tensors()
+            
+            self.input_details = self.interpreter.get_input_details()
+            self.output_details = self.interpreter.get_output_details()
+            
+            logger.info(f"Loaded TensorFlow Lite model from {model_path}")
+            
+        except Exception as e:
+            logger.error(f"Error loading TFLite model: {e}")
+            raise ModelError(f"Failed to load TFLite model: {e}") from e
+    
+    def _predict_tflite(self, features: np.ndarray) -> np.ndarray:
+        """Predict using TensorFlow Lite model"""
+        if self.interpreter is None:
+            raise ModelError("TFLite interpreter not initialized")
+            
+        try:
+            # Set input tensor
+            self.interpreter.set_tensor(self.input_details[0]['index'], features.astype(np.float32))
+            
+            # Run inference
+            self.interpreter.invoke()
+            
+            # Get output tensor
+            output = self.interpreter.get_tensor(self.output_details[0]['index'])
+            
+            return output
+            
+        except Exception as e:
+            logger.error(f"Error in TFLite prediction: {e}")
+            raise ModelError(f"TFLite prediction failed: {e}") from e
 
     def train(
         self,
@@ -128,14 +218,22 @@ class AutoencoderDetector(BaseDetector):
             raise ModelError(f"Failed to train Autoencoder: {e}") from e
 
     def calculate_reconstruction_error(self, features: np.ndarray) -> float:
-        if not self.is_trained or self.model is None:
+        if not self.is_trained:
             return 0.0
-        
+            
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
         try:
-            reconstructions = self.model.predict(features, verbose=0)
+            if self.use_tflite:
+                if self.interpreter is None:
+                    return 0.0
+                reconstructions = self._predict_tflite(features)
+            else:
+                if self.model is None:
+                    return 0.0
+                reconstructions = self.model.predict(features, verbose=0)
+                
             errors = np.mean((features - reconstructions) ** 2, axis=1)
             return float(np.mean(errors))
         except Exception as e:
@@ -143,7 +241,7 @@ class AutoencoderDetector(BaseDetector):
             return 0.0
 
     def predict(self, features: np.ndarray) -> Tuple[int, float]:
-        if not self.is_trained or self.model is None:
+        if not self.is_trained:
             logger.warning("Model not trained, returning default prediction")
             return (0, 0.0)
         
@@ -167,9 +265,18 @@ class AutoencoderDetector(BaseDetector):
         
         try:
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            self.model.save(str(save_path))
             
-            metadata_path = save_path.with_suffix('').with_suffix('_metadata.npz')
+            if self.use_tflite:
+                # Convert and save as TFLite
+                tflite_path = self._convert_to_tflite(save_path)
+                final_path = tflite_path
+            else:
+                # Save as regular TensorFlow model
+                self.model.save(str(save_path))
+                final_path = save_path
+            
+            # Save metadata
+            metadata_path = final_path.with_suffix('').with_suffix('_metadata.npz')
             np.savez(
                 str(metadata_path),
                 is_trained=self.is_trained,
@@ -177,9 +284,10 @@ class AutoencoderDetector(BaseDetector):
                 reconstruction_threshold=self.reconstruction_threshold,
                 input_dim=self.input_dim,
                 encoding_dim=self.encoding_dim,
+                use_tflite=self.use_tflite,
             )
             
-            logger.info(f"Saved Autoencoder model to {save_path}")
+            logger.info(f"Saved Autoencoder model to {final_path}")
         except Exception as e:
             logger.error(f"Error saving model: {e}")
             raise ModelError(f"Failed to save model: {e}") from e
@@ -223,9 +331,10 @@ class AutoencoderDetector(BaseDetector):
             return False
         
         try:
-            self.model = tf.keras.models.load_model(str(load_path))
-            
+            # Load metadata first to determine model type
             metadata_path = load_path.with_suffix('').with_suffix('_metadata.npz')
+            use_tflite_from_metadata = self.use_tflite
+            
             if metadata_path.exists():
                 metadata = np.load(str(metadata_path), allow_pickle=True)
                 self.is_trained = bool(metadata['is_trained'])
@@ -233,8 +342,20 @@ class AutoencoderDetector(BaseDetector):
                 self.reconstruction_threshold = float(metadata['reconstruction_threshold'])
                 self.input_dim = int(metadata['input_dim'])
                 self.encoding_dim = int(metadata['encoding_dim'])
+                
+                # Check if metadata specifies TFLite usage
+                if 'use_tflite' in metadata:
+                    use_tflite_from_metadata = bool(metadata['use_tflite'])
+            
+            # Load model based on type
+            if load_path.suffix == '.tflite' or use_tflite_from_metadata:
+                self._load_tflite_model(load_path)
+                self.use_tflite = True
             else:
-                self.is_trained = True
+                if not TENSORFLOW_AVAILABLE:
+                    raise ModelError("TensorFlow is required to load .h5 models")
+                self.model = tf.keras.models.load_model(str(load_path))
+                self.use_tflite = False
             
             logger.info(f"Loaded Autoencoder model from {load_path}")
             return True

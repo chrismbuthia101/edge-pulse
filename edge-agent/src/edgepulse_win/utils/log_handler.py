@@ -3,7 +3,29 @@ import structlog
 from pathlib import Path
 from typing import Optional
 
-from edgepulse_win.utils.error_handler import LoggingError, ConfigurationError
+
+class EdgePulseError(Exception):
+    """Base exception for all EdgePulse errors."""
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
+
+    def __str__(self) -> str:
+        if self.details:
+            return f"{self.message} (Details: {self.details})"
+        return self.message
+
+
+class ConfigurationError(EdgePulseError):
+    """Raised when configuration is invalid or missing."""
+    pass
+
+
+class LoggingError(EdgePulseError):
+    """Raised when logging operations fail."""
+    pass
 
 def configure_logging(
     log_level: str = "INFO", 

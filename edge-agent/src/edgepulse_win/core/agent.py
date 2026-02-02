@@ -11,16 +11,16 @@ from edgepulse_win.config.settings import AgentSettings
 from edgepulse_win.utils.log_handler import configure_logging, get_logger
 from edgepulse_win.storage.database import DatabaseManager
 from edgepulse_win.sync.async_queue import AsyncSyncQueue
-from edgepulse_win.api.adaptive import AdaptiveAPIServer
+from edgepulse_win.api.api_server import AdaptiveAPIServer
 
 from edgepulse_win.collectors.system_collector import SystemMetricsCollector
 from edgepulse_win.collectors.process_collector import ProcessMonitor
 from edgepulse_win.collectors.network_collector import NetworkMonitor
 from edgepulse_win.features.feature_extractor import FeatureExtractor
 from edgepulse_win.features.feature_normalizer import DeviceNormalizer
-from edgepulse_win.detectors.isolation_forest import IsolationForestDetector
-from edgepulse_win.detectors.autoencoder import AutoencoderDetector
-from edgepulse_win.detectors.ensemble import EnsembleDetector
+from edgepulse_win.detectors.isolation_forest_detector import IsolationForestDetector
+from edgepulse_win.detectors.autoencoder_reconstruction_detector import AutoencoderDetector
+from edgepulse_win.detectors.ensemble_detector import EnsembleDetector
 from edgepulse_win.analysis.shap_explainer import SHAPExplainer
 from edgepulse_win.analysis.report_generator import ReportGenerator
 from edgepulse_win.alerts.alert_engine import AlertEngine
@@ -300,6 +300,7 @@ class EdgePulseAgent:
                 encoding_dim=self.settings.detection.autoencoder_encoding_dim,
                 hidden_layers=self.settings.detection.autoencoder_hidden_layers,
                 learning_rate=self.settings.detection.autoencoder_learning_rate,
+                use_tflite=self.settings.detection.autoencoder_use_tflite,
                 device_id=self.device_id,
                 path_manager=path_manager,
             )

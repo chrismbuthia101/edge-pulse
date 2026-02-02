@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from edgepulse_win.utils.error_handler import LoggingError, ValidationError
-from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.storage.chain import HashChain
 from edgepulse_win.storage.database import DatabaseManager
 from edgepulse_win.storage.sanitizer import sanitize

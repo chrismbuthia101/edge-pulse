@@ -3,13 +3,13 @@
 
 import logging
 import joblib
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any, Dict
 from pathlib import Path
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
 from edgepulse_win.utils.error_handler import ModelError
-from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.detectors.base import BaseDetector
 
 logger = logging.getLogger(__name__)

@@ -68,6 +68,7 @@ class DetectionConfig(BaseSettings):
     autoencoder_hidden_layers: List[int] = Field(default=[64, 32, 16], description="Hidden layer sizes")
     autoencoder_learning_rate: float = Field(default=0.001, ge=0.0001, le=0.1)
     autoencoder_input_dim: Optional[int] = Field(default=None, description="Autoencoder input dimension")
+    autoencoder_use_tflite: bool = Field(default=False, description="Use TensorFlow Lite for inference")
 
 class PrivacyConfig(BaseSettings):
     """Privacy and data retention configuration"""
