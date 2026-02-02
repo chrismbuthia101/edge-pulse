@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Edge agent for edge-pulse monitoring system"
 authors = ["cipher_101"]
 readme = "README.md"
-packages = [{include = "src"}]
+packages = [{include = "src/edgepulse_win"}]
 
 [build-system]
 requires = ["poetry-core"]
@@ -48,4 +48,4 @@ notifications = ["notify-py"]
 all = ["tensorflow", "shap", "supabase", "fastapi", "uvicorn", "notify-py"]
 
 [tool.poetry.scripts]
-edge-agent = "src.main:main"
+edge-agent = "src.edgepulse_win.__main__:main"

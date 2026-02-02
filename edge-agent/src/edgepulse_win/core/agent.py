@@ -29,6 +29,7 @@ from edgepulse_win.sync.supabase import SupabaseSync
 from edgepulse_win.config.privacy import PrivacyController
 from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.utils.error_handler import EdgePulseError, ConfigurationError, ModelError, DetectionError, LoggingError, SyncError, NetworkError, ResourceError
+from edgepulse_win.shared.metrics import create_metrics_collector, StandardMetrics
 
 logger = get_logger(__name__)
 
@@ -76,7 +77,7 @@ class EdgePulseAgent:
         )
         
         # Metrics
-        self.metrics = initialize_metrics(self.device_id)
+        self.metrics = create_metrics_collector("agent", self.device_id)
         
         # State
         self._running = False
@@ -367,7 +368,15 @@ class EdgePulseAgent:
             logger.info("anomaly_detected", severity=data.get('severity'))
             
             # Update metrics
-            self.metrics.record_anomaly(data.get('severity', 'medium'))
+            self.metrics.increment_counter(
+                StandardMetrics.ANOMALIES_DETECTED_TOTAL,
+                labels={'severity': data.get('severity', 'medium')}
+            )
+            self.metrics.observe_histogram(
+                StandardMetrics.ALERT_ANOMALY_SCORE,
+                data.get('anomaly_score', 0.5),
+                labels={'severity': data.get('severity', 'medium')}
+            )
             
             # Generate report if needed
             if self.settings.alerting.min_severity in ['high', 'critical']:
@@ -381,7 +390,11 @@ class EdgePulseAgent:
         async def handle_sync_completed(event: Event):
             data = event.data
             logger.info("sync_completed", items=data.get('count', 0))
-            self.metrics.record_sync_attempt('success')
+            self.metrics.increment_counter(StandardMetrics.SYNC_ATTEMPTS_TOTAL)
+            self.metrics.set_gauge(
+                StandardMetrics.SYNC_SUCCESS_RATE,
+                1.0  # Success rate for this attempt
+            )
         
         # Subscribe to events
         self.event_bus.subscribe(EventType.ANOMALY_DETECTED, handle_anomaly)
@@ -456,13 +469,13 @@ class EdgePulseAgent:
                 import psutil
                 
                 # Update system metrics
-                self.metrics.update_cpu_usage(psutil.cpu_percent())
-                self.metrics.update_memory_usage(psutil.virtual_memory().percent)
+                self.metrics.set_gauge(StandardMetrics.CPU_USAGE, psutil.cpu_percent())
+                self.metrics.set_gauge(StandardMetrics.MEMORY_USAGE, psutil.virtual_memory().percent)
                 
                 # Update queue size
                 if self.sync_queue:
                     stats = self.sync_queue.get_stats()
-                    self.metrics.update_queue_size(stats['queue_size'])
+                    self.metrics.set_gauge(StandardMetrics.SYNC_QUEUE_SIZE, stats['queue_size'])
                 
                 await asyncio.sleep(self.settings.metrics.collection_interval)
                 
