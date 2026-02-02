@@ -28,7 +28,7 @@ from edgepulse_win.alerts.notifier import LocalNotifier
 from edgepulse_win.sync.supabase import SupabaseSync
 from edgepulse_win.config.privacy import PrivacyController
 from edgepulse_win.utils.path_manager import PathManager
-from edgepulse_win.utils.error_handler import EdgePulseError, ConfigurationError, ModelError, DetectionError, LoggingError, SyncError, NetworkError, ResourceError
+from edgepulse_win.utils.error_handler import EdgePulseError, ConfigurationError, ModelError, DetectionError, SyncError, NetworkError
 from edgepulse_win.shared.metrics import create_metrics_collector, StandardMetrics
 
 logger = get_logger(__name__)
@@ -81,6 +81,7 @@ class EdgePulseAgent:
         
         # State
         self._running = False
+        self._shutdown_event = asyncio.Event()
         self._tasks: List[asyncio.Task] = []
         self._pipeline: Optional[AsyncPipeline] = None
         self._sync_client: Optional[Any] = None
@@ -169,7 +170,7 @@ class EdgePulseAgent:
             
             # Publish start event
             await self.event_bus.publish(Event(
-                type=EventType.AGENT_STARTED,
+                type=EventType.SYSTEM,
                 data={"device_id": self.device_id},
                 timestamp=datetime.utcnow(),
                 source="async_agent"
@@ -194,12 +195,19 @@ class EdgePulseAgent:
         logger.info("stopping_async_agent", device_id=self.device_id)
         
         self._running = False
+        self._shutdown_event.set()
         
         try:
             # Cancel background tasks
             for task in self._tasks:
                 task.cancel()
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            
+            # Stop collectors
+            for collector in self._collectors:
+                if hasattr(collector, 'stop'):
+                    collector.stop()
+                    logger.info("collector_stopped", collector=collector.__class__.__name__)
             
             # Stop components
             if self._pipeline:
@@ -221,7 +229,7 @@ class EdgePulseAgent:
             
             # Publish stop event
             await self.event_bus.publish(Event(
-                type=EventType.AGENT_STOPPED,
+                type=EventType.SYSTEM,
                 data={"device_id": self.device_id},
                 timestamp=datetime.utcnow(),
                 source="async_agent"
@@ -242,11 +250,13 @@ class EdgePulseAgent:
         self._setup_signal_handlers()
         
         try:
-            # Keep running until stopped
-            while self._running:
-                await asyncio.sleep(1)
+            # Keep running until shutdown event is set
+            await self._shutdown_event.wait()
+            logger.info("shutdown_event_received")
         except KeyboardInterrupt:
             logger.info("received_keyboard_interrupt")
+        except Exception as e:
+            logger.error("run_forever_error", error=str(e))
         finally:
             await self.stop()
     
@@ -280,6 +290,7 @@ class EdgePulseAgent:
         """Create default detectors"""
         path_manager = PathManager()
         detectors = []
+        models_loaded = []
         
         # Isolation Forest
         isolation_forest = IsolationForestDetector(
@@ -292,6 +303,7 @@ class EdgePulseAgent:
         
         if isolation_forest.is_trained:
             detectors.append(isolation_forest)
+            models_loaded.append("Isolation Forest")
         
         # Autoencoder (if enabled)
         if self.settings.detection.use_autoencoder:
@@ -308,6 +320,13 @@ class EdgePulseAgent:
             
             if autoencoder.is_trained:
                 detectors.append(autoencoder)
+                models_loaded.append("Autoencoder")
+        
+        # Log model loading status
+        if models_loaded:
+            logger.info(f"Models loaded: {', '.join(models_loaded)}")
+        else:
+            logger.info("No model files loaded - system will run without anomaly detection")
         
         # Ensemble (if multiple detectors)
         if self.settings.detection.use_ensemble and len(detectors) > 1:
@@ -341,12 +360,23 @@ class EdgePulseAgent:
     
     async def _initialize_components(self) -> None:
         """Initialize all components"""
+        # Start collectors
+        for collector in self._collectors:
+            if hasattr(collector, 'start'):
+                collector.start()
+                logger.info("collector_started", collector=collector.__class__.__name__)
+        
         # Initialize feature normalizer
         self.normalizer = DeviceNormalizer(
             device_id=self.device_id,
             path_manager=PathManager(),
         )
-        self.normalizer.load_baseline()
+        baseline_loaded = self.normalizer.load_baseline()
+        
+        if baseline_loaded:
+            logger.info("Feature normalizer baseline loaded successfully")
+        else:
+            logger.info("No baseline file found - normalizer will learn from data")
         
         # Initialize SHAP explainer
         if self._detectors:
@@ -398,8 +428,8 @@ class EdgePulseAgent:
             )
         
         # Subscribe to events
-        self.event_bus.subscribe(EventType.ANOMALY_DETECTED, handle_anomaly)
-        self.event_bus.subscribe(EventType.SYNC_COMPLETED, handle_sync_completed)
+        self.event_bus.subscribe(EventType.DETECTION, handle_anomaly)
+        self.event_bus.subscribe(EventType.SYNC, handle_sync_completed)
     
     async def _initialize_sync_client(self) -> None:
         """Initialize sync client"""
@@ -456,9 +486,6 @@ class EdgePulseAgent:
                 
             except asyncio.CancelledError:
                 break
-            except ResourceError as e:
-                logger.error("health_check_error", error=str(e))
-                await asyncio.sleep(30)
             except Exception as e:
                 logger.error("health_check_error", error=str(e))
                 await asyncio.sleep(30)
@@ -482,9 +509,6 @@ class EdgePulseAgent:
                 
             except asyncio.CancelledError:
                 break
-            except ResourceError as e:
-                logger.error("metrics_collection_error", error=str(e))
-                await asyncio.sleep(30)
             except Exception as e:
                 logger.error("metrics_collection_error", error=str(e))
                 await asyncio.sleep(30)
@@ -504,8 +528,6 @@ class EdgePulseAgent:
                 
             except asyncio.CancelledError:
                 break
-            except LoggingError as e:
-                logger.error("data_cleanup_error", error=str(e))
             except Exception as e:
                 logger.error("data_cleanup_error", error=str(e))
     
@@ -523,10 +545,6 @@ class EdgePulseAgent:
             
             logger.info("agent_state_saved")
             
-        except ModelError as e:
-            logger.error("state_save_error", error=str(e))
-        except StorageError as e:
-            logger.error("state_save_error", error=str(e))
         except Exception as e:
             logger.error("state_save_error", error=str(e))
     
@@ -534,7 +552,8 @@ class EdgePulseAgent:
         """Setup signal handlers for graceful shutdown"""
         def signal_handler(signum, frame):
             logger.info("received_signal", signal=signum)
-            asyncio.create_task(self.stop())
+            # Set shutdown event instead of creating a task
+            self._shutdown_event.set()
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)

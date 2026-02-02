@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class APIConfig(BaseSettings):
     """API server configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_API_')
+    model_config = SettingsConfigDict(env_prefix='API_')
     
     enabled: bool = Field(default=True, description="Enable API server")
     mode: Literal["auto", "fastapi", "minimal", "socket"] = Field(
@@ -19,7 +19,7 @@ class APIConfig(BaseSettings):
 
 class SyncConfig(BaseSettings):
     """Synchronization configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_SYNC_')
+    model_config = SettingsConfigDict(env_prefix='SYNC_')
     
     enabled: bool = Field(default=False, description="Enable cloud sync")
     supabase_url: Optional[str] = Field(default=None, description="Supabase URL")
@@ -31,7 +31,7 @@ class SyncConfig(BaseSettings):
 
 class CollectionConfig(BaseSettings):
     """Data collection configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_COLLECTION_')
+    model_config = SettingsConfigDict(env_prefix='COLLECTION_')
     
     interval: int = Field(default=60, ge=5, le=3600, description="Collection interval in seconds")
     window_1min: int = Field(default=60, ge=10, description="1-minute window size")
@@ -43,7 +43,7 @@ class CollectionConfig(BaseSettings):
 
 class FeatureConfig(BaseSettings):
     """Feature extraction configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_FEATURES_')
+    model_config = SettingsConfigDict(env_prefix='FEATURES_')
     
     feature_dimension: int = Field(default=64, ge=8, le=512, description="Feature vector dimension")
     history_retention_hours: int = Field(default=24, ge=1, le=168, description="History retention in hours")
@@ -53,7 +53,7 @@ class FeatureConfig(BaseSettings):
 
 class DetectionConfig(BaseSettings):
     """Anomaly detection configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_DETECTION_')
+    model_config = SettingsConfigDict(env_prefix='DETECTION_')
     
     threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Detection threshold")
     use_autoencoder: bool = Field(default=False, description="Use autoencoder model")
@@ -72,10 +72,10 @@ class DetectionConfig(BaseSettings):
 
 class PrivacyConfig(BaseSettings):
     """Privacy and data retention configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_PRIVACY_')
+    model_config = SettingsConfigDict(env_prefix='')
     
     data_retention_days: int = Field(default=30, ge=1, le=365, description="Data retention in days")
-    anonymization_level: Literal["none", "basic", "full"] = Field(
+    anonymization_level: Literal["none", "basic", "medium", "full"] = Field(
         default="basic", 
         description="Data anonymization level"
     )
@@ -85,7 +85,7 @@ class PrivacyConfig(BaseSettings):
 
 class AlertingConfig(BaseSettings):
     """Alerting configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_ALERTING_')
+    model_config = SettingsConfigDict(env_prefix='ALERT_')
     
     enabled: bool = Field(default=True, description="Enable alerting")
     correlation_window: int = Field(default=300, ge=60, description="Alert correlation window in seconds")
@@ -99,7 +99,7 @@ class AlertingConfig(BaseSettings):
     
 class LoggingConfig(BaseSettings):
     """Logging configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_LOGGING_')
+    model_config = SettingsConfigDict(env_prefix='LOG_')
     
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", 
@@ -113,7 +113,7 @@ class LoggingConfig(BaseSettings):
 
 class MetricsConfig(BaseSettings):
     """Metrics configuration"""
-    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_METRICS_')
+    model_config = SettingsConfigDict(env_prefix='METRICS_')
     
     enabled: bool = Field(default=True, description="Enable metrics collection")
     prometheus_enabled: bool = Field(default=False, description="Enable Prometheus metrics")
@@ -125,7 +125,7 @@ class AgentSettings(BaseSettings):
     """Main agent settings"""
     model_config = SettingsConfigDict(
         env_file='.env',
-        env_prefix='EDGEPULSE_',
+        env_prefix='',
         case_sensitive=False,
         extra='allow'  # Allow extra fields for backward compatibility
     )

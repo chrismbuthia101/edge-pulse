@@ -107,8 +107,17 @@ def log_operation(
                 LOG_FIELDS['event_type']: f"{component}.{operation}"
             }
             
-            if device_id:
-                log_context[LOG_FIELDS['device_id']] = device_id
+            # Handle device_id - it could be a callable (like lambda self: self.device_id)
+            device_id_value = device_id
+            if callable(device_id):
+                # For methods, the first arg should be self
+                if args:
+                    device_id_value = device_id(args[0])
+                else:
+                    device_id_value = device_id()
+            
+            if device_id_value:
+                log_context[LOG_FIELDS['device_id']] = device_id_value
                 
             try:
                 logger.info(f"{operation}_started", **log_context)

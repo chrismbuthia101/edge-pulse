@@ -1,7 +1,7 @@
 # Log writer: SQLite persistence with hash-chain integration.
 
 import json
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +13,7 @@ from edgepulse_win.storage.chain import HashChain
 from edgepulse_win.storage.database import DatabaseManager
 from edgepulse_win.storage.sanitizer import sanitize
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LogWriter:

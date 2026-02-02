@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional
 from dataclasses import dataclass
 
 from edgepulse_win.utils.log_handler import get_logger
-from edgepulse_win.utils.error_handler import ValidationError, EdgePulseError
+from edgepulse_win.utils.error_handler import EdgePulseError
 from edgepulse_win.shared import EventType
 
 logger = get_logger(__name__)
@@ -37,8 +37,10 @@ class EventBus:
     def __init__(self):
         self._subscribers: Dict[EventType, List[Callable]] = {}
         self._running = False
-        self._event_queue: asyncio.Queue = asyncio.Queue()
+        self._event_queue: Optional[asyncio.Queue] = None
         self._processor_task: Optional[asyncio.Task] = None
+        self._start_lock = asyncio.Lock()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
     
     def subscribe(self, event_type: EventType, handler: Callable) -> None:
         """Subscribe to an event type"""
@@ -53,14 +55,12 @@ class EventBus:
             try:
                 self._subscribers[event_type].remove(handler)
                 logger.debug("event_unsubscribed", event_type=event_type.value, handler=handler.__name__)
-            except ValidationError:
-                pass  # Handler not found
             except ValueError:
                 pass  # Handler not found
     
     async def publish(self, event: Event) -> None:
         """Publish an event"""
-        if not self._running:
+        if not self._running or not self._event_queue:
             logger.warning("event_bus_not_running", event_type=event.type.value)
             return
         
@@ -69,40 +69,49 @@ class EventBus:
     
     async def start(self) -> None:
         """Start the event processor"""
-        if self._running:
-            return
-        
-        self._running = True
-        self._processor_task = asyncio.create_task(self._process_events())
-        logger.info("event_bus_started")
+        async with self._start_lock:
+            if self._running:
+                return
+            
+            # Store the current event loop and create queue in it
+            self._loop = asyncio.get_running_loop()
+            self._event_queue = asyncio.Queue()
+            
+            self._running = True
+            self._processor_task = asyncio.create_task(self._process_events())
+            logger.info("event_bus_started")
     
     async def stop(self) -> None:
         """Stop the event processor"""
-        if not self._running:
-            return
-        
-        self._running = False
-        
-        if self._processor_task:
-            self._processor_task.cancel()
-            try:
-                await self._processor_task
-            except asyncio.CancelledError:
-                pass
-        
-        # Process remaining events
-        while not self._event_queue.empty():
-            try:
-                event = self._event_queue.get_nowait()
-                await self._handle_event(event)
-            except asyncio.QueueEmpty:
-                break
-        
-        logger.info("event_bus_stopped")
+        async with self._start_lock:
+            if not self._running:
+                return
+            
+            self._running = False
+            
+            if self._processor_task:
+                self._processor_task.cancel()
+                try:
+                    await self._processor_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Process remaining events
+            if self._event_queue:
+                while not self._event_queue.empty():
+                    try:
+                        event = self._event_queue.get_nowait()
+                        await self._handle_event(event)
+                    except asyncio.QueueEmpty:
+                        break
+            
+            self._loop = None
+            self._event_queue = None
+            logger.info("event_bus_stopped")
     
     async def _process_events(self) -> None:
         """Process events from the queue"""
-        while self._running:
+        while self._running and self._event_queue:
             try:
                 # Wait for events with timeout to allow graceful shutdown
                 event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
@@ -111,10 +120,9 @@ class EventBus:
                 continue
             except asyncio.CancelledError:
                 break
-            except EdgePulseError as e:
-                logger.error("event_processor_error", error=str(e))
             except Exception as e:
                 logger.error("event_processor_error", error=str(e))
+                await asyncio.sleep(0.1)
     
     async def _handle_event(self, event: Event) -> None:
         """Handle a single event"""
@@ -140,13 +148,6 @@ class EventBus:
                 await handler(event)
             else:
                 await asyncio.to_thread(handler, event)
-        except EdgePulseError as e:
-            logger.error(
-                "event_handler_failed",
-                event=event.type.value,
-                handler=handler.__name__,
-                error=str(e)
-            )
         except Exception as e:
             logger.error(
                 "event_handler_failed",

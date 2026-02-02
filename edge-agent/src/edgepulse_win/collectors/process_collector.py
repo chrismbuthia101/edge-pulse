@@ -1,14 +1,14 @@
 # Process Monitor
 
 import hashlib
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Generator, Any
 from datetime import datetime
 import psutil
 from edgepulse_win.collectors.base import BaseCollector
 from edgepulse_win.utils.error_handler import PermissionError, ResourceError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ProcessMonitor(BaseCollector):
     def __init__(self) -> None:

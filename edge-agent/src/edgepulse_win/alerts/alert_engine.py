@@ -2,14 +2,14 @@
 
 # Intelligent alert generation, correlation, and deduplication.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from collections import deque
 
 from edgepulse_win.shared import SeverityLevel
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AlertEngine:

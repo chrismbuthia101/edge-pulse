@@ -3,7 +3,7 @@
 # Monitors network behavior patterns including connections, ports, and entropy.
 # Privacy: NO packet payloads or DNS content - metadata only.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import math
 from typing import Dict, List, Optional, Any
 from collections import Counter, defaultdict
@@ -12,7 +12,7 @@ import psutil
 from edgepulse_win.collectors.base import BaseCollector
 from edgepulse_win.utils.error_handler import PermissionError, NetworkError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class NetworkMonitor(BaseCollector):

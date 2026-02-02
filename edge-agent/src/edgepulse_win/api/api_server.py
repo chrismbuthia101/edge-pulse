@@ -8,13 +8,18 @@ from datetime import datetime
 
 from edgepulse_win.utils.log_handler import get_logger
 from edgepulse_win.shared import SeverityLevel, DeviceStatus, create_standard_response
+from edgepulse_win.shared.constants import (
+    DEFAULT_API_PORT, DEFAULT_API_HOST, DEFAULT_API_MODE,
+    DEFAULT_MIN_MEMORY_MB, DEFAULT_MIN_CPU_CORES, DEFAULT_SOCKET_PATH,
+    API_MODES, API_ENDPOINTS
+)
 
 logger = get_logger(__name__)
 
 class BaseAPIServer(ABC):
     """Base class for API servers"""
     
-    def __init__(self, port: int = 8080):
+    def __init__(self, port: int = DEFAULT_API_PORT):
         self.port = port
         self._running = False
         self.server: Optional[asyncio.Server] = None
@@ -32,7 +37,7 @@ class MinimalAPIServer(BaseAPIServer):
     """Minimal HTTP server using only standard library"""
     
     async def start(self) -> None:
-        self.server = await asyncio.start_server(self._handle_request, '0.0.0.0', self.port)
+        self.server = await asyncio.start_server(self._handle_request, DEFAULT_API_HOST, self.port)
         self._running = True
         logger.info("minimal_api_server_started", port=self.port)
     
@@ -57,9 +62,9 @@ class MinimalAPIServer(BaseAPIServer):
             await writer.wait_closed()
     
     def _generate_response(self, request: str) -> str:
-        if "GET /health" in request:
+        if f"GET {API_ENDPOINTS['health']}" in request:
             data = {"status": "healthy", "server": "minimal"}
-        elif "GET /metrics" in request:
+        elif f"GET {API_ENDPOINTS['metrics']}" in request:
             data = {"metrics": "basic_metrics_placeholder"}
         else:
             data = {"message": "EdgePulse Agent API", "server": "minimal"}
@@ -71,8 +76,8 @@ class SocketAPIServer(BaseAPIServer):
     """Unix socket API server for low-resource environments"""
     
     def __init__(self, socket_path: Optional[Path] = None):
-        super().__init__(0)
-        self.socket_path = socket_path or Path("/tmp/edgepulse.sock")
+        super().__init__(0)  # Port not used for socket
+        self.socket_path = socket_path or Path(DEFAULT_SOCKET_PATH)
     
     async def start(self) -> None:
         if self.socket_path.exists():
@@ -115,7 +120,7 @@ class SocketAPIServer(BaseAPIServer):
 class FastAPIServer(BaseAPIServer):
     """Full FastAPI server for capable devices"""
     
-    def __init__(self, port: int = 8080):
+    def __init__(self, port: int = DEFAULT_API_PORT):
         super().__init__(port)
         self.app: Optional[Any] = None
         self.uvicorn_server: Optional[Any] = None
@@ -128,7 +133,7 @@ class FastAPIServer(BaseAPIServer):
             self.app = FastAPI(title="EdgePulse Agent API", version="1.0.0")
             self._setup_routes()
             
-            config = uvicorn.Config(app=self.app, host="0.0.0.0", port=self.port, log_level="info")
+            config = uvicorn.Config(app=self.app, host=DEFAULT_API_HOST, port=self.port, log_level="info")
             self.uvicorn_server = uvicorn.Server(config)
             asyncio.create_task(self.uvicorn_server.serve())
             
@@ -141,16 +146,20 @@ class FastAPIServer(BaseAPIServer):
     async def stop(self) -> None:
         if self.uvicorn_server:
             self.uvicorn_server.should_exit = True
-            await self.uvicorn_server.shutdown()
+            # Handle different uvicorn versions
+            if hasattr(self.uvicorn_server, 'shutdown'):
+                await self.uvicorn_server.shutdown()
+            elif hasattr(self.uvicorn_server, 'handle_exit'):
+                await self.uvicorn_server.handle_exit(sig=15, frame=None)
         self._running = False
         logger.info("fastapi_server_stopped")
     
     def _setup_routes(self) -> None:
-        @self.app.get("/health")
+        @self.app.get(API_ENDPOINTS["health"])
         async def health():
             return {"status": "healthy", "server": "fastapi"}
         
-        @self.app.get("/metrics")
+        @self.app.get(API_ENDPOINTS["metrics"])
         async def metrics():
             return {
                 "cpu_usage": psutil.cpu_percent(),
@@ -158,15 +167,16 @@ class FastAPIServer(BaseAPIServer):
                 "server": "fastapi"
             }
         
-        @self.app.get("/status")
+        @self.app.get(API_ENDPOINTS["status"])
         async def status():
             return {"status": "running", "server": "fastapi", "version": "1.0.0"}
 
 class AdaptiveAPIServer:
     """Adaptive API server that selects the best implementation based on resources"""
     
-    def __init__(self, mode: str = "auto", port: int = 8080, socket_path: Optional[Path] = None, 
-                 min_memory_mb: int = 512, min_cpu_cores: int = 2):
+    def __init__(self, mode: str = DEFAULT_API_MODE, port: int = DEFAULT_API_PORT, 
+                 socket_path: Optional[Path] = None, min_memory_mb: int = DEFAULT_MIN_MEMORY_MB, 
+                 min_cpu_cores: int = DEFAULT_MIN_CPU_CORES):
         self.mode = mode
         self.port = port
         self.socket_path = socket_path
@@ -183,9 +193,9 @@ class AdaptiveAPIServer:
         logger.info("selected_api_mode", mode=self._selected_mode)
         
         server_classes = {
-            "fastapi": lambda: FastAPIServer(self.port),
-            "socket": lambda: SocketAPIServer(self.socket_path),
-            "minimal": lambda: MinimalAPIServer(self.port)
+            API_MODES["FASTAPI"]: lambda: FastAPIServer(self.port),
+            API_MODES["SOCKET"]: lambda: SocketAPIServer(self.socket_path),
+            API_MODES["MINIMAL"]: lambda: MinimalAPIServer(self.port)
         }
         
         if self._selected_mode not in server_classes:
@@ -197,11 +207,11 @@ class AdaptiveAPIServer:
             logger.info("adaptive_api_server_started", mode=self._selected_mode)
         except Exception as e:
             logger.error("api_server_start_failed", mode=self._selected_mode, error=str(e))
-            if self._selected_mode != "minimal":
+            if self._selected_mode != API_MODES["MINIMAL"]:
                 logger.info("falling_back_to_minimal_server")
                 self.server = MinimalAPIServer(self.port)
                 await self.server.start()
-                self._selected_mode = "minimal"
+                self._selected_mode = API_MODES["MINIMAL"]
             else:
                 raise
     
@@ -230,14 +240,14 @@ class AdaptiveAPIServer:
             
             if (fastapi_available and cpu_count >= self.min_cpu_cores and 
                 available_memory_mb >= self.min_memory_mb):
-                return "fastapi"
+                return API_MODES["FASTAPI"]
             elif available_memory_mb >= 256:
-                return "socket"
+                return API_MODES["SOCKET"]
             else:
-                return "minimal"
+                return API_MODES["MINIMAL"]
         except Exception as e:
             logger.error("resource_detection_failed", error=str(e))
-            return "minimal"
+            return API_MODES["MINIMAL"]
     
     def get_mode(self) -> Optional[str]:
         return self._selected_mode

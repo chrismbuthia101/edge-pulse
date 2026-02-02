@@ -32,13 +32,13 @@ class PipelineMetrics:
                 {"device_id": self.metrics.device_id}
             )
     
-    async def track_cycle(self):
-        """Async context manager for tracking pipeline cycles"""
-        start_time = time.time()
-        try:
-            yield
-        finally:
-            duration = time.time() - start_time
+    async def __aenter__(self):
+        self._start_time = time.time()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._start_time:
+            duration = time.time() - self._start_time
             self.metrics.observe_histogram(
                 StandardMetrics.PIPELINE_CYCLE_DURATION,
                 duration,
@@ -89,14 +89,15 @@ class AsyncPipeline:
         self._collection_interval = interval
         
         # Start event bus if not already running
-        await self.event_bus.start()
+        if not self.event_bus._running:
+            await self.event_bus.start()
         
         # Start the main processing task
         self._task = asyncio.create_task(self._run_loop())
         
         # Publish start event
         await self.event_bus.publish(Event(
-            type=EventType.AGENT_STARTED,
+            type=EventType.SYSTEM,
             data={"interval": interval},
             timestamp=datetime.utcnow(),
             source="async_pipeline"
@@ -118,21 +119,23 @@ class AsyncPipeline:
             except asyncio.CancelledError:
                 pass
         
-        # Publish stop event
-        await self.event_bus.publish(Event(
-            type=EventType.AGENT_STOPPED,
-            data={},
-            timestamp=datetime.utcnow(),
-            source="async_pipeline"
-        ))
+        # Publish stop event only if event bus is running
+        if self.event_bus._running:
+            await self.event_bus.publish(Event(
+                type=EventType.SYSTEM,
+                data={},
+                timestamp=datetime.utcnow(),
+                source="async_pipeline"
+            ))
         
         logger.info("pipeline_stopped")
     
     async def _run_loop(self) -> None:
         """Main processing loop"""
+        pipeline_metrics = PipelineMetrics(self.metrics)
         while self._running:
             try:
-                async with self.metrics.track_cycle():
+                async with pipeline_metrics:
                     await self.process_cycle()
                 
                 # Sleep for the collection interval
@@ -142,35 +145,13 @@ class AsyncPipeline:
                 break
             except DetectionError as e:
                 logger.error("pipeline_detection_error", error=str(e))
-                
-                # Publish error event
-                await self.event_bus.publish(Event(
-                    type=EventType.PIPELINE_ERROR,
-                    data={"error": str(e), "error_type": "DetectionError"},
-                    timestamp=datetime.utcnow(),
-                    source="async_pipeline"
-                ))
+                await self._publish_error_event(str(e), "DetectionError")
             except EdgePulseError as e:
                 logger.error("pipeline_error", error=str(e))
-                
-                # Publish error event
-                await self.event_bus.publish(Event(
-                    type=EventType.PIPELINE_ERROR,
-                    data={"error": str(e), "error_type": "EdgePulseError"},
-                    timestamp=datetime.utcnow(),
-                    source="async_pipeline"
-                ))
+                await self._publish_error_event(str(e), "EdgePulseError")
             except Exception as e:
                 logger.error("pipeline_error", error=str(e))
-                
-                # Publish error event
-                await self.event_bus.publish(Event(
-                    type=EventType.PIPELINE_ERROR,
-                    data={"error": str(e), "error_type": "UnexpectedError"},
-                    timestamp=datetime.utcnow(),
-                    source="async_pipeline"
-                ))
-                
+                await self._publish_error_event(str(e), "UnexpectedError")
                 # Continue processing after error
                 await asyncio.sleep(min(self._collection_interval, 10.0))
     
@@ -217,8 +198,13 @@ class AsyncPipeline:
         tasks = [self._safe_collect(collector) for collector in self.collectors]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Merge results, handling errors
-        merged_telemetry = {}
+        # Structure the telemetry data as expected by feature extractor
+        structured_telemetry = {
+            "system_metrics": {},
+            "processes": [],
+            "network_connections": [],
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
         for i, result in enumerate(results):
             collector_name = self.collectors[i].__class__.__name__
@@ -227,20 +213,47 @@ class AsyncPipeline:
                 logger.error("collector_error", collector=collector_name, error=str(result))
                 continue
             
-            if result:
+            if not result:
+                continue
+            
+            # Handle different collector types
+            if collector_name == "SystemMetricsCollector":
+                if isinstance(result, list) and result:
+                    result = result[0]  # Get the first (and only) telemetry dict
+                
+                if isinstance(result, dict):
+                    # Map system metrics to expected structure
+                    structured_telemetry["system_metrics"] = {
+                        "cpu": result.get("cpu", {}),
+                        "memory": result.get("memory", {}),
+                        "disk": result.get("disk", {}),
+                        "network": result.get("network", {}),
+                        "uptime": result.get("uptime", {})
+                    }
+            
+            elif collector_name == "ProcessMonitor":
                 if isinstance(result, list):
-                    # Handle list of telemetry points
-                    for item in result:
-                        if isinstance(item, dict):
-                            merged_telemetry.update(item)
+                    structured_telemetry["processes"] = result
                 elif isinstance(result, dict):
-                    merged_telemetry.update(result)
+                    structured_telemetry["processes"] = [result]
+            
+            elif collector_name == "NetworkMonitor":
+                if isinstance(result, list):
+                    structured_telemetry["network_connections"] = result
+                elif isinstance(result, dict):
+                    structured_telemetry["network_connections"] = [result]
+            
+            else:
+                # For other collectors, add to system_metrics
+                if isinstance(result, dict):
+                    structured_telemetry["system_metrics"][collector_name.lower()] = result
         
-        # Add timestamp if not present
-        if "timestamp" not in merged_telemetry:
-            merged_telemetry["timestamp"] = datetime.utcnow().isoformat()
+        logger.debug("telemetry_collected", 
+                   system_metrics_keys=list(structured_telemetry["system_metrics"].keys()),
+                   processes_count=len(structured_telemetry["processes"]),
+                   network_connections_count=len(structured_telemetry["network_connections"]))
         
-        return merged_telemetry
+        return structured_telemetry
     
     async def _safe_collect(self, collector: Any) -> Optional[Dict[str, Any]]:
         """Safely collect from a single collector"""
@@ -325,7 +338,7 @@ class AsyncPipeline:
                 
                 # Publish anomaly event
                 await self.event_bus.publish(Event(
-                    type=EventType.ANOMALY_DETECTED,
+                    type=EventType.DETECTION,
                     data={
                         "detection": detection,
                         "features": features,
@@ -365,6 +378,16 @@ class AsyncPipeline:
                         logger.error("alert_processing_error", error=str(e))
         
         return alerts_generated
+    
+    async def _publish_error_event(self, error_message: str, error_type: str) -> None:
+        """Publish error event to event bus if it's running"""
+        if self.event_bus._running:
+            await self.event_bus.publish(Event(
+                type=EventType.SYSTEM,
+                data={"error": error_message, "error_type": error_type},
+                timestamp=datetime.utcnow(),
+                source="async_pipeline"
+            ))
     
     def set_collection_interval(self, interval: float) -> None:
         """Update the collection interval"""

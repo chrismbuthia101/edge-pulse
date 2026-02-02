@@ -4,6 +4,21 @@
 import argparse
 import asyncio
 import sys
+import os
+from pathlib import Path
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Try to load .env from current directory and parent directories
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        load_dotenv()  # Try current directory
+except ImportError:
+    pass  # dotenv not available, use system environment
+
 from edgepulse_win.core.agent import EdgePulseAgent
 from edgepulse_win.config.settings import AgentSettings
 from edgepulse_win.utils.error_handler import ConfigurationError, EdgePulseError

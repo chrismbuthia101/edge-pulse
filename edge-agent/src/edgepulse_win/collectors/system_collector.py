@@ -2,8 +2,9 @@
 # Collects CPU, memory, disk, and network metrics using psutil.
 
 from datetime import datetime
+import time
 from typing import Dict, Any, Optional, List, Union
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import psutil
 from edgepulse_win.collectors.base import BaseCollector
 from edgepulse_win.utils.error_handler import ResourceError, PermissionError
@@ -12,7 +13,7 @@ from edgepulse_win.shared import (
     create_metrics_collector, StandardMetrics
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SystemMetricsCollector(BaseCollector):

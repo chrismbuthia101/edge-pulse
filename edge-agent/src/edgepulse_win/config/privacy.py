@@ -1,12 +1,12 @@
 # Privacy Controller
 # Enforces privacy-by-design principles and GDPR compliance.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import hashlib
 from typing import Dict
 from datetime import datetime, timedelta
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PrivacyController:

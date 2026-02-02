@@ -1,6 +1,6 @@
 # Log Manager
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Union
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +9,7 @@ from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.storage.log_writer import LogWriter
 from edgepulse_win.storage.chain import HashChain
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LogManager:

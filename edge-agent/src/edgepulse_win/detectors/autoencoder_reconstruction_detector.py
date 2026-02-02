@@ -1,7 +1,7 @@
 # Autoencoder Detector
 # Secondary anomaly detector using autoencoder reconstruction error.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
 import numpy as np
@@ -28,7 +28,7 @@ from edgepulse_win.utils.error_handler import ModelError
 from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.detectors.base import BaseDetector
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AutoencoderDetector(BaseDetector):

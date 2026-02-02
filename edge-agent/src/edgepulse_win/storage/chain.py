@@ -1,14 +1,14 @@
 # Hash chain core: persistence and integrity verification.
 
 import json
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 from edgepulse_win.utils.error_handler import LoggingError
 from edgepulse_win.utils.path_manager import PathManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HashChain:

@@ -1,7 +1,7 @@
 # Isolation Forest Detector
 # Primary unsupervised anomaly detector using Isolation Forest algorithm.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import joblib
 from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
@@ -12,7 +12,7 @@ from edgepulse_win.utils.error_handler import ModelError
 from edgepulse_win.utils.path_manager import PathManager
 from edgepulse_win.detectors.base import BaseDetector
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class IsolationForestDetector(BaseDetector):

@@ -1,6 +1,6 @@
 # Device Normalizer
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import pickle
 from typing import Optional
 from pathlib import Path
@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler, RobustScaler
 from edgepulse_win.utils.error_handler import ModelError
 from edgepulse_win.utils.path_manager import PathManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DeviceNormalizer:

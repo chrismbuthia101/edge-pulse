@@ -98,6 +98,31 @@ class InMemoryMetricsCollector(MetricCollector):
         
         label_str = ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
         return f"{name}{{{label_str}}}"
+    
+    def record_anomaly(self, severity: str = "medium") -> None:
+        """Record an anomaly detection"""
+        self.increment_counter(
+            StandardMetrics.ANOMALIES_DETECTED_TOTAL,
+            labels={'severity': severity}
+        )
+    
+    def record_alert(self, severity: str = "medium", anomaly_score: Optional[float] = None, alert_type: Optional[str] = None) -> None:
+        """Record an alert generation"""
+        self.increment_counter(
+            StandardMetrics.ALERTS_GENERATED_TOTAL,
+            labels={'severity': severity}
+        )
+        
+        if anomaly_score is not None:
+            self.observe_histogram(
+                StandardMetrics.ALERT_ANOMALY_SCORE,
+                anomaly_score,
+                labels={'severity': severity}
+            )
+    
+    def update_collection_interval(self, interval: float) -> None:
+        """Update the collection interval metric"""
+        self.set_gauge(StandardMetrics.COLLECTION_INTERVAL, interval)
 
 
 class StandardMetrics:

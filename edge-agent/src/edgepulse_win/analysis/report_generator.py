@@ -1,14 +1,14 @@
 # Report Generator
 # Generates comprehensive, human-readable anomaly reports.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 import uuid
 from typing import Dict, Optional
 from datetime import datetime
 
 from edgepulse_win.shared import SeverityLevel
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ReportGenerator:

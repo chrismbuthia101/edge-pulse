@@ -1,13 +1,13 @@
 # Local Notifier
 # Delivers alerts to local user via multiple channels.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Dict, Optional
 from datetime import datetime, time
 
 from edgepulse_win.utils.error_handler import LoggingError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LocalNotifier:

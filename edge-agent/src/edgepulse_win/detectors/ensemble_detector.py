@@ -1,11 +1,11 @@
 #Ensemble Detector
 # Combines multiple anomaly detectors with voting/weighting strategies.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from typing import Tuple, Dict, List, Optional
 import numpy as np
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseDetector:
@@ -82,9 +82,9 @@ class EnsembleDetector:
         # Apply voting strategy
         if self.voting_strategy == 'majority':
             # Simple majority vote
-            final_label = 1 if sum(labels) > len(labels) / 2 else 0
-            final_score = np.mean(scores)
-            confidence = np.mean(confidences)
+            final_label = 1 if sum(int(label) for label in labels) > len(labels) / 2 else 0
+            final_score = float(np.mean(scores))
+            confidence = float(np.mean(confidences))
             
         elif self.voting_strategy == 'weighted':
             # Weighted average of scores
@@ -116,9 +116,9 @@ class EnsembleDetector:
             
         else:
             logger.warning(f"Unknown voting strategy: {self.voting_strategy}, using majority")
-            final_label = 1 if sum(labels) > len(labels) / 2 else 0
-            final_score = np.mean(scores)
-            confidence = np.mean(confidences)
+            final_label = 1 if sum(int(label) for label in labels) > len(labels) / 2 else 0
+            final_score = float(np.mean(scores))
+            confidence = float(np.mean(confidences))
         
         return (final_label, float(final_score), detector_scores)
 

@@ -1,6 +1,6 @@
 # Feature extraction from telemetry with validation.
 
-import logging
+from edgepulse_win.utils.log_handler import get_logger
 from datetime import datetime
 from typing import Dict, List, Any
 
@@ -9,7 +9,7 @@ import numpy as np
 from edgepulse_win.utils.error_handler import ValidationError
 from edgepulse_win.shared import normalize_timestamp
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FeatureExtractor:
