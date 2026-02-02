@@ -26,15 +26,14 @@ class LocalNotifier:
         self.quiet_hours_start = quiet_hours_start
         self.quiet_hours_end = quiet_hours_end
         
-        # Try to import win10toast-ng
+        # Try to import notify-py
         self.toast_available = False
         if enable_system_tray:
             try:
-                from win10toast_ng import ToastNotifier
-                self.toaster = ToastNotifier()
+                from notify_py import Notify
                 self.toast_available = True
             except ImportError:
-                logger.warning("win10toast-ng not available, system tray notifications disabled")
+                logger.warning("notify-py not available, system tray notifications disabled")
                 self.toast_available = False
 
     def _is_quiet_hours(self) -> bool:
@@ -93,21 +92,11 @@ class LocalNotifier:
                 f"ID: {alert_id[:8]}..."
             )
             
-            # Duration based on severity
-            duration_map = {
-                "critical": 10,
-                "high": 8,
-                "medium": 5,
-                "low": 3,
-            }
-            duration = duration_map.get(severity.lower(), 5)
-            
-            self.toaster.show_toast(
-                title=title,
-                msg=message,
-                duration=duration,
-                threaded=True,
+            notification = Notify(
+                default_notification_title=title,
+                default_notification_message=message,
             )
+            notification.send()
         except LoggingError as e:
             logger.error(f"Error sending system tray notification: {e}")
         except Exception as e:
