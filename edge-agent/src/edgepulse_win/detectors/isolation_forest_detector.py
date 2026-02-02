@@ -3,7 +3,7 @@
 
 import logging
 import joblib
-from typing import Tuple, Optional, Any, Dict
+from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
 import numpy as np
 from sklearn.ensemble import IsolationForest
@@ -42,7 +42,9 @@ class IsolationForestDetector(BaseDetector):
         self.is_trained = False
         self.training_samples = 0
 
-    def train(self, features: np.ndarray) -> None:
+    def train(self, training_data: Any, config: Dict[str, Any]) -> None:
+        features = training_data if isinstance(training_data, np.ndarray) else np.array(training_data)
+        
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -68,6 +70,33 @@ class IsolationForestDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Error training Isolation Forest: {e}")
             raise ModelError(f"Failed to train Isolation Forest: {e}") from e
+
+    def detect(self, features: Any) -> List[Any]:
+        """Detect anomalies in features"""
+        if not self.is_trained or self.model is None:
+            logger.warning("Model not trained, returning default predictions")
+            return [(0, 0.0)] * (len(features) if hasattr(features, '__len__') else 1)
+        
+        features_array = features if isinstance(features, np.ndarray) else np.array(features)
+        
+        if features_array.ndim == 1:
+            features_array = features_array.reshape(1, -1)
+        
+        try:
+            scores = self.model.score_samples(features_array)
+            normalized_scores = (1 - scores) / 2
+            predictions = self.model.predict(features_array)
+            labels = (predictions == -1).astype(int)
+            
+            results = []
+            for i in range(len(labels)):
+                results.append((int(labels[i]), float(normalized_scores[i])))
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error detecting with Isolation Forest: {e}")
+            return [(0, 0.0)] * len(features_array)
 
     def predict(self, features: np.ndarray) -> Tuple[int, float]:
         if not self.is_trained or self.model is None:

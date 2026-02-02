@@ -2,7 +2,7 @@
 # Secondary anomaly detector using autoencoder reconstruction error.
 
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
 import numpy as np
 
@@ -66,7 +66,7 @@ class AutoencoderDetector(BaseDetector):
         self.training_samples = 0
         self.reconstruction_threshold = 0.1
 
-    def _build_model(self) -> tf.keras.Model:
+    def _build_model(self):
         if not TENSORFLOW_AVAILABLE:
             raise ModelError("TensorFlow is required for training models")
             
@@ -159,14 +159,14 @@ class AutoencoderDetector(BaseDetector):
             logger.error(f"Error in TFLite prediction: {e}")
             raise ModelError(f"TFLite prediction failed: {e}") from e
 
-    def train(
-        self,
-        features: np.ndarray,
-        epochs: Optional[int] = None,
-        batch_size: int = 32,
-        validation_split: float = 0.2,
-        early_stopping: bool = True,
-    ) -> None:
+    def train(self, training_data: Any, config: Dict[str, Any]) -> None:
+        features = training_data if isinstance(training_data, np.ndarray) else np.array(training_data)
+        
+        epochs = config.get('epochs') if config else None
+        batch_size = config.get('batch_size', 32) if config else 32
+        validation_split = config.get('validation_split', 0.2) if config else 0.2
+        early_stopping = config.get('early_stopping', True) if config else True
+        
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -216,6 +216,44 @@ class AutoencoderDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Error training Autoencoder: {e}")
             raise ModelError(f"Failed to train Autoencoder: {e}") from e
+
+    def detect(self, features: Any) -> List[Any]:
+        """Detect anomalies in features"""
+        if not self.is_trained:
+            logger.warning("Model not trained, returning default predictions")
+            return [(0, 0.0)] * (len(features) if hasattr(features, '__len__') else 1)
+        
+        features_array = features if isinstance(features, np.ndarray) else np.array(features)
+        
+        if features_array.ndim == 1:
+            features_array = features_array.reshape(1, -1)
+        
+        try:
+            if self.use_tflite:
+                if self.interpreter is None:
+                    return [(0, 0.0)] * len(features_array)
+                reconstructions = self._predict_tflite(features_array)
+            else:
+                if self.model is None:
+                    return [(0, 0.0)] * len(features_array)
+                reconstructions = self.model.predict(features_array, verbose=0)
+                
+            errors = np.mean((features_array - reconstructions) ** 2, axis=1)
+            results = []
+            
+            for error in errors:
+                if self.reconstruction_threshold > 0:
+                    normalized_score = min(1.0, error / self.reconstruction_threshold)
+                else:
+                    normalized_score = 0.0
+                
+                label = 1 if error > self.reconstruction_threshold else 0
+                results.append((label, float(normalized_score)))
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error detecting with Autoencoder: {e}")
+            return [(0, 0.0)] * len(features_array)
 
     def calculate_reconstruction_error(self, features: np.ndarray) -> float:
         if not self.is_trained:

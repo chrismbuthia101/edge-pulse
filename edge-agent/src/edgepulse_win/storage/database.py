@@ -178,6 +178,9 @@ class DatabaseManager:
         self.db_path = db_path
         self._initialized = False
         
+        # Ensure parent directory exists
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        
         logger.info("standardized_db_manager_initialized", db_path=str(db_path))
     
     async def initialize(self) -> None:

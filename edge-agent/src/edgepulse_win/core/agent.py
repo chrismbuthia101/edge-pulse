@@ -61,10 +61,10 @@ class EdgePulseAgent:
         # Core dependencies
         self.event_bus = event_bus or get_event_bus()
         self.database = database or DatabaseManager(
-            PathManager().get_data_path() / "edgepulse.db"
+            PathManager().data_dir / "edgepulse.db"
         )
         self.sync_queue = sync_queue or AsyncSyncQueue(
-            PathManager().get_data_path() / "sync",
+            PathManager().data_dir / "sync",
             max_size=self.settings.sync.offline_queue_max,
             max_retry_attempts=self.settings.sync.retry_max_attempts,
             batch_size=self.settings.sync.batch_size
@@ -122,7 +122,7 @@ class EdgePulseAgent:
                 alert_engine=self._alert_engine,
                 device_id=self.device_id,
                 event_bus=self.event_bus,
-                metrics=self.metrics
+                metrics_collector=self.metrics
             )
             
             # Setup event handlers
