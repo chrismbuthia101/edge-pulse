@@ -6,6 +6,8 @@ import uuid
 from typing import Dict, Optional
 from datetime import datetime
 
+from edgepulse_win.shared import SeverityLevel
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,17 +16,16 @@ class ReportGenerator:
     def __init__(self, device_id: str):
         self.device_id = device_id
 
-    def assign_severity(self, anomaly_score: float) -> str:
+    def assign_severity(self, anomaly_score: float) -> SeverityLevel:
+        """Assign severity level based on anomaly score using shared enum"""
         if anomaly_score > 0.9:
-            return "critical"
+            return SeverityLevel.CRITICAL
         elif anomaly_score > 0.7:
-            return "high"
+            return SeverityLevel.HIGH
         elif anomaly_score > 0.5:
-            return "medium"
-        elif anomaly_score > 0.3:
-            return "low"
+            return SeverityLevel.MEDIUM
         else:
-            return "low"
+            return SeverityLevel.LOW
 
     def generate_alert_report(
         self,

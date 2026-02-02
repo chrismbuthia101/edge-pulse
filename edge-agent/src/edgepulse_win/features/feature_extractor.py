@@ -6,7 +6,8 @@ from typing import Dict, List, Any
 
 import numpy as np
 
-from edgepulse_win.utils.exception_handler import ValidationError
+from edgepulse_win.utils.error_handler import ValidationError
+from edgepulse_win.shared import normalize_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class FeatureExtractor:
             raise ValidationError(f"Missing telemetry keys: {missing}")
 
         try:
-            datetime.fromisoformat(telemetry["timestamp"])
+            normalize_timestamp(telemetry["timestamp"])
         except (ValueError, TypeError):
             raise ValidationError("Invalid timestamp format")
 

@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from collections import deque
 
+from edgepulse_win.shared import SeverityLevel
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,7 @@ class AlertEngine:
         deduplication_threshold: float = 0.8,
         rate_limit: int = 10,
         rate_window: int = 3600,
-        min_severity: str = "medium",
+        min_severity: SeverityLevel = SeverityLevel.MEDIUM,
     ):
         self.correlation_window = correlation_window
         self.deduplication_threshold = deduplication_threshold
@@ -29,17 +31,21 @@ class AlertEngine:
         self.alert_history: deque = deque(maxlen=1000)
         self.active_alerts: List[Dict] = []
         
-        # Severity levels for comparison
-        self.severity_levels = {
-            "low": 1,
-            "medium": 2,
-            "high": 3,
-            "critical": 4,
+        # Severity levels for comparison using enum
+        self.severity_order = {
+            SeverityLevel.LOW: 1,
+            SeverityLevel.MEDIUM: 2,
+            SeverityLevel.HIGH: 3,
+            SeverityLevel.CRITICAL: 4,
         }
 
-    def should_alert(self, anomaly_score: float, severity: str) -> bool:
+    def should_alert(self, anomaly_score: float, severity: SeverityLevel) -> bool:
+        # Ensure severity is enum
+        if isinstance(severity, str):
+            severity = SeverityLevel(severity.lower())
+            
         # Check severity threshold
-        if self.severity_levels.get(severity, 0) < self.severity_levels.get(self.min_severity, 0):
+        if self.severity_order.get(severity, 0) < self.severity_order.get(self.min_severity, 0):
             return False
         
         return True

@@ -1,131 +1,218 @@
-# Settings Manager
-# Centralized configuration management with Pydantic validation.
+from typing import Optional, List, Literal
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-import logging
-import yaml
-from typing import Any, Optional
-from pathlib import Path
+class APIConfig(BaseSettings):
+    """API server configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_API_')
+    
+    enabled: bool = Field(default=True, description="Enable API server")
+    mode: Literal["auto", "fastapi", "minimal", "socket"] = Field(
+        default="auto", 
+        description="API server mode"
+    )
+    port: int = Field(default=8080, ge=1, le=65535, description="API server port")
+    require_auth: bool = Field(default=False, description="Require authentication")
+    socket_path: Optional[str] = Field(default=None, description="Unix socket path")
+    min_memory_mb: int = Field(default=512, ge=128, description="Minimum memory for FastAPI")
+    min_cpu_cores: int = Field(default=2, ge=1, description="Minimum CPU cores for FastAPI")
 
-from pydantic import ValidationError as PydanticValidationError
+class SyncConfig(BaseSettings):
+    """Synchronization configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_SYNC_')
+    
+    enabled: bool = Field(default=False, description="Enable cloud sync")
+    supabase_url: Optional[str] = Field(default=None, description="Supabase URL")
+    supabase_key: Optional[SecretStr] = Field(default=None, description="Supabase API key")
+    batch_size: int = Field(default=50, ge=1, le=1000, description="Sync batch size")
+    retry_max_attempts: int = Field(default=5, ge=1, le=20, description="Max retry attempts")
+    offline_queue_max: int = Field(default=10000, ge=100, description="Max offline queue size")
+    sync_interval: int = Field(default=300, ge=60, description="Sync interval in seconds")
 
-from edgepulse_win.utils.exception_handler import ConfigurationError
-from edgepulse_win.schemas.config import AgentConfig
-from edgepulse_win.utils.paths import PathManager
+class CollectionConfig(BaseSettings):
+    """Data collection configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_COLLECTION_')
+    
+    interval: int = Field(default=60, ge=5, le=3600, description="Collection interval in seconds")
+    window_1min: int = Field(default=60, ge=10, description="1-minute window size")
+    window_5min: int = Field(default=300, ge=60, description="5-minute window size")
+    window_15min: int = Field(default=900, ge=300, description="15-minute window size")
+    enable_process_monitoring: bool = Field(default=True, description="Enable process monitoring")
+    enable_network_monitoring: bool = Field(default=True, description="Enable network monitoring")
+    max_processes: int = Field(default=100, ge=10, description="Max processes to monitor")
 
-logger = logging.getLogger(__name__)
+class FeatureConfig(BaseSettings):
+    """Feature extraction configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_FEATURES_')
+    
+    feature_dimension: int = Field(default=64, ge=8, le=512, description="Feature vector dimension")
+    history_retention_hours: int = Field(default=24, ge=1, le=168, description="History retention in hours")
+    enable_auto_scaling: bool = Field(default=True, description="Enable feature auto-scaling")
+    normalize_features: bool = Field(default=True, description="Normalize features")
+    feature_selection: bool = Field(default=False, description="Enable feature selection")
 
+class DetectionConfig(BaseSettings):
+    """Anomaly detection configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_DETECTION_')
+    
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Detection threshold")
+    use_autoencoder: bool = Field(default=False, description="Use autoencoder model")
+    use_ensemble: bool = Field(default=True, description="Use ensemble detection")
+    
+    # Isolation Forest settings
+    isolation_forest_n_estimators: int = Field(default=100, ge=10, le=1000)
+    isolation_forest_contamination: str = Field(default="auto", description="Contamination parameter")
+    
+    # Autoencoder settings
+    autoencoder_encoding_dim: int = Field(default=8, ge=2, le=64)
+    autoencoder_hidden_layers: List[int] = Field(default=[64, 32, 16], description="Hidden layer sizes")
+    autoencoder_learning_rate: float = Field(default=0.001, ge=0.0001, le=0.1)
+    autoencoder_input_dim: Optional[int] = Field(default=None, description="Autoencoder input dimension")
 
-class SettingsManager:
+class PrivacyConfig(BaseSettings):
+    """Privacy and data retention configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_PRIVACY_')
+    
+    data_retention_days: int = Field(default=30, ge=1, le=365, description="Data retention in days")
+    anonymization_level: Literal["none", "basic", "full"] = Field(
+        default="basic", 
+        description="Data anonymization level"
+    )
+    collect_command_lines: bool = Field(default=False, description="Collect process command lines")
+    encrypt_storage: bool = Field(default=False, description="Encrypt local storage")
+    hash_sensitive_data: bool = Field(default=True, description="Hash sensitive data")
 
-    def __init__(self, config_path: Optional[Path] = None, path_manager: Optional[PathManager] = None):
-        self.path_manager = path_manager or PathManager()
+class AlertingConfig(BaseSettings):
+    """Alerting configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_ALERTING_')
+    
+    enabled: bool = Field(default=True, description="Enable alerting")
+    correlation_window: int = Field(default=300, ge=60, description="Alert correlation window in seconds")
+    rate_limit: int = Field(default=5, ge=1, description="Max alerts per rate window")
+    rate_window: int = Field(default=3600, ge=300, description="Rate window in seconds")
+    min_severity: Literal["low", "medium", "high", "critical"] = Field(
+        default="medium", 
+        description="Minimum alert severity"
+    )
+    enable_local_notifications: bool = Field(default=True, description="Enable local notifications")
+    
+class LoggingConfig(BaseSettings):
+    """Logging configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_LOGGING_')
+    
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO", 
+        description="Log level"
+    )
+    format: Literal["json", "text"] = Field(default="json", description="Log format")
+    file_path: Optional[str] = Field(default=None, description="Log file path")
+    max_file_size_mb: int = Field(default=100, ge=1, description="Max log file size in MB")
+    backup_count: int = Field(default=5, ge=1, description="Number of log backups")
+    enable_console: bool = Field(default=True, description="Enable console logging")
+
+class MetricsConfig(BaseSettings):
+    """Metrics configuration"""
+    model_config = SettingsConfigDict(env_prefix='EDGEPULSE_METRICS_')
+    
+    enabled: bool = Field(default=True, description="Enable metrics collection")
+    prometheus_enabled: bool = Field(default=False, description="Enable Prometheus metrics")
+    prometheus_port: int = Field(default=9090, ge=1, le=65535, description="Prometheus port")
+    collection_interval: int = Field(default=30, ge=5, description="Metrics collection interval")
+    retention_hours: int = Field(default=168, ge=24, description="Metrics retention in hours")
+
+class AgentSettings(BaseSettings):
+    """Main agent settings"""
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_prefix='EDGEPULSE_',
+        case_sensitive=False,
+        extra='allow'  # Allow extra fields for backward compatibility
+    )
+    
+    # Core settings
+    device_id: str = Field(
+        default="default-device", 
+        min_length=3,
+        description="Unique device identifier"
+    )
+    environment: Literal["development", "staging", "production"] = Field(
+        default="production",
+        description="Environment"
+    )
+    
+    # Sub-configurations
+    api: APIConfig = Field(default_factory=APIConfig)
+    sync: SyncConfig = Field(default_factory=SyncConfig)
+    collection: CollectionConfig = Field(default_factory=CollectionConfig)
+    features: FeatureConfig = Field(default_factory=FeatureConfig)
+    detection: DetectionConfig = Field(default_factory=DetectionConfig)
+    privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
+    alerting: AlertingConfig = Field(default_factory=AlertingConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    
+    # Advanced settings
+    enable_ml_features: bool = Field(default=True, description="Enable ML features")
+    max_memory_usage_mb: int = Field(default=1024, ge=128, description="Max memory usage in MB")
+    graceful_shutdown_timeout: int = Field(default=30, ge=5, description="Graceful shutdown timeout")
+    health_check_interval: int = Field(default=60, ge=10, description="Health check interval")
+    
+    @field_validator('device_id')
+    @classmethod
+    def validate_device_id(cls, v: str) -> str:
+        """Validate device_id format"""
+        if not v or len(v.strip()) < 3:
+            raise ValueError("device_id must be at least 3 characters long")
         
-        if config_path:
-            self.config_path = Path(config_path)
-        else:
-            self.config_path = self.path_manager.get_config_path()
+        # Remove whitespace and special characters
+        import re
+        v = re.sub(r'[^a-zA-Z0-9_-]', '', v.strip())
         
-        self.config: AgentConfig = AgentConfig()
-        self.load_config()
-
-    def load_config(self, path: Optional[Path] = None) -> AgentConfig:
-        load_path = path or self.config_path
+        if not v:
+            raise ValueError("device_id contains no valid characters")
         
-        if not load_path.exists():
-            logger.warning(f"Config file not found: {load_path}, using defaults")
-            self.config = AgentConfig()
-            return self.config
-        
-        try:
-            with open(load_path, 'r') as f:
-                config_dict = yaml.safe_load(f) or {}
-            
-            # Validate with Pydantic
-            try:
-                self.config = AgentConfig(**config_dict)
-            except PydanticValidationError as e:
-                logger.warning(f"Config validation errors: {e}")
-                # Use defaults for invalid fields
-                self.config = AgentConfig()
-                logger.info("Using default configuration due to validation errors")
-            
-            logger.info(f"Loaded config from {load_path}")
-            return self.config
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            self.config = AgentConfig()
-            return self.config
-
-    def save_config(self, config: Optional[AgentConfig] = None, path: Optional[Path] = None) -> None:
-        save_config = config or self.config
-        save_path = path or self.config_path
-        
-        try:
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Convert Pydantic model to dict
-            config_dict = save_config.model_dump()
-            
-            with open(save_path, 'w') as f:
-                yaml.dump(config_dict, f, default_flow_style=False)
-            
-            self.config = save_config
-            logger.info(f"Saved config to {save_path}")
-        except Exception as e:
-            logger.error(f"Error saving config: {e}")
-            raise ConfigurationError(f"Failed to save config: {e}") from e
-
-    def get_setting(self, key: str, default: Any = None) -> Any:
-        keys = key.split('.')
-        value = self.config.model_dump()
-        
-        for k in keys:
-            if isinstance(value, dict):
-                value = value.get(k)
-            else:
-                return default
-            
-            if value is None:
-                return default
-        
-        return value if value is not None else default
-
-    def set_setting(self, key: str, value: Any) -> None:
-        keys = key.split('.')
-        config_dict = self.config.model_dump()
-        config = config_dict
-        
-        for k in keys[:-1]:
-            if k not in config:
-                config[k] = {}
-            config = config[k]
-        
-        config[keys[-1]] = value
-        
-        # Rebuild config with validation
-        try:
-            self.config = AgentConfig(**config_dict)
-            self.save_config()
-        except PydanticValidationError as e:
-            raise ConfigurationError(f"Invalid configuration value: {e}") from e
-
-    def validate_config(self) -> tuple[bool, list[str]]:
-        errors = []
-        
-        try:
-            # Pydantic validates on model creation
-            AgentConfig(**self.config.model_dump())
-            return (True, [])
-        except PydanticValidationError as e:
-            for error in e.errors():
-                errors.append(f"{'.'.join(str(loc) for loc in error['loc'])}: {error['msg']}")
-            return (False, errors)
-
-    def reset_to_defaults(self) -> None:
-        """Reset configuration to defaults."""
-        self.config = AgentConfig()
-        self.save_config()
-        logger.info("Reset config to defaults")
-
-    def get_config(self) -> AgentConfig:
-        return self.config
+        return v
+    
+    @field_validator('max_memory_usage_mb')
+    @classmethod
+    def validate_memory_limit(cls, v: int) -> int:
+        """Validate memory limit"""
+        if v < 128:
+            raise ValueError("max_memory_usage_mb must be at least 128")
+        return v
+    
+    def get_effective_config(self) -> dict:
+        """Get effective configuration with all nested settings flattened"""
+        return self.model_dump()
+    
+    def is_production(self) -> bool:
+        """Check if running in production mode"""
+        return self.environment == "production"
+    
+    def is_development(self) -> bool:
+        """Check if running in development mode"""
+        return self.environment == "development"
+    
+    def get_log_level(self) -> str:
+        """Get the effective log level"""
+        return self.logging.level.upper()
+    
+    def should_enable_api(self) -> bool:
+        """Check if API should be enabled"""
+        return self.api.enabled
+    
+    def should_enable_sync(self) -> bool:
+        """Check if sync should be enabled"""
+        return self.sync.enabled and bool(self.sync.supabase_url and self.sync.supabase_key)
+    
+    def should_enable_ml(self) -> bool:
+        """Check if ML features should be enabled"""
+        return self.enable_ml_features
+    
+    def get_collection_interval_seconds(self) -> int:
+        """Get collection interval in seconds"""
+        return self.collection.interval
+    
+    def get_data_retention_days(self) -> int:
+        """Get data retention period in days"""
+        return self.privacy.data_retention_days

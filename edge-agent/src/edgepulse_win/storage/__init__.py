@@ -2,7 +2,7 @@
 
 from edgepulse_win.storage.log_manager import LogManager
 from edgepulse_win.storage.chain import HashChain
-from edgepulse_win.storage.writer import LogWriter
+from edgepulse_win.storage.log_writer import LogWriter
 from edgepulse_win.storage.database import DatabaseManager
 from edgepulse_win.storage.sanitizer import sanitize
 

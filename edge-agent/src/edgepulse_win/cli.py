@@ -1,11 +1,12 @@
-"""
-Command line interface for EdgePulse
-"""
+# Command line interface for EdgePulse
+
 
 import argparse
+import asyncio
 import sys
 from edgepulse_win.core.agent import EdgePulseAgent
-from edgepulse_win.config.settings import SettingsManager
+from edgepulse_win.config.settings import AgentSettings
+from edgepulse_win.utils.error_handler import ConfigurationError, EdgePulseError
 
 
 def main():
@@ -32,19 +33,25 @@ def main():
     args = parser.parse_args()
     
     try:
-        settings_manager = SettingsManager(config_path=args.config)
-        agent = EdgePulseAgent(settings=settings_manager)
+        settings = AgentSettings()
+        agent = EdgePulseAgent(settings=settings)
         
         if args.daemon:
-            agent.run_daemon()
+            asyncio.run(agent.run_forever())
         else:
-            agent.run()
+            asyncio.run(agent.run_forever())
             
     except KeyboardInterrupt:
         print("\nShutting down EdgePulse...")
         sys.exit(0)
+    except ConfigurationError as e:
+        print(f"Configuration Error: {e}")
+        sys.exit(1)
+    except EdgePulseError as e:
+        print(f"EdgePulse Error: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Unexpected Error: {e}")
         sys.exit(1)
 
 

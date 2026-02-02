@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from edgepulse_win.utils.paths import PathManager
-from edgepulse_win.storage.writer import LogWriter
+from edgepulse_win.storage.log_writer import LogWriter
 from edgepulse_win.storage.chain import HashChain
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,6 @@ class LogManager:
         """Export complete forensic package with hash chain."""
         self.writer.export_forensic_package(output_path)
 
-    def enforce_retention(self) -> None:
+    async def enforce_retention(self) -> None:
         """Delete old logs based on retention policy."""
-        self.writer.enforce_retention()
+        await self.writer.enforce_retention()

@@ -1,8 +1,5 @@
-"""
-Isolation Forest Detector
-
-Primary unsupervised anomaly detector using Isolation Forest algorithm.
-"""
+# Isolation Forest Detector
+# Primary unsupervised anomaly detector using Isolation Forest algorithm.
 
 import logging
 import joblib
@@ -11,18 +8,14 @@ from pathlib import Path
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-from edgepulse_win.utils.exception_handler import ModelError
+from edgepulse_win.utils.error_handler import ModelError
 from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.detectors.base import BaseDetector
 
 logger = logging.getLogger(__name__)
 
 
-class IsolationForestDetector:
-    """
-    Isolation Forest-based anomaly detector.
-    
-    Lightweight, edge-friendly unsupervised learning algorithm.
-    """
+class IsolationForestDetector(BaseDetector):
 
     def __init__(
         self,
@@ -34,18 +27,6 @@ class IsolationForestDetector:
         device_id: Optional[str] = None,
         path_manager: Optional[PathManager] = None,
     ):
-        """
-        Initialize the Isolation Forest detector.
-        
-        Args:
-            n_estimators: Number of trees in the forest (default: 100)
-            contamination: Expected proportion of anomalies (default: 'auto')
-            max_samples: Number of samples to draw for each tree (default: 'auto')
-            random_state: Random seed for reproducibility
-            model_path: Path to save/load model (uses path_manager if None)
-            device_id: Device ID for device-specific models
-            path_manager: Path manager instance (creates new if None)
-        """
         self.n_estimators = n_estimators
         self.contamination = contamination
         self.max_samples = max_samples
@@ -62,15 +43,6 @@ class IsolationForestDetector:
         self.training_samples = 0
 
     def train(self, features: np.ndarray) -> None:
-        """
-        Train the Isolation Forest model on normal data.
-        
-        Args:
-            features: Feature array (2D: n_samples, n_features)
-            
-        Raises:
-            ModelError: If training fails or feature dimension mismatch
-        """
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -98,17 +70,6 @@ class IsolationForestDetector:
             raise ModelError(f"Failed to train Isolation Forest: {e}") from e
 
     def predict(self, features: np.ndarray) -> Tuple[int, float]:
-        """
-        Predict anomaly label and score.
-        
-        Args:
-            features: Feature array (can be 1D or 2D)
-            
-        Returns:
-            Tuple of (anomaly_label, anomaly_score)
-            - anomaly_label: 0 (normal) or 1 (anomaly)
-            - anomaly_score: -1 to 1 (higher = more anomalous)
-        """
         if not self.is_trained or self.model is None:
             logger.warning("Model not trained, returning default prediction")
             return (0, 0.0)
@@ -132,12 +93,6 @@ class IsolationForestDetector:
             return (0, 0.0)
 
     def update_model(self, new_features: np.ndarray) -> None:
-        """
-        Incrementally update the model with new data.
-        
-        Args:
-            new_features: New feature array
-        """
         if not self.is_trained or self.model is None:
             self.train(new_features)
             return
@@ -146,12 +101,6 @@ class IsolationForestDetector:
         self.train(new_features)
 
     def save_model(self, path: Optional[Path] = None) -> None:
-        """
-        Save the trained model to disk.
-        
-        Args:
-            path: Path to save (default: self.model_path)
-        """
         if not self.is_trained or self.model is None:
             logger.warning("No trained model to save")
             return
@@ -175,16 +124,36 @@ class IsolationForestDetector:
             logger.error(f"Error saving model: {e}")
             raise ModelError(f"Failed to save model: {e}") from e
 
-    def load_model(self, path: Optional[Path] = None) -> bool:
-        """
-        Load a trained model from disk.
+    def evaluate(self, test_data: Any) -> Dict[str, float]:
+        if not self.is_trained or self.model is None:
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
         
-        Args:
-            path: Path to load (default: self.model_path)
+        try:
+            if isinstance(test_data, np.ndarray):
+                if test_data.ndim == 1:
+                    test_data = test_data.reshape(1, -1)
+                
+                predictions = []
+                for sample in test_data:
+                    label, score = self.predict(sample)
+                    predictions.append((label, score))
+                
+                # Basic metrics calculation
+                if predictions:
+                    anomaly_count = sum(1 for label, _ in predictions if label == 1)
+                    avg_score = sum(score for _, score in predictions) / len(predictions)
+                    
+                    return {
+                        "anomaly_rate": anomaly_count / len(predictions),
+                        "avg_anomaly_score": avg_score,
+                        "total_samples": len(predictions)
+                    }
             
-        Returns:
-            True if loaded successfully, False otherwise
-        """
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+        except Exception as e:
+            logger.error(f"Error evaluating isolation forest: {e}")
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+    def load_model(self, path: Optional[Path] = None) -> bool:
         load_path = Path(path) if path else self.model_path
         
         if not load_path.exists():

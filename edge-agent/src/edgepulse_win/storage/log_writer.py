@@ -7,10 +7,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from edgepulse_win.utils.exception_handler import LoggingError, ValidationError
+from edgepulse_win.utils.error_handler import LoggingError, ValidationError
 from edgepulse_win.utils.paths import PathManager
 from edgepulse_win.storage.chain import HashChain
-from edgepulse_win.storage.database import DatabaseManager, initialize_database, enforce_retention
+from edgepulse_win.storage.database import DatabaseManager
 from edgepulse_win.storage.sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,16 @@ class LogWriter:
         self.db_path = db_path or self.path_manager.get_log_db_path(device_id)
 
         self.chain = HashChain(device_id, self.path_manager)
-        initialize_database(self.db_path)
-        logger.info(f"Initialized database at {self.db_path}")
+        self.db_manager = DatabaseManager(self.db_path)
+        self._initialized = False
+        logger.info(f"Created LogWriter for database at {self.db_path}")
+
+    async def initialize(self) -> None:
+        """Initialize the database"""
+        if not self._initialized:
+            await self.db_manager.initialize()
+            self._initialized = True
+            logger.info(f"Initialized database at {self.db_path}")
 
     def write_event(self, event_type: str, data: Dict) -> None:
         """Log a general event."""
@@ -213,18 +221,13 @@ class LogWriter:
             logger.error(f"Error exporting forensic package: {exc}")
             raise
 
-    def enforce_retention(self) -> None:
+    async def enforce_retention(self) -> None:
         """Delete old logs based on retention policy."""
         try:
-            events_deleted, anomalies_deleted, state_deleted, alerts_deleted = enforce_retention(
-                self.db_path, self.retention_days
-            )
+            results = await self.db_manager.cleanup_old_data(self.retention_days)
             logger.info(
-                "Retention policy enforced: deleted %s events, %s anomalies, %s state entries, %s alerts",
-                events_deleted,
-                anomalies_deleted,
-                state_deleted,
-                alerts_deleted,
+                "Retention policy enforced: deleted %s records",
+                results
             )
         except Exception as exc:
             logger.error(f"Error enforcing retention: {exc}")

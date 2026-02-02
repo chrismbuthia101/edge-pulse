@@ -1,7 +1,7 @@
 """Utility modules."""
 
 from edgepulse_win.utils.path_manager import PathManager
-from edgepulse_win.utils.exception_handler import (
+from edgepulse_win.utils.error_handler import (
     EdgePulseError,
     ConfigurationError,
     ModelError,

@@ -5,6 +5,8 @@ import logging
 from typing import Dict, Optional
 from datetime import datetime, time
 
+from edgepulse_win.utils.error_handler import LoggingError
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +68,8 @@ class LocalNotifier:
             print(f"Type: {anomaly.get('anomaly_type', 'unknown')}")
             print(f"\n{anomaly.get('explanation', {}).get('summary', 'No explanation available')}")
             print("=" * 60 + "\n")
+        except LoggingError as e:
+            logger.error(f"Error sending console notification: {e}")
         except Exception as e:
             logger.error(f"Error sending console notification: {e}")
 
@@ -104,6 +108,8 @@ class LocalNotifier:
                 duration=duration,
                 threaded=True,
             )
+        except LoggingError as e:
+            logger.error(f"Error sending system tray notification: {e}")
         except Exception as e:
             logger.error(f"Error sending system tray notification: {e}")
 
@@ -119,6 +125,8 @@ class LocalNotifier:
                 f"Anomaly: {alert.get('anomaly', {}).get('anomaly_type', 'unknown')}"
             )
             logger.info(log_message)
+        except LoggingError as e:
+            logger.error(f"Error writing log file notification: {e}")
         except Exception as e:
             logger.error(f"Error writing log file notification: {e}")
 

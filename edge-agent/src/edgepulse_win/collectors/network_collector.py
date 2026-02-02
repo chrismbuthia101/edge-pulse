@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 import psutil
 from edgepulse_win.collectors.base import BaseCollector
+from edgepulse_win.utils.error_handler import PermissionError, NetworkError
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +68,21 @@ class NetworkMonitor(BaseCollector):
                     self._connection_history.append(conn_info)
                     
                 except (psutil.AccessDenied, AttributeError) as e:
-                    logger.debug(f"Error processing connection: {e}")
+                    if isinstance(e, psutil.AccessDenied):
+                        logger.debug(f"Access denied processing connection: {e}")
+                    else:
+                        logger.debug(f"Attribute error processing connection: {e}")
+                    continue
+                except NetworkError as e:
+                    logger.warning(f"Network error processing connection: {e}")
                     continue
                 except Exception as e:
                     logger.warning(f"Unexpected error processing connection: {e}")
                     continue
-        except psutil.AccessDenied:
-            logger.warning("Access denied when getting network connections")
+        except PermissionError as e:
+            logger.warning(f"Access denied when getting network connections: {e}")
+        except NetworkError as e:
+            logger.error(f"Network error getting active connections: {e}")
         except Exception as e:
             logger.error(f"Error getting active connections: {e}")
     

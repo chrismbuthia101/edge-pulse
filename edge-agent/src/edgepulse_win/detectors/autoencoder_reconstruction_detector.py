@@ -1,8 +1,5 @@
-"""
-Autoencoder Detector
-
-Secondary anomaly detector using autoencoder reconstruction error.
-"""
+# Autoencoder Detector
+# Secondary anomaly detector using autoencoder reconstruction error.
 
 import logging
 from typing import Tuple, Optional
@@ -10,18 +7,14 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-from edgepulse_win.utils.exception_handler import ModelError
+from edgepulse_win.utils.error_handler import ModelError
 from edgepulse_win.utils.paths import PathManager
+from edgepulse_win.detectors.base import BaseDetector
 
 logger = logging.getLogger(__name__)
 
 
-class AutoencoderDetector:
-    """
-    Autoencoder-based anomaly detector.
-    
-    Learns to reconstruct normal behavior; high reconstruction error = anomaly.
-    """
+class AutoencoderDetector(BaseDetector):
 
     def __init__(
         self,
@@ -33,18 +26,6 @@ class AutoencoderDetector:
         device_id: Optional[str] = None,
         path_manager: Optional[PathManager] = None,
     ):
-        """
-        Initialize the autoencoder detector.
-        
-        Args:
-            input_dim: Input feature dimension (default: 50)
-            encoding_dim: Latent space dimension (default: 8)
-            hidden_layers: List of hidden layer sizes (default: [64, 32, 16])
-            learning_rate: Learning rate for optimizer (default: 0.001)
-            model_path: Path to save/load model (uses path_manager if None)
-            device_id: Device ID for device-specific models
-            path_manager: Path manager instance (creates new if None)
-        """
         self.input_dim = input_dim
         self.encoding_dim = encoding_dim
         self.hidden_layers = hidden_layers or [64, 32, 16]
@@ -64,12 +45,6 @@ class AutoencoderDetector:
         self.reconstruction_threshold = 0.1
 
     def _build_model(self) -> tf.keras.Model:
-        """
-        Build the autoencoder architecture.
-        
-        Returns:
-            Compiled Keras model
-        """
         input_layer = tf.keras.layers.Input(shape=(self.input_dim,))
         
         x = input_layer
@@ -102,19 +77,6 @@ class AutoencoderDetector:
         validation_split: float = 0.2,
         early_stopping: bool = True,
     ) -> None:
-        """
-        Train the autoencoder on normal data.
-        
-        Args:
-            features: Feature array (2D: n_samples, n_features)
-            epochs: Number of training epochs (default: 50)
-            batch_size: Batch size (default: 32)
-            validation_split: Validation split ratio (default: 0.2)
-            early_stopping: Use early stopping (default: True)
-            
-        Raises:
-            ModelError: If training fails or feature dimension mismatch
-        """
         if features.ndim == 1:
             features = features.reshape(1, -1)
         
@@ -166,15 +128,6 @@ class AutoencoderDetector:
             raise ModelError(f"Failed to train Autoencoder: {e}") from e
 
     def calculate_reconstruction_error(self, features: np.ndarray) -> float:
-        """
-        Calculate reconstruction error for features.
-        
-        Args:
-            features: Feature array (can be 1D or 2D)
-            
-        Returns:
-            Mean squared reconstruction error
-        """
         if not self.is_trained or self.model is None:
             return 0.0
         
@@ -190,15 +143,6 @@ class AutoencoderDetector:
             return 0.0
 
     def predict(self, features: np.ndarray) -> Tuple[int, float]:
-        """
-        Predict anomaly label and score based on reconstruction error.
-        
-        Args:
-            features: Feature array (can be 1D or 2D)
-            
-        Returns:
-            Tuple of (anomaly_label, anomaly_score)
-        """
         if not self.is_trained or self.model is None:
             logger.warning("Model not trained, returning default prediction")
             return (0, 0.0)
@@ -215,12 +159,6 @@ class AutoencoderDetector:
         return (label, normalized_score)
 
     def save_model(self, path: Optional[Path] = None) -> None:
-        """
-        Save the trained model to disk.
-        
-        Args:
-            path: Path to save (default: self.model_path)
-        """
         if not self.is_trained or self.model is None:
             logger.warning("No trained model to save")
             return
@@ -246,16 +184,38 @@ class AutoencoderDetector:
             logger.error(f"Error saving model: {e}")
             raise ModelError(f"Failed to save model: {e}") from e
 
-    def load_model(self, path: Optional[Path] = None) -> bool:
-        """
-        Load a trained model from disk.
+    def evaluate(self, test_data: Any) -> Dict[str, float]:
+        """Evaluate detector performance"""
+        if not self.is_trained or self.model is None:
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
         
-        Args:
-            path: Path to load (default: self.model_path)
+        try:
+            if isinstance(test_data, np.ndarray):
+                if test_data.ndim == 1:
+                    test_data = test_data.reshape(1, -1)
+                
+                predictions = []
+                for sample in test_data:
+                    label, score = self.predict(sample)
+                    predictions.append((label, score))
+                
+                # Basic metrics calculation
+                if predictions:
+                    anomaly_count = sum(1 for label, _ in predictions if label == 1)
+                    avg_score = sum(score for _, score in predictions) / len(predictions)
+                    
+                    return {
+                        "anomaly_rate": anomaly_count / len(predictions),
+                        "avg_anomaly_score": avg_score,
+                        "total_samples": len(predictions)
+                    }
             
-        Returns:
-            True if loaded successfully, False otherwise
-        """
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+        except Exception as e:
+            logger.error(f"Error evaluating autoencoder: {e}")
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+            
+    def load_model(self, path: Optional[Path] = None) -> bool:
         load_path = Path(path) if path else self.model_path
         
         if not load_path.exists():

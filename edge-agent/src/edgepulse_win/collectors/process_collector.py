@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Generator, Any
 from datetime import datetime
 import psutil
 from edgepulse_win.collectors.base import BaseCollector
+from edgepulse_win.utils.error_handler import PermissionError, ResourceError
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,11 @@ class ProcessMonitor(BaseCollector):
             return process_details
         except psutil.NoSuchProcess:
             return None
-        except psutil.AccessDenied:
-            logger.warning(f"Access denied for process {pid}")
+        except PermissionError as e:
+            logger.warning(f"Access denied for process {pid}: {e}")
+            return None
+        except ResourceError as e:
+            logger.error(f"Error getting process details for PID {pid}: {e}")
             return None
         except Exception as e:
             logger.error(f"Error getting process details for PID {pid}: {e}")
@@ -112,11 +116,16 @@ class ProcessMonitor(BaseCollector):
                         processes.append(process_details)
                         # Update snapshot
                         self._process_snapshots[pid] = process_details
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                except (psutil.NoSuchProcess, PermissionError):
+                    continue
+                except ResourceError as e:
+                    logger.warning(f"Error processing PID {proc.info.get('pid')}: {e}")
                     continue
                 except Exception as e:
                     logger.warning(f"Error processing PID {proc.info.get('pid')}: {e}")
                     continue
+        except ResourceError as e:
+            logger.error(f"Error iterating processes: {e}")
         except Exception as e:
             logger.error(f"Error iterating processes: {e}")
         
@@ -129,21 +138,24 @@ class ProcessMonitor(BaseCollector):
     def watch_for_new_processes(self) -> Generator[Dict[str, Any], None, None]:
         current_pids: set[int] = set()
         
-        try:
-            for proc in psutil.process_iter(['pid']):
-                try:
-                    pid = proc.info['pid']
-                    current_pids.add(pid)
-                    
-                    if pid not in self._process_snapshots:
-                        process_details = self.get_process_details(pid)
-                        if process_details:
-                            self._process_snapshots[pid] = process_details
-                            yield process_details
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except Exception as e:
-            logger.error(f"Error watching for new processes: {e}")
+        for proc in psutil.process_iter(['pid']):
+            try:
+                pid = proc.info['pid']
+                current_pids.add(pid)
+                
+                if pid not in self._process_snapshots:
+                    process_details = self.get_process_details(pid)
+                    if process_details:
+                        self._process_snapshots[pid] = process_details
+                        yield process_details
+            except (psutil.NoSuchProcess, PermissionError):
+                continue
+            except ResourceError as e:
+                logger.error(f"Error watching for new processes: {e}")
+                break
+            except Exception as e:
+                logger.error(f"Error watching for new processes: Unexpected error - {e}")
+                raise ResourceError(f"Unexpected error watching for new processes: {e}")
         
         self._process_snapshots = {
             pid: self._process_snapshots[pid]
