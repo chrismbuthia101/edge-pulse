@@ -10,6 +10,7 @@ from edgepulse_win.core.async_pipeline import AsyncPipeline
 from edgepulse_win.config.settings import AgentSettings
 from edgepulse_win.utils.log_handler import configure_logging, get_logger
 from edgepulse_win.storage.database import DatabaseManager
+from edgepulse_win.storage.chain import HashChain
 from edgepulse_win.sync.async_queue import AsyncSyncQueue
 from edgepulse_win.api.api_server import AdaptiveAPIServer
 
@@ -75,13 +76,15 @@ class EdgePulseAgent:
             min_memory_mb=self.settings.api.min_memory_mb,
             min_cpu_cores=self.settings.api.min_cpu_cores
         )
+        # Tamper-evident hash chain for security-relevant events
+        self.hash_chain = HashChain(self.device_id, PathManager())
         
         # Metrics
         self.metrics = create_metrics_collector("agent", self.device_id)
         
         # State
         self._running = False
-        self._shutdown_event = asyncio.Event()
+        self._shutdown_event: Optional[asyncio.Event] = None
         self._tasks: List[asyncio.Task] = []
         self._pipeline: Optional[AsyncPipeline] = None
         self._sync_client: Optional[Any] = None
@@ -99,6 +102,9 @@ class EdgePulseAgent:
         logger.info("initializing_async_agent", device_id=self.device_id)
         
         try:
+            if self._shutdown_event is None:
+                self._shutdown_event = asyncio.Event()
+
             # Configure logging
             configure_logging(
                 log_level=self.settings.logging.level,
@@ -171,10 +177,20 @@ class EdgePulseAgent:
             # Publish start event
             await self.event_bus.publish(Event(
                 type=EventType.SYSTEM,
-                data={"device_id": self.device_id},
+                data={"device_id": self.device_id, "event": "agent_started"},
                 timestamp=datetime.utcnow(),
                 source="async_agent"
             ))
+            # Hash-chain the start event
+            try:
+                start_entry = self.hash_chain.create_entry(
+                    "agent_started",
+                    {"device_id": self.device_id}
+                )
+                if not self.hash_chain.append(start_entry):
+                    logger.error("hash_chain_append_failed", event_type="agent_started")
+            except Exception as e:
+                logger.error("hash_chain_error", error=str(e))
             
             logger.info("async_agent_started", device_id=self.device_id)
             
@@ -195,7 +211,8 @@ class EdgePulseAgent:
         logger.info("stopping_async_agent", device_id=self.device_id)
         
         self._running = False
-        self._shutdown_event.set()
+        if self._shutdown_event is not None:
+            self._shutdown_event.set()
         
         try:
             # Cancel background tasks
@@ -230,7 +247,7 @@ class EdgePulseAgent:
             # Publish stop event
             await self.event_bus.publish(Event(
                 type=EventType.SYSTEM,
-                data={"device_id": self.device_id},
+                data={"device_id": self.device_id, "event": "agent_stopped"},
                 timestamp=datetime.utcnow(),
                 source="async_agent"
             ))
@@ -251,6 +268,8 @@ class EdgePulseAgent:
         
         try:
             # Keep running until shutdown event is set
+            if self._shutdown_event is None:
+                raise RuntimeError("Agent shutdown event was not initialized")
             await self._shutdown_event.wait()
             logger.info("shutdown_event_received")
         except KeyboardInterrupt:
@@ -395,27 +414,94 @@ class EdgePulseAgent:
         """Setup event handlers"""
         # Handle anomaly detected events
         async def handle_anomaly(event: Event):
-            data = event.data
-            logger.info("anomaly_detected", severity=data.get('severity'))
+            data = event.data or {}
+            detection = data.get("detection", {}) or {}
+            features = data.get("features")
+            severity_label = data.get("severity", detection.get("severity", "medium"))
             
-            # Update metrics
+            logger.info(
+                "anomaly_detected",
+                severity=severity_label,
+                detector=detection.get("detector")
+            )
+            
+            # Update anomaly metrics
             self.metrics.increment_counter(
                 StandardMetrics.ANOMALIES_DETECTED_TOTAL,
-                labels={'severity': data.get('severity', 'medium')}
+                labels={'severity': severity_label}
             )
             self.metrics.observe_histogram(
                 StandardMetrics.ALERT_ANOMALY_SCORE,
-                data.get('anomaly_score', 0.5),
-                labels={'severity': data.get('severity', 'medium')}
+                detection.get('anomaly_score', 0.5),
+                labels={'severity': severity_label}
             )
             
-            # Generate report if needed
-            if self.settings.alerting.min_severity in ['high', 'critical']:
-                await asyncio.to_thread(
-                    self.report_generator.generate_anomaly_report,
-                    data.get('detection'),
-                    data.get('features')
-                )
+            # Build explanation using SHAP (with safe fallback)
+            explanation: Dict[str, Any] = {}
+            try:
+                if hasattr(self, "shap_explainer") and getattr(self, "shap_explainer", None) and features is not None:
+                    explanation = self.shap_explainer.explain_prediction(features)
+            except Exception as e:
+                logger.error("shap_explanation_error", error=str(e))
+                explanation = {}
+            
+            # Prepare anomaly data for reporting (normalized schema)
+            anomaly_data = {
+                "anomaly_score": detection.get("anomaly_score", 0.0),
+                "label": detection.get("label", 0),
+                "confidence": detection.get("confidence", 0.0),
+                "detector": detection.get("detector"),
+            }
+            
+            # Generate human-readable alert report
+            report = await asyncio.to_thread(
+                self.report_generator.generate_alert_report,
+                anomaly_data,
+                explanation,
+                {"raw_detection": detection}
+            )
+            
+            # Route through alert engine for correlation/deduplication
+            alert = None
+            try:
+                if self._alert_engine:
+                    alert = self._alert_engine.process_anomaly(report, report.get("explanation", {}))
+            except Exception as e:
+                logger.error("alert_engine_error", error=str(e))
+                alert = None
+            
+            if not alert:
+                return
+            
+            # Record alert metrics
+            alert_severity = str(alert.get("severity", severity_label))
+            self.metrics.record_alert(alert_severity)
+            
+            # Local notifications
+            try:
+                if getattr(self, "notifier", None):
+                    await asyncio.to_thread(self.notifier.notify_all, alert)
+            except Exception as e:
+                logger.error("local_notification_error", error=str(e))
+            
+            # Tamper-evident logging via hash chain
+            try:
+                anomaly_entry = self.hash_chain.create_entry("anomaly_detected", detection)
+                if not self.hash_chain.append(anomaly_entry):
+                    logger.error("hash_chain_append_failed", event_type="anomaly_detected")
+                alert_entry = self.hash_chain.create_entry("alert_generated", alert)
+                if not self.hash_chain.append(alert_entry):
+                    logger.error("hash_chain_append_failed", event_type="alert_generated")
+            except Exception as e:
+                logger.error("hash_chain_error", error=str(e))
+            
+            # Publish alert event for any downstream consumers
+            await self.event_bus.publish(Event(
+                type=EventType.ALERT,
+                data={"alert": alert},
+                timestamp=datetime.utcnow(),
+                source="async_agent"
+            ))
         
         # Handle sync completed events
         async def handle_sync_completed(event: Event):
@@ -426,6 +512,16 @@ class EdgePulseAgent:
                 StandardMetrics.SYNC_SUCCESS_RATE,
                 1.0  # Success rate for this attempt
             )
+            # Hash-chain sync completion for auditability
+            try:
+                sync_entry = self.hash_chain.create_entry(
+                    "sync_completed",
+                    {"count": data.get("count", 0)}
+                )
+                if not self.hash_chain.append(sync_entry):
+                    logger.error("hash_chain_append_failed", event_type="sync_completed")
+            except Exception as e:
+                logger.error("hash_chain_error", error=str(e))
         
         # Subscribe to events
         self.event_bus.subscribe(EventType.DETECTION, handle_anomaly)
@@ -469,6 +565,9 @@ class EdgePulseAgent:
     
     async def _health_check_loop(self) -> None:
         """Background health check loop"""
+        # Give components time to initialize before starting health checks
+        await asyncio.sleep(5)
+        
         while self._running:
             try:
                 # Check component health
@@ -522,7 +621,7 @@ class EdgePulseAgent:
                 
                 if self._running:  # Check again after sleep
                     cleanup_results = await self.database.cleanup_old_data(
-                        days=self.settings.get_data_retention_days()
+                        retention_days=self.settings.get_data_retention_days()
                     )
                     logger.info("data_cleanup_completed", results=cleanup_results)
                 

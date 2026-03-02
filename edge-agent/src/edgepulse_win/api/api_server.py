@@ -124,6 +124,12 @@ class FastAPIServer(BaseAPIServer):
         super().__init__(port)
         self.app: Optional[Any] = None
         self.uvicorn_server: Optional[Any] = None
+
+    def is_healthy(self) -> bool:
+        if not self._running or self.uvicorn_server is None:
+            return False
+        should_exit = getattr(self.uvicorn_server, "should_exit", False)
+        return not bool(should_exit)
     
     async def start(self) -> None:
         try:
@@ -135,7 +141,8 @@ class FastAPIServer(BaseAPIServer):
             
             config = uvicorn.Config(app=self.app, host=DEFAULT_API_HOST, port=self.port, log_level="info")
             self.uvicorn_server = uvicorn.Server(config)
-            asyncio.create_task(self.uvicorn_server.serve())
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.uvicorn_server.serve())
             
             self._running = True
             logger.info("fastapi_server_started", port=self.port)

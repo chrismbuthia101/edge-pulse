@@ -3,7 +3,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from edgepulse_win.utils.log_handler import get_logger
 from edgepulse_win.shared import (
@@ -533,3 +533,50 @@ class DatabaseManager:
         async with self.connection() as conn:
             await conn.executemany(query, params_list)
             await conn.commit()
+
+    async def cleanup_old_data(self, retention_days: int) -> Dict[str, int]:
+        """
+        Delete old records from time-series tables based on the given retention period.
+        
+        Returns a dictionary with the number of deleted rows per table.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        cutoff_iso = cutoff.isoformat()
+        
+        delete_statements = {
+            "alerts": (
+                "DELETE FROM alerts WHERE timestamp < ?",
+                (cutoff_iso,),
+            ),
+            "telemetry": (
+                "DELETE FROM telemetry WHERE timestamp < ?",
+                (cutoff_iso,),
+            ),
+            "detections": (
+                "DELETE FROM detections WHERE timestamp < ?",
+                (cutoff_iso,),
+            ),
+            "features": (
+                "DELETE FROM features WHERE timestamp < ?",
+                (cutoff_iso,),
+            ),
+            "events": (
+                "DELETE FROM events WHERE timestamp < ?",
+                (cutoff_iso,),
+            ),
+        }
+        
+        results: Dict[str, int] = {}
+        
+        async with self.connection() as conn:
+            for table, (query, params) in delete_statements.items():
+                cursor = await conn.execute(query, params)
+                results[table] = cursor.rowcount or 0
+            await conn.commit()
+        
+        logger.info(
+            "old_data_cleaned",
+            cutoff=cutoff_iso,
+            deleted=results,
+        )
+        return results

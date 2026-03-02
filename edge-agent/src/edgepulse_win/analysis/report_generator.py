@@ -33,8 +33,8 @@ class ReportGenerator:
         explanation: Dict,
         context: Optional[Dict] = None,
     ) -> Dict:
-    
-        anomaly_score = anomaly_data.get("score", 0.0)
+        # Support both legacy "score" field and standardized "anomaly_score"
+        anomaly_score = anomaly_data.get("anomaly_score", anomaly_data.get("score", 0.0))
         anomaly_label = anomaly_data.get("label", 0)
         
         severity = self.assign_severity(anomaly_score)
@@ -71,6 +71,18 @@ class ReportGenerator:
         }
         
         return report
+
+    def generate_anomaly_report(
+        self,
+        anomaly_data: Dict,
+        explanation: Dict,
+        context: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Backwards-compatible wrapper used by components that still call
+        generate_anomaly_report. Internally delegates to generate_alert_report.
+        """
+        return self.generate_alert_report(anomaly_data, explanation, context)
 
     def _determine_anomaly_type(
         self,
@@ -110,22 +122,22 @@ class ReportGenerator:
 
     def _generate_recommended_actions(
         self,
-        severity: str,
+        severity: SeverityLevel,
         anomaly_type: str,
         top_features: list,
     ) -> list:
        
         actions = []
         
-        if severity == "critical":
+        if severity == SeverityLevel.CRITICAL:
             actions.append("Immediate investigation required")
             actions.append("Consider isolating the device from network")
             actions.append("Review system logs for related events")
-        elif severity == "high":
+        elif severity == SeverityLevel.HIGH:
             actions.append("Investigate within 1 hour")
             actions.append("Review recent system changes")
             actions.append("Monitor for additional anomalies")
-        elif severity == "medium":
+        elif severity == SeverityLevel.MEDIUM:
             actions.append("Review during next maintenance window")
             actions.append("Monitor trends over time")
         else:

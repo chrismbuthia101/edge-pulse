@@ -39,7 +39,7 @@ class EventBus:
         self._running = False
         self._event_queue: Optional[asyncio.Queue] = None
         self._processor_task: Optional[asyncio.Task] = None
-        self._start_lock = asyncio.Lock()
+        self._start_lock: Optional[asyncio.Lock] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
     
     def subscribe(self, event_type: EventType, handler: Callable) -> None:
@@ -69,6 +69,8 @@ class EventBus:
     
     async def start(self) -> None:
         """Start the event processor"""
+        if self._start_lock is None:
+            self._start_lock = asyncio.Lock()
         async with self._start_lock:
             if self._running:
                 return
@@ -83,6 +85,8 @@ class EventBus:
     
     async def stop(self) -> None:
         """Stop the event processor"""
+        if self._start_lock is None:
+            self._start_lock = asyncio.Lock()
         async with self._start_lock:
             if not self._running:
                 return

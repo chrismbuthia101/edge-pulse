@@ -303,10 +303,67 @@ class AsyncPipeline:
             if isinstance(result, Exception):
                 logger.error("detector_error", detector=detector_name, error=str(result))
                 continue
-            
-            if result:
-                result["detector"] = detector_name
-                detections.append(result)
+
+            if result is None:
+                continue
+
+            detection: Optional[Dict[str, Any]] = None
+
+            if isinstance(result, dict):
+                detection = result
+            elif isinstance(result, (list, tuple)):
+                if len(result) == 0:
+                    continue
+
+                first = result[0]
+                if isinstance(first, dict):
+                    detection = first
+                elif isinstance(first, (list, tuple)) and len(first) >= 2:
+                    detection = {
+                        "label": int(first[0]),
+                        "anomaly_score": float(first[1]),
+                    }
+                else:
+                    logger.warning(
+                        "detector_unexpected_result",
+                        detector=detector_name,
+                        result_type=type(first).__name__,
+                    )
+                    continue
+            else:
+                size = getattr(result, "size", None)
+                if isinstance(size, int):
+                    if size == 0:
+                        continue
+                    try:
+                        first = result.flat[0]
+                    except Exception:
+                        first = None
+                    if isinstance(first, (list, tuple)) and len(first) >= 2:
+                        detection = {
+                            "label": int(first[0]),
+                            "anomaly_score": float(first[1]),
+                        }
+                    else:
+                        logger.warning(
+                            "detector_unexpected_result",
+                            detector=detector_name,
+                            result_type=type(result).__name__,
+                        )
+                        continue
+                else:
+                    logger.warning(
+                        "detector_unexpected_result",
+                        detector=detector_name,
+                        result_type=type(result).__name__,
+                    )
+                    continue
+
+            if detection is None:
+                continue
+
+            detection["detector"] = detector_name
+            detections.append(detection)
         
         return detections
     
@@ -332,11 +389,11 @@ class AsyncPipeline:
         for detection in detections:
             # Check if this is an anomaly
             if detection.get('label') == 1 or detection.get('anomaly_score', 0) > 0.5:
-                # Record anomaly in metrics
+                # Record anomaly in metrics (severity will be derived downstream)
                 severity = detection.get('severity', 'medium')
                 self.metrics.record_anomaly(severity)
                 
-                # Publish anomaly event
+                # Publish anomaly event for downstream handling (XAI, alerting, logging)
                 await self.event_bus.publish(Event(
                     type=EventType.DETECTION,
                     data={
@@ -347,35 +404,6 @@ class AsyncPipeline:
                     timestamp=datetime.utcnow(),
                     source="async_pipeline"
                 ))
-                
-                # Generate alert if alert engine is available
-                if self.alert_engine:
-                    try:
-                        if hasattr(self.alert_engine, 'process_detection'):
-                            if asyncio.iscoroutinefunction(self.alert_engine.process_detection):
-                                await self.alert_engine.process_detection(detection)
-                            else:
-                                await asyncio.to_thread(
-                                    self.alert_engine.process_detection,
-                                    detection
-                                )
-                        
-                        alerts_generated += 1
-                        self.metrics.record_alert(severity)
-                        
-                        # Publish alert event
-                        await self.event_bus.publish(Event(
-                            type=EventType.ALERT_GENERATED,
-                            data={
-                                "detection": detection,
-                                "severity": severity
-                            },
-                            timestamp=datetime.utcnow(),
-                            source="async_pipeline"
-                        ))
-                        
-                    except Exception as e:
-                        logger.error("alert_processing_error", error=str(e))
         
         return alerts_generated
     

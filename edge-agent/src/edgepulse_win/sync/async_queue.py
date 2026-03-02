@@ -45,7 +45,7 @@ class AsyncSyncQueue:
         self.device_id = device_id
         
         # In-memory queue for fast access
-        self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_size)
+        self.queue: Optional[asyncio.Queue] = None
         
         # Database for persistence
         self.db = DatabaseManager(storage_path / "sync_queue.db")
@@ -85,6 +85,8 @@ class AsyncSyncQueue:
     @log_operation("initialize", "sync_queue", device_id=lambda self: self.device_id)
     async def initialize(self) -> None:
         """Initialize the sync queue"""
+        if self.queue is None:
+            self.queue = asyncio.Queue(maxsize=self.max_size)
         await self.db.initialize()
         await self._load_persisted_items()
     
@@ -118,12 +120,16 @@ class AsyncSyncQueue:
                 pass
         
         # Persist remaining items
-        await self._persist_queue()
+        if self.queue is not None:
+            await self._persist_queue()
         
         logger.info("sync_queue_stopped", stats=self.stats)
     
     async def enqueue(self, item_type: str, item_data: Dict, priority: int = 0) -> bool:
         """Add an item to the sync queue"""
+        if self.queue is None:
+            raise RuntimeError("Sync queue not initialized")
+
         if self.queue.qsize() >= self.max_size:
             logger.warning(
                 "sync_queue_full",
@@ -180,12 +186,16 @@ class AsyncSyncQueue:
     
     async def get_batch(self, max_size: Optional[int] = None, timeout: float = 5.0) -> List[Dict]:
         """Get a batch of items ready for processing"""
+        if self.queue is None:
+            raise RuntimeError("Sync queue not initialized")
+
         batch_size = max_size or self.batch_size
         batch = []
-        deadline = asyncio.get_event_loop().time() + timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         
         while len(batch) < batch_size:
-            remaining = deadline - asyncio.get_event_loop().time()
+            remaining = deadline - loop.time()
             if remaining <= 0:
                 break
             
@@ -424,6 +434,8 @@ class AsyncSyncQueue:
             
             # Re-queue for retry
             try:
+                if self.queue is None:
+                    raise RuntimeError("Sync queue not initialized")
                 await self.queue.put(item)
                 self.stats["total_retries"] += 1
                 logger.debug(
@@ -454,6 +466,9 @@ class AsyncSyncQueue:
     async def _load_persisted_items(self) -> None:
         """Load persisted items from database on startup"""
         try:
+            if self.queue is None:
+                raise RuntimeError("Sync queue not initialized")
+
             persisted_items = await self.db.get_sync_queue_items(limit=self.max_size)
             
             for item_dict in persisted_items:
@@ -484,6 +499,9 @@ class AsyncSyncQueue:
     
     async def _persist_queue(self) -> None:
         """Persist all items in the queue to database"""
+        if self.queue is None:
+            return
+
         items = []
         while not self.queue.empty():
             try:
@@ -526,19 +544,24 @@ class AsyncSyncQueue:
     
     def get_stats(self) -> Dict[str, Any]:
         """Get current queue statistics"""
-        self.stats["queue_size"] = self.queue.qsize()
+        if self.queue is not None:
+            self.stats["queue_size"] = self.queue.qsize()
         return self.stats.copy()
     
     async def clear_queue(self) -> int:
         """Clear all items from the queue"""
-        count = self.queue.qsize()
+        if self.queue is None:
+            count = 0
+        else:
+            count = self.queue.qsize()
         
         # Clear in-memory queue
-        while not self.queue.empty():
-            try:
-                self.queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+        if self.queue is not None:
+            while not self.queue.empty():
+                try:
+                    self.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
         
         # Clear persisted queue
         await self.db.execute_update("DELETE FROM sync_queue")
