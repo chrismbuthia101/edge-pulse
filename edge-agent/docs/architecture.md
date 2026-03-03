@@ -1,6 +1,7 @@
 # EdgePulse Agent Architecture & Data Flow
 
 ## Overview
+
 The EdgePulse agent is a sophisticated edge security monitoring system that processes telemetry data through multiple stages: **Collection → Feature Extraction → Detection → Analysis → Alerting**.
 
 ## System Architecture Diagram
@@ -10,14 +11,14 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 │   Data Sources  │    │   Event Bus     │    │   Storage       │
 │                 │    │                 │    │                 │
 │ • System Metrics │◄──►│ • Async Events  │◄──►│ • SQLite DB     │
-│ • Process Data  │    │ • Pub/Sub       │    │ • Time Series   │
-│ • Network I/O   │    │ • Correlation   │    │ • Models         │
-│ • Logs          │    │                 │    │                 │
+│ • Process Data  │    │ • Pub/Sub       │    │ • HashChain     │
+│ • Network I/O   │    │ • Correlation   │    │ • Time Series   │
+│ • Logs          │    │                 │    │ • Models         │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    ASYNC PIPELINE                               │
+│                    EDGE PULSE AGENT                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐           │
 │  │ Collectors  │→ │ Features    │→ │ Detectors   │           │
 │  │             │  │ Extractor   │  │             │           │
@@ -39,14 +40,86 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Outputs       │    │   Sync Layer     │    │   API Layer      │
+│   Security      │    │   Sync Layer     │    │   API Layer      │
 │                 │    │                 │    │                 │
-│ • Alerts        │◄──►│ • Supabase       │◄──►│ • REST API      │
-│ • Reports       │    │ • Offline Queue  │    │ • WebSocket     │
-│ • Metrics       │    │ • Retry Logic    │    │ • Health Check  │
-│ • Logs          │    │                 │    │                 │
+│ • HashChain     │◄──►│ • Supabase       │◄──►│ • Adaptive API  │
+│ • Tamper Log    │    │ • Offline Queue  │    │ • REST/WebSocket│
+│ • Privacy Ctrl  │    │ • Retry Logic    │    │ • Health Check  │
+│ • Metrics       │    │                 │    │ • Prometheus     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
+
+## Core System Components
+
+### **EdgePulseAgent** (`src/edgepulse_win/core/agent.py`)
+
+**Purpose**: Main async orchestrator with dependency injection and lifecycle management
+
+**Key Features**:
+
+- Async/await architecture with graceful shutdown
+- Dependency injection for all components
+- Background task management (health checks, metrics, cleanup)
+- Event-driven communication via EventBus
+- Tamper-evident logging via HashChain
+
+**Initialization Flow**:
+
+```python
+agent = EdgePulseAgent(settings=settings)
+await agent.initialize()  # Setup all components
+await agent.start()       # Start processing
+await agent.run_forever() # Main loop
+```
+
+### **Security & Integrity Layer**
+
+#### **HashChain** (`src/edgepulse_win/storage/chain.py`)
+
+**Purpose**: Tamper-evident logging for security-relevant events
+
+**Features**:
+
+- Cryptographic hash chaining (SHA-256)
+- Immutable audit trail for anomalies, alerts, sync events
+- Device-specific chain isolation
+- Integrity verification on load
+
+**Event Types Logged**:
+
+- `agent_started/stopped`: Agent lifecycle events
+- `anomaly_detected`: ML detection results
+- `alert_generated`: Processed alerts
+- `sync_completed`: Cloud sync operations
+
+#### **PrivacyController** (`src/edgepulse_win/config/privacy.py`)
+
+**Purpose**: Data privacy and anonymization controls
+
+**Features**:
+
+- Configurable anonymization levels (none/basic/medium/full)
+- Sensitive data hashing
+- Command line collection control
+- Data retention enforcement
+
+### **Adaptive API Server** (`src/edgepulse_win/api/api_server.py`)
+
+**Purpose**: Resource-aware API server with mode switching
+
+**Modes**:
+
+- **Auto**: Automatically selects based on available resources
+- **FastAPI**: Full-featured REST + WebSocket (requires ≥512MB RAM, ≥2 cores)
+- **Minimal**: Lightweight HTTP server for constrained environments
+- **Socket**: Unix socket for local communication
+
+**Features**:
+
+- Health check endpoints
+- Metrics exposure (Prometheus compatible)
+- Resource monitoring and mode adaptation
+- Graceful degradation under load
 
 ## Detailed Component Interactions
 
@@ -57,18 +130,21 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 **Purpose**: Gather raw telemetry data from various system sources
 
 **Key Components**:
+
 - **SystemMetricsCollector**: CPU, memory, disk, network metrics
 - **ProcessMonitor**: Process creation, execution, resource usage
 - **NetworkMonitor**: Network connections, traffic patterns
 - **CustomCollectors**: Extensible for specific data sources
 
 **Inputs**:
+
 - System calls (psutil)
 - Windows Performance Counters
 - Network interfaces
 - Process tables
 
 **Outputs**:
+
 ```python
 {
     "timestamp": "2024-01-01T12:00:00Z",
@@ -107,6 +183,7 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 **Purpose**: Transform raw telemetry into ML-ready feature vectors
 
 **Process Flow**:
+
 1. **Validate telemetry structure**
 2. **Update historical buffer** (24-hour retention)
 3. **Extract feature groups**:
@@ -148,9 +225,10 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 **Purpose**: Identify anomalous patterns in feature vectors
 
 #### **IsolationForestDetector** (`isolation_forest_detector.py`)
+
 - **Algorithm**: Unsupervised isolation forest
 - **Input**: Feature vector (64 dims)
-- **Output**: 
+- **Output**:
   ```python
   {
       "label": 1,  # 1 = anomaly, 0 = normal
@@ -162,11 +240,13 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
   ```
 
 #### **AutoencoderDetector** (`autoencoder_reconstruction_detector.py`)
+
 - **Algorithm**: Neural network autoencoder
 - **Input**: Feature vector
 - **Output**: Reconstruction error-based anomaly score
 
 #### **EnsembleDetector** (`ensemble_detector.py`)
+
 - **Algorithm**: Weighted voting from multiple detectors
 - **Input**: Results from individual detectors
 - **Output**: Combined anomaly prediction with confidence
@@ -209,6 +289,7 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 **Purpose**: Intelligent alert generation and management
 
 **Process Flow**:
+
 1. **Severity Filtering**: Only alerts above threshold
 2. **Rate Limiting**: Prevent alert fatigue (max 10/hour)
 3. **Deduplication**: Suppress similar alerts (80% similarity)
@@ -242,6 +323,7 @@ The EdgePulse agent is a sophisticated edge security monitoring system that proc
 The **EventBus** (`src/edgepulse_win/core/events_bus.py`) coordinates all components:
 
 **Event Types**:
+
 - `TELEMETRY_COLLECTED`: Raw data available
 - `FEATURES_EXTRACTED`: Features ready for detection
 - `ANOMALY_DETECTED`: Anomaly found by detector
@@ -250,6 +332,7 @@ The **EventBus** (`src/edgepulse_win/core/events_bus.py`) coordinates all compon
 - `PIPELINE_ERROR`: Processing error occurred
 
 **Event Flow Example**:
+
 ```python
 # Collector publishes telemetry
 await event_bus.publish(Event(
@@ -270,71 +353,179 @@ await event_bus.publish(Event(
 
 ## Pipeline Processing Loop
 
-The **AsyncPipeline** (`src/edgepulse_win/core/async_pipeline.py`) orchestrates the entire flow:
+The **AsyncPipeline** (`src/edgepulse_win/core/async_pipeline.py`) orchestrates the entire flow with metrics tracking:
 
 ```python
 async def process_cycle(self):
-    # 1. Collect telemetry (parallel from all collectors)
-    telemetry = await self._collect_telemetry()
-    
-    # 2. Extract features
-    features = await self._extract_features(telemetry)
-    
-    # 3. Run detectors (parallel)
-    detections = await self._run_detectors(features)
-    
-    # 4. Process detections and generate alerts
-    alerts_generated = await self._process_detections(detections, features)
-    
-    return {
-        "telemetry_points": len(telemetry),
-        "features_extracted": len(features),
-        "detections": len(detections),
-        "alerts_generated": alerts_generated
-    }
+    with PipelineMetrics(self.metrics):
+        # 1. Collect telemetry (parallel from all collectors)
+        telemetry = await self._collect_telemetry()
+
+        # 2. Extract features with normalization
+        features = await self._extract_features(telemetry)
+
+        # 3. Run detectors (parallel)
+        detections = await self._run_detectors(features)
+
+        # 4. Process detections and generate alerts
+        alerts_generated = await self._process_detections(detections, features)
+
+        return {
+            "telemetry_points": len(telemetry),
+            "features_extracted": len(features),
+            "detections": len(detections),
+            "alerts_generated": alerts_generated
+        }
 ```
+
+**Key Features**:
+
+- Parallel collector execution
+- Metrics tracking for each cycle
+- Event-driven notifications
+- Graceful error handling
 
 ## Data Persistence & Sync
 
 ### **Storage Layer** (`src/edgepulse_win/storage/`)
+
 - **DatabaseManager**: SQLite operations for telemetry, alerts, models
+- **HashChain**: Tamper-evident audit log with SHA-256 integrity
+- **LogManager**: Structured logging with rotation and compression
+- **LogWriter**: High-performance async log writing
+- **Sanitizer**: Data sanitization for privacy compliance
 - **TimeSeriesStorage**: Efficient time-series data storage
 - **ModelStorage**: Persist trained ML models
 
 ### **Sync Layer** (`src/edgepulse_win/sync/`)
+
 - **SupabaseSync**: Cloud synchronization with retry logic
-- **AsyncSyncQueue**: Offline queue for failed syncs
+- **AsyncSyncQueue**: Offline queue for failed syncs (max 10,000 items)
 - **Conflict Resolution**: Handle concurrent updates
 
 ## Configuration & Management
 
 ### **Settings** (`src/edgepulse_win/config/`)
+
 - **AgentSettings**: Main configuration with Pydantic validation
+- **APIConfig**: Adaptive API server configuration (mode, port, resource thresholds)
+- **SyncConfig**: Cloud sync settings (Supabase, batch size, retry logic)
+- **CollectionConfig**: Data collection parameters (intervals, monitoring toggles)
+- **FeatureConfig**: Feature extraction settings (dimensions, normalization)
+- **DetectionConfig**: ML detector configuration (thresholds, model parameters)
 - **PrivacyConfig**: Data retention and anonymization settings
-- **APIConfig**: REST API server configuration
+- **AlertingConfig**: Alert engine parameters (rate limiting, correlation)
+- **LoggingConfig**: Structured logging configuration
 
 ### **Metrics** (`src/edgepulse_win/shared/metrics.py`)
-- **StandardMetrics**: Standardized metric definitions
+
+- **StandardMetrics**: Prometheus-compatible metric definitions
 - **InMemoryMetricsCollector**: Real-time metrics collection
 - **MetricsRegistry**: Global metrics management
 
+**Key Metrics Tracked**:
+
+- `CPU_USAGE`, `MEMORY_USAGE`: System resource utilization
+- `PIPELINE_CYCLE_DURATION`: End-to-end processing time
+- `ANOMALIES_DETECTED_TOTAL`: Detection count by severity
+- `ALERT_ANOMALY_SCORE`: Anomaly score distribution
+- `SYNC_ATTEMPTS_TOTAL`, `SYNC_SUCCESS_RATE`: Cloud sync performance
+- `SYNC_QUEUE_SIZE`: Offline queue depth
+
 ## Input/Output Summary
 
-| Stage | Input | Output |
-|-------|-------|--------|
-| **Collection** | System calls, network interfaces | Raw telemetry dict |
-| **Feature Extraction** | Raw telemetry dict | 64-dim feature vector |
-| **Detection** | Feature vector | Anomaly score + label |
-| **Analysis** | Detection + features | Explanation + report |
-| **Alerting** | Detection + explanation | Processed alert or suppression |
+| Stage                  | Input                            | Output                         |
+| ---------------------- | -------------------------------- | ------------------------------ |
+| **Collection**         | System calls, network interfaces | Raw telemetry dict             |
+| **Feature Extraction** | Raw telemetry dict               | 64-dim feature vector          |
+| **Detection**          | Feature vector                   | Anomaly score + label          |
+| **Analysis**           | Detection + features             | Explanation + report           |
+| **Alerting**           | Detection + explanation          | Processed alert or suppression |
+
+## Deployment & Operations
+
+### **Entry Points**
+
+**CLI** (`src/edgepulse_win/cli.py`):
+
+```bash
+edge-agent --daemon --verbose --config /path/to/config.yaml
+```
+
+**Python API**:
+
+```python
+from edgepulse_win.core.agent import EdgePulseAgent
+from edgepulse_win.config.settings import AgentSettings
+
+settings = AgentSettings()
+agent = EdgePulseAgent(settings=settings)
+await agent.run_forever()
+```
+
+### **API Server Modes**
+
+**Auto Mode** (Recommended):
+
+- Automatically selects FastAPI or Minimal based on resources
+- FastAPI: ≥512MB RAM, ≥2 CPU cores
+- Minimal: Constrained environments
+
+**Manual Mode Selection**:
+
+- `API_MODE=fastapi`: Full REST + WebSocket
+- `API_MODE=minimal`: Lightweight HTTP only
+- `API_MODE=socket`: Unix socket for local communication
+
+### **Background Services**
+
+**Health Monitoring**:
+
+- Component health checks every 30 seconds
+- Pipeline status monitoring
+- API server health endpoints
+
+**Data Management**:
+
+- Automatic data cleanup every 24 hours
+- Configurable retention periods (1-365 days)
+- Model state persistence on shutdown
+
+**Metrics Collection**:
+
+- Real-time system metrics (CPU, memory)
+- Pipeline performance metrics
+- Prometheus-compatible endpoint
 
 ## Performance Characteristics
 
-- **Collection Interval**: 60 seconds (configurable)
-- **Feature Dimension**: 64 features (configurable)
-- **Detection Latency**: <100ms per feature vector
-- **Alert Rate Limiting**: 10 alerts/hour
-- **Data Retention**: 30 days (configurable)
-- **Sync Batch Size**: 50 records (configurable)
+### **Resource Requirements**
 
-This architecture enables real-time edge security monitoring with intelligent anomaly detection, explainable AI, and comprehensive alert management while maintaining low resource overhead suitable for edge deployment.
+**Minimum Requirements**:
+
+- **CPU**: 1 core (2+ cores for FastAPI mode)
+- **Memory**: 256MB (512MB+ for FastAPI mode)
+- **Storage**: 1GB (varies with retention)
+- **Network**: Optional (for cloud sync)
+
+### **Operational Metrics**
+
+- **Collection Interval**: 60 seconds (5-3600s configurable)
+- **Feature Dimension**: 64 features (8-512 configurable)
+- **Detection Latency**: <100ms per feature vector
+- **Pipeline Cycle Duration**: <500ms typical
+- **Alert Rate Limiting**: 5 alerts/hour (1-100 configurable)
+- **Data Retention**: 30 days (1-365 days configurable)
+- **Sync Batch Size**: 50 records (1-1000 configurable)
+- **Offline Queue**: 10,000 items max
+- **Health Check Interval**: 30 seconds
+
+### **Scalability Features**
+
+- **Parallel collector execution**
+- **Async pipeline processing**
+- **Adaptive API server mode**
+- **Background task management**
+- **Resource-aware component loading**
+
+This architecture enables real-time edge security monitoring with intelligent anomaly detection, explainable AI, tamper-evident logging, and comprehensive alert management while maintaining low resource overhead suitable for edge deployment.

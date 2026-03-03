@@ -169,7 +169,7 @@ class AsyncPipeline:
         # 2. Extract features
         features = await self._extract_features(telemetry)
         
-        if not features:
+        if features is None or features.size == 0:
             logger.warning("no_features_extracted")
             return {"status": "no_features"}
         
@@ -182,7 +182,7 @@ class AsyncPipeline:
         result = {
             "status": "success",
             "telemetry_points": len(telemetry) if isinstance(telemetry, list) else 1,
-            "features_extracted": len(features) if isinstance(features, dict) else 0,
+            "features_extracted": int(features.size) if hasattr(features, 'size') else (len(features) if isinstance(features, dict) else 0),
             "detections": len(detections),
             "alerts_generated": alerts_generated
         }

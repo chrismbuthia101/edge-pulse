@@ -53,3 +53,5 @@ data/models/
 *.tmp
 *.temp
 *.log
+
+/src/data/logs

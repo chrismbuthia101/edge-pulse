@@ -45,7 +45,7 @@ class FeatureConfig(BaseSettings):
     """Feature extraction configuration"""
     model_config = SettingsConfigDict(env_prefix='FEATURES_')
     
-    feature_dimension: int = Field(default=64, ge=8, le=512, description="Feature vector dimension")
+    feature_dimension: int = Field(default=10, ge=8, le=512, description="Feature vector dimension")
     history_retention_hours: int = Field(default=24, ge=1, le=168, description="History retention in hours")
     enable_auto_scaling: bool = Field(default=True, description="Enable feature auto-scaling")
     normalize_features: bool = Field(default=True, description="Normalize features")
