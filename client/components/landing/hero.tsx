@@ -109,14 +109,14 @@ export function Hero() {
           className="flex flex-col sm:flex-row gap-4 justify-center mb-12"
         >
           <Button size="lg" className="text-lg px-8 py-6">
-            <Link href="/auth/register" className="flex items-center">
+            <Link href="/register" className="flex items-center">
               Start Monitoring
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
 
           <Button variant="outline" size="lg" className="text-lg px-8 py-6">
-            <Link href="/auth/login" className="flex items-center">
+            <Link href="/login" className="flex items-center">
               <Play className="mr-2 h-5 w-5" />
               View Dashboard Demo
             </Link>
