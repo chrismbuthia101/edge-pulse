@@ -10,14 +10,12 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Shield,
-  CheckCircle,
+  Shield
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -51,20 +49,6 @@ export default function RegisterPage() {
   const passwordStrength = passwordRequirements.filter((req) =>
     req.test(password)
   ).length;
-
-  const strengthColor =
-    passwordStrength <= 2
-      ? "bg-destructive"
-      : passwordStrength <= 4
-      ? "bg-chart-3"
-      : "bg-chart-2";
-
-  const strengthText =
-    passwordStrength <= 2
-      ? "Weak"
-      : passwordStrength <= 4
-      ? "Fair"
-      : "Strong";
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -289,7 +273,7 @@ export default function RegisterPage() {
                 Already have an account?{" "}
               </span>
               <Link
-                href="/auth/login"
+                href="/login"
                 className="text-primary hover:underline"
               >
                 Sign In →

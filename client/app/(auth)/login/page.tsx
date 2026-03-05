@@ -110,7 +110,7 @@ export default function LoginPage() {
           transition={{ duration: 0.5 }}
         >
           <p className="text-muted-foreground italic">
-            "{securityQuotes[currentQuote]}"
+            &quot;{securityQuotes[currentQuote]}&quot;
           </p>
         </motion.div>
       </div>
@@ -241,10 +241,10 @@ export default function LoginPage() {
 
             <div className="text-center text-sm">
               <span className="text-muted-foreground">
-                Don't have an account?{" "}
+                Don&apos;t have an account?{" "}
               </span>
               <Link
-                href="/auth/register"
+                href="/register"
                 className="text-primary hover:underline"
               >
                 Register →

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Activity, Shield, AlertTriangle, Menu, X } from "lucide-react";
+import { Activity, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
@@ -74,10 +74,10 @@ export function Navigation() {
             <div className="flex items-center gap-4">
               <ThemeToggle />
               <Button variant="outline" asChild>
-                <Link href="/auth/login">Sign In</Link>
+                <Link href="/login">Sign In</Link>
               </Button>
               <Button asChild>
-                <Link href="/auth/register">Get Started</Link>
+                <Link href="/register">Get Started</Link>
               </Button>
             </div>
           </div>
@@ -121,10 +121,10 @@ export function Navigation() {
               
               <div className="flex flex-col gap-2 pt-4 border-t border-border">
                 <Button variant="outline" asChild>
-                  <Link href="/auth/login">Sign In</Link>
+                  <Link href="/login">Sign In</Link>
                 </Button>
                 <Button asChild>
-                  <Link href="/auth/register">Get Started</Link>
+                  <Link href="/register">Get Started</Link>
                 </Button>
               </div>
             </div>
