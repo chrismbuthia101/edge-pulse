@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Menu, X } from "lucide-react";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { Shield, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
@@ -15,34 +15,38 @@ const navItems = [
 ];
 
 export function Navigation() {
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("");
+  const { scrollY } = useScroll();
+
+  const navBackground = useTransform(scrollY, [0, 50], ["bg-transparent", "bg-background/90"]);
+  const navBorder = useTransform(scrollY, [0, 50], ["border-transparent", "border-border"]);
+  const navShadow = useTransform(scrollY, [0, 50], ["shadow-none", "shadow-sm"]);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-      
-      // Update active section based on scroll position
-      const sections = navItems.map(item => item.href.replace('#', ''));
-      const currentSection = sections.find(section => {
-        const element = document.getElementById(section);
-        if (element) {
-          const rect = element.getBoundingClientRect();
+      const sections = navItems.map((item) => item.href.replace("#", ""));
+      const current = sections.find((section) => {
+        const el = document.getElementById(section);
+        if (el) {
+          const rect = el.getBoundingClientRect();
           return rect.top <= 100 && rect.bottom >= 100;
         }
         return false;
       });
-      setActiveSection(currentSection || "");
+      setActiveSection(current || "");
     };
-    
+
+    handleScroll(); // Initial call
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const handleNavClick = (href: string) => {
     const element = document.querySelector(href);
-    element?.scrollIntoView({ behavior: 'smooth' });
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     setMobileOpen(false);
   };
 
@@ -50,62 +54,64 @@ export function Navigation() {
     <motion.nav
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-background/80 backdrop-blur-md border-b border-border"
-          : "bg-transparent"
-      }`}
+      transition={{ duration: 0.5 }}
+      style={{
+        backgroundColor: navBackground,
+        borderColor: navBorder,
+        boxShadow: navShadow,
+      }}
+      className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 backdrop-blur-md border-b"
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group" aria-label="EdgePulse Home">
-            <motion.div
-              whileHover={{ scale: 1.05, rotate: 5 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative"
-            >
-              <Activity className="h-8 w-8 text-primary" />
+          {/* Enhanced logo with hover animation */}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Link href="/" className="flex items-center gap-2 group" aria-label="EdgePulse Home">
               <motion.div
-                className="absolute inset-0 bg-primary rounded-full opacity-0 group-hover:opacity-20"
-                initial={{ scale: 0 }}
-                whileHover={{ scale: 1.5 }}
-                transition={{ duration: 0.3, type: "spring" }}
-              />
-            </motion.div>
-            <span className="text-xl font-display font-bold">
-              Edge<span className="text-primary">Pulse</span>
-            </span>
-          </Link>
+                className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/15 transition-colors"
+                whileHover={{ rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 0.5 }}
+              >
+                <Shield className="h-4 w-4 text-primary" />
+              </motion.div>
+              <motion.span
+                className="text-lg font-display font-bold text-foreground"
+                whileHover={{ x: 2 }}
+                transition={{ duration: 0.2 }}
+              >
+                Edge<span className="text-primary">Pulse</span>
+              </motion.span>
+            </Link>
+          </motion.div>
 
-          {/* Desktop Navigation */}
+          {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-8">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-1">
               {navItems.map((item) => {
-                const isActive = activeSection === item.href.replace('#', '');
+                const isActive = activeSection === item.href.replace("#", "");
                 return (
                   <motion.div
                     key={item.href}
-                    className="relative"
-                    whileHover={{ y: -2 }}
-                    whileTap={{ y: 0 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
                     <button
                       onClick={() => handleNavClick(item.href)}
-                      className={`text-sm font-medium transition-colors relative ${
-                        isActive
-                          ? "text-primary"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
                       aria-label={`Navigate to ${item.label}`}
+                      className={`relative px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${isActive
+                        ? "text-primary bg-primary/8"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                        }`}
                     >
                       {item.label}
                       {isActive && (
                         <motion.div
-                          layoutId="activeNavIndicator"
-                          className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full"
-                          initial={false}
-                          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                          layoutId="nav-indicator"
+                          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-primary rounded-full"
+                          transition={{ type: "spring", stiffness: 400, damping: 30 }}
                         />
                       )}
                     </button>
@@ -113,76 +119,139 @@ export function Navigation() {
                 );
               })}
             </div>
-            
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button variant="outline" asChild>
-                  <Link href="/login" aria-label="Sign in to your account">Sign In</Link>
+
+            <div className="flex items-center gap-2">
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: 180 }}
+                whileTap={{ scale: 0.9 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ThemeToggle />
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/login">Sign In</Link>
                 </Button>
               </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button asChild>
-                  <Link href="/register" aria-label="Get started with EdgePulse">Get Started</Link>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button size="sm" asChild>
+                  <Link href="/register">Get Started</Link>
                 </Button>
               </motion.div>
             </div>
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Enhanced mobile button */}
           <div className="md:hidden flex items-center gap-2">
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setMobileOpen(!mobileOpen)}
+            <motion.div
+              whileHover={{ scale: 1.1, rotate: 180 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ duration: 0.3 }}
             >
-              {mobileOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </Button>
+              <ThemeToggle />
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileOpen(!mobileOpen)}
+                aria-label="Toggle mobile menu"
+                className="relative"
+              >
+                <AnimatePresence mode="wait">
+                  {mobileOpen ? (
+                    <motion.div
+                      key="close"
+                      initial={{ rotate: -90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: 90, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <X className="h-5 w-5" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="menu"
+                      initial={{ rotate: 90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: -90, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Menu className="h-5 w-5" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Button>
+            </motion.div>
           </div>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Enhanced mobile menu with staggered animations */}
         <AnimatePresence>
           {mobileOpen && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="md:hidden mt-4 pb-4 border-t border-border pt-4"
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="md:hidden overflow-hidden"
             >
-              <div className="flex flex-col gap-4">
-                {navItems.map((item) => (
+              <motion.div
+                className="pt-4 pb-2 border-t border-border mt-4 flex flex-col gap-1"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ delay: 0.1, duration: 0.2 }}
+              >
+                {navItems.map((item, index) => (
                   <motion.button
                     key={item.href}
                     onClick={() => handleNavClick(item.href)}
-                    className="text-left text-muted-foreground hover:text-foreground transition-colors font-medium"
-                    aria-label={`Navigate to ${item.label}`}
-                    whileHover={{ x: 8 }}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + index * 0.05, duration: 0.2 }}
+                    whileHover={{ scale: 1.02, x: 4 }}
                     whileTap={{ scale: 0.98 }}
+                    className="text-left px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-all duration-200"
                   >
                     {item.label}
                   </motion.button>
                 ))}
-                
-                <div className="flex flex-col gap-2 pt-4 border-t border-border">
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button variant="outline" asChild className="w-full">
-                      <Link href="/login" aria-label="Sign in to your account">Sign In</Link>
+                <motion.div
+                  className="flex gap-2 mt-3 pt-3 border-t border-border"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.2 }}
+                >
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex-1"
+                  >
+                    <Button variant="outline" size="sm" className="w-full" asChild>
+                      <Link href="/login">Sign In</Link>
                     </Button>
                   </motion.div>
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button asChild className="w-full">
-                      <Link href="/register" aria-label="Get started with EdgePulse">Get Started</Link>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex-1"
+                  >
+                    <Button size="sm" className="w-full" asChild>
+                      <Link href="/register">Get Started</Link>
                     </Button>
                   </motion.div>
-                </div>
-              </div>
+                </motion.div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

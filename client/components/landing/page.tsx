@@ -9,7 +9,7 @@ import { Footer } from "@/components/landing/footer";
 
 export function LandingPage() {
   return (
-    <main className="min-h-screen overflow-y-auto">
+    <main className="min-h-screen overflow-y-auto bg-background">
       <Navigation />
       <Hero />
       <Features />

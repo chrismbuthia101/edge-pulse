@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Activity, Mail } from "lucide-react";
+import { Shield, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const footerSections = [
@@ -11,7 +11,7 @@ const footerSections = [
     links: [
       { label: "Features", href: "#features" },
       { label: "Security", href: "#security" },
-      { label: "Pricing", href: "#pricing" },
+      { label: "How It Works", href: "#how-it-works" },
       { label: "Documentation", href: "/docs" },
     ],
   },
@@ -21,7 +21,7 @@ const footerSections = [
       { label: "About", href: "#about" },
       { label: "Blog", href: "/blog" },
       { label: "Careers", href: "/careers" },
-      { label: "Contact", href: "#contact" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
@@ -37,58 +37,64 @@ const footerSections = [
 
 export function Footer() {
   return (
-    <footer className="bg-muted/30 border-t border-border/50">
-      <div className="max-w-7xl mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12">
-          {/* Brand */}
+    <footer className="bg-background border-t border-border">
+      <div className="max-w-7xl mx-auto px-6 pt-16 pb-10">
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
+          {/* Brand column */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="lg:col-span-2"
           >
-            <Link href="/" className="flex items-center gap-2 mb-4" aria-label="EdgePulse Home">
-              <Activity className="h-8 w-8 text-primary" />
-              <span className="text-xl font-display font-bold">
+            <Link href="/" className="inline-flex items-center gap-2 mb-4 group">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
+                <Shield className="h-4 w-4 text-primary" />
+              </div>
+              <span className="text-lg font-display font-bold text-foreground">
                 Edge<span className="text-primary">Pulse</span>
               </span>
             </Link>
-            <p className="text-muted-foreground mb-6 leading-relaxed">
-              Advanced edge-based security solution powered by machine learning. 
-              Protect your enterprise devices with real-time threat detection.
+
+            <p className="text-sm text-muted-foreground leading-relaxed mb-5 max-w-xs">
+              Advanced edge security powered by machine learning. Protect your enterprise devices
+              with real-time, explainable, privacy-first threat detection.
             </p>
-            <div className="flex gap-4">
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/contact" aria-label="Contact us">
-                  <Mail className="w-4 h-4 mr-2" />
-                  Contact
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                <Link href="/contact">
+                  <Mail className="w-3.5 h-3.5" />
+                  Contact Us
                 </Link>
               </Button>
-              <Button size="sm" asChild>
-                <Link href="/register" aria-label="Get started with EdgePulse">
+              <Button size="sm" className="gap-1.5" asChild>
+                <Link href="/register">
                   Get Started
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </Button>
             </div>
           </motion.div>
 
-          {/* Links */}
+          {/* Link columns */}
           {footerSections.map((section, index) => (
             <motion.div
               key={section.title}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.08 }}
             >
-              <h3 className="font-semibold mb-4">{section.title}</h3>
-              <ul className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground mb-4">
+                {section.title}
+              </h3>
+              <ul className="space-y-2.5">
                 {section.links.map((link) => (
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className="text-muted-foreground hover:text-foreground transition-colors text-sm"
-                      aria-label={`Navigate to ${link.label}`}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {link.label}
                     </Link>
@@ -99,20 +105,17 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Bottom */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="border-t border-border/50 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4"
-        >
-          <p className="text-sm text-muted-foreground">
-            © 2024 EdgePulse. All rights reserved.
-          </p>
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <span>Built with ❤️ for enterprise security</span>
+        {/* Bottom bar */}
+        <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+          <p>© {new Date().getFullYear()} EdgePulse. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              All systems operational
+            </span>
+            <span>Built for enterprise security</span>
           </div>
-        </motion.div>
+        </div>
       </div>
     </footer>
   );

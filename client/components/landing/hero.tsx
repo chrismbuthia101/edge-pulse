@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion, Variants, easeOut, useScroll, useTransform } from "framer-motion";
-import { ArrowRight, Play, Shield, Zap, Brain } from "lucide-react";
+import { ArrowRight, Shield, Zap, Brain, Activity, AlertTriangle, Cpu, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMemo } from "react";
 
@@ -11,302 +11,373 @@ const containerVariants: Variants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
+      staggerChildren: 0.12,
+      delayChildren: 0.1,
     },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { y: 20, opacity: 0 },
+  hidden: { y: 24, opacity: 0 },
   visible: {
     y: 0,
     opacity: 1,
-    transition: { duration: 0.6, ease: easeOut, type: "spring", stiffness: 100 },
+    transition: { duration: 0.6, ease: easeOut },
   },
 };
 
+const stats = [
+  { label: "< 500ms Detection", icon: Zap },
+  { label: "100% Edge Native", icon: Shield },
+  { label: "SHAP XAI Engine", icon: Brain },
+];
+
+const threatEvents = [
+  { time: "00:01", event: "Port scan detected", device: "srv-prod-01", severity: "high" },
+  { time: "00:03", event: "Unusual outbound traffic", device: "dev-laptop-07", severity: "critical" },
+  { time: "00:05", event: "Auth brute-force attempt", device: "ws-finance-03", severity: "high" },
+  { time: "00:08", event: "Process injection blocked", device: "srv-prod-02", severity: "critical" },
+];
+
 export function Hero() {
   const { scrollY } = useScroll();
-  const y = useTransform(scrollY, [0, 1000], [0, 150]);
-  const opacity = useTransform(scrollY, [0, 300], [1, 0]);
+  const parallaxY = useTransform(scrollY, [0, 1000], [0, -150]);
+  const parallaxScale = useTransform(scrollY, [0, 1000], [1, 0.8]);
 
-  const nodes = [...Array(12)].map((_, i) => ({
-    cx: 10 + (i % 4) * 25,
-    cy: 15 + Math.floor(i / 4) * 35,
-    key: i,
-  }));
-
-  // Generate deterministic particles to avoid Math.random in render
-  const particles = useMemo(() =>
-    [...Array(30)].map((_, i) => {
-      const seed = i * 1234; // Simple seed based on index
-      const left = ((seed * 9301 + 49297) % 233280) / 233280 * 100;
-      const top = ((seed * 233280 + 9301) % 233280) / 233280 * 100;
-      const xMovement = ((seed * 49297 + 233280) % 40) - 20;
-      const duration = 8 + ((seed * 9301) % 8);
-      const delay = ((seed * 49297) % 4);
-
-      return {
-        id: i,
-        left,
-        top,
-        xMovement,
-        duration,
-        delay,
-      };
-    }),
+  const particles = useMemo(
+    () =>
+      [...Array(30)].map((_, i) => {
+        const seed = i * 1234;
+        return {
+          id: i,
+          left: ((seed * 9301 + 49297) % 233280) / 233280 * 100,
+          top: ((seed * 233280 + 9301) % 233280) / 233280 * 100,
+          xMovement: ((seed * 49297 + 233280) % 60) - 30,
+          yMovement: ((seed * 1234 + 49297) % 40) - 20,
+          duration: 8 + ((seed * 9301) % 10),
+          delay: ((seed * 49297) % 8),
+          size: 1 + ((seed * 1111) % 4),
+          type: i % 3 === 0 ? "glow" : i % 3 === 1 ? "float" : "pulse",
+        };
+      }),
     []
   );
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-      {/* Animated Background */}
-      <motion.div
-        style={{ y, opacity }}
-        className="absolute inset-0"
-      >
-        {/* Enhanced Mesh Gradient Background */}
-        <div className="absolute inset-0 bg-linear-to-br from-slate-950 via-blue-950/30 to-slate-950">
-          <div className="absolute inset-0 opacity-30">
-            <div className="absolute top-0 -left-4 w-96 h-96 bg-linear-to-r from-blue-600 to-cyan-600 rounded-full mix-blend-screen filter blur-3xl animate-blob" />
-            <div className="absolute top-0 -right-4 w-96 h-96 bg-linear-to-r from-indigo-600 to-purple-600 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-2000" />
-            <div className="absolute -bottom-8 left-20 w-96 h-96 bg-linear-to-r from-emerald-600 to-teal-600 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-4000" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-linear-to-r from-slate-600 to-blue-700 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-6000" />
-          </div>
-        </div>
+    <section className="relative min-h-screen flex items-center overflow-hidden bg-background pt-20">
+      {/* Background — theme-aware subtle texture */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Soft radial glow — primary color, works in both modes */}
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/8 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px]" />
 
-        {/* Enhanced Grid Pattern */}
-        <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
+        {/* Grid pattern */}
+        <svg className="absolute inset-0 w-full h-full opacity-[0.04] dark:opacity-[0.07]">
           <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path
-                d="M 40 0 L 0 0 0 40"
-                fill="none"
-                stroke="rgba(255,255,255,0.1)"
-                strokeWidth="0.5"
-              />
+            <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.8" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
+          <rect width="100%" height="100%" fill="url(#hero-grid)" className="text-foreground" />
         </svg>
 
-        {/* Enhanced Floating Particles */}
-        <div className="absolute inset-0">
-          {particles.map((particle) => (
+        {/* Enhanced floating particles with different types */}
+        {particles.map((p) => {
+          const animationVariants = {
+            glow: {
+              y: [0, -100, 0],
+              x: [0, p.xMovement, 0],
+              opacity: [0, 0.8, 0],
+              scale: [1, 1.5, 1],
+            },
+            float: {
+              y: [0, -60, 0],
+              x: [0, p.xMovement * 0.5, 0],
+              opacity: [0, 0.6, 0],
+              rotate: [0, 180, 360],
+            },
+            pulse: {
+              y: [0, -40, 0],
+              x: [0, p.xMovement * 0.3, 0],
+              opacity: [0, 0.4, 0],
+              scale: [1, 0.5, 1],
+            },
+          };
+
+          const currentAnimation = animationVariants[p.type as keyof typeof animationVariants];
+
+          return (
             <motion.div
-              key={particle.id}
-              className="absolute w-2 h-2 bg-linear-to-r from-blue-400 to-cyan-400 rounded-full shadow-lg shadow-blue-400/50"
+              key={p.id}
+              className={`absolute rounded-full ${p.type === "glow"
+                ? "bg-primary/60 blur-sm"
+                : p.type === "float"
+                  ? "bg-primary/40"
+                  : "bg-primary/30"
+                }`}
               style={{
-                left: `${particle.left}%`,
-                top: `${particle.top}%`,
+                left: `${p.left}%`,
+                top: `${p.top}%`,
+                width: p.size,
+                height: p.size,
               }}
-              animate={{
-                y: [0, -120, 0],
-                x: [0, particle.xMovement, 0],
-                opacity: [0, 0.8, 0],
-                scale: [1, 1.5, 1],
-              }}
+              animate={currentAnimation}
               transition={{
-                duration: particle.duration,
+                duration: p.duration,
                 repeat: Infinity,
-                delay: particle.delay,
+                delay: p.delay,
                 ease: "easeInOut",
+                times: [0, 0.5, 1]
               }}
             />
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
-        {/* Enhanced Animated Nodes */}
-        <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-          {nodes.map((node) => (
-            <motion.g key={node.key}>
-              <motion.circle
-                cx={`${node.cx}%`}
-                cy={`${node.cy}%`}
-                r="3"
-                fill="url(#nodeGradient)"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{
-                  scale: [0, 2, 1],
-                  opacity: [0, 1, 0.6],
-                }}
-                transition={{
-                  duration: 2.5,
-                  delay: node.key * 0.2,
-                  repeat: Infinity,
-                  repeatType: "reverse",
-                }}
-                whileHover={{
-                  scale: 3,
-                  opacity: 1,
-                  filter: "drop-shadow(0 0 12px rgba(59, 130, 246, 0.8))",
-                  transition: { duration: 0.3, ease: easeOut },
-                }}
-              />
-              <motion.circle
-                cx={`${node.cx}%`}
-                cy={`${node.cy}%`}
-                r="8"
-                fill="none"
-                stroke="rgba(59, 130, 246, 0.3)"
-                strokeWidth="0.5"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{
-                  scale: [0, 3, 2],
-                  opacity: [0, 0.5, 0],
-                }}
-                transition={{
-                  duration: 2.5,
-                  delay: node.key * 0.2,
-                  repeat: Infinity,
-                  repeatType: "reverse",
-                }}
-              />
-            </motion.g>
-          ))}
-          <defs>
-            <radialGradient id="nodeGradient">
-              <stop offset="0%" stopColor="#3b82f6" />
-              <stop offset="100%" stopColor="#06b6d4" />
-            </radialGradient>
-          </defs>
-        </svg>
-      </motion.div>
-
-      {/* Content */}
+      {/* Main content — two columns with parallax */}
       <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="relative z-10 text-center max-w-5xl mx-auto px-6"
+        style={{ y: parallaxY, scale: parallaxScale }}
+        className="relative z-10 w-full max-w-7xl mx-auto px-6 py-16"
       >
-        <motion.h1
-          variants={itemVariants}
-          className="text-5xl md:text-7xl lg:text-8xl font-display font-bold tracking-tight mb-8"
-        >
-          <span className="bg-linear-to-r from-white via-blue-100 to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
-            Intelligent Edge Security.
-          </span>
-          <br />
-          <span className="bg-linear-to-r from-blue-400 via-cyan-500 to-indigo-600 bg-clip-text text-transparent drop-shadow-2xl animate-pulse">
-            Zero Trust. Zero Latency.
-          </span>
-        </motion.h1>
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
 
-        <motion.p
-          variants={itemVariants}
-          className="text-xl md:text-2xl text-blue-100/90 mb-12 max-w-4xl mx-auto leading-relaxed font-light"
-        >
-          Revolutionary          <span className="font-semibold text-transparent bg-linear-to-r from-blue-400 to-cyan-400 bg-clip-text">AI-powered threat detection</span> that operates at the edge.
-          <span className="text-emerald-300 font-medium">Real-time responses.</span>
-          <span className="text-indigo-300 font-medium">Complete privacy.</span>
-          <span className="text-slate-300 font-medium">Transparent AI.</span>
-        </motion.p>
-
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col sm:flex-row gap-6 justify-center mb-16"
-        >
-          <Button size="lg" className="text-lg px-10 py-8 bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border-0 shadow-2xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-300 group">
-            <Link href="/register" className="flex items-center">
-              <Shield className="mr-3 h-6 w-6 group-hover:rotate-12 transition-transform duration-300" />
-              Start Protected
-              <ArrowRight className="ml-3 h-5 w-5 group-hover:translate-x-1 transition-transform duration-300" />
-            </Link>
-          </Button>
-
-          <Button variant="outline" size="lg" className="text-lg px-10 py-8 border-blue-500/50 text-blue-300 hover:bg-blue-500/10 hover:border-blue-400 hover:text-blue-200 shadow-xl shadow-blue-500/10 transition-all duration-300 group">
-            <Link href="/login" className="flex items-center">
-              <Play className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-300" />
-              Live Demo
-            </Link>
-          </Button>
-        </motion.div>
-
-        {/* Enhanced Stats */}
-        <motion.div variants={itemVariants} className="flex flex-wrap justify-center gap-8 text-sm">
-          {[
-            { label: "< 500ms Detection", icon: Zap, color: "from-amber-400 to-orange-500" },
-            { label: "100% Edge Native", icon: Shield, color: "from-blue-400 to-cyan-500" },
-            { label: "SHAP XAI Engine", icon: Brain, color: "from-indigo-400 to-purple-500" }
-          ].map((stat, i) => (
-            <motion.div
-              key={i}
-              whileHover={{ scale: 1.08, y: -4 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-linear-to-r from-white/10 to-white/5 backdrop-blur-xl border border-white/20 px-8 py-4 rounded-2xl shadow-2xl hover:shadow-3xl hover:shadow-blue-500/20 transition-all duration-300 group"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 bg-linear-to-r ${stat.color} rounded-xl shadow-lg`}>
-                  <stat.icon className="w-5 h-5 text-white" />
-                </div>
-                <span className="font-semibold text-white group-hover:text-blue-200 transition-colors duration-300">
-                  {stat.label}
-                </span>
-              </div>
+          {/* ── Left column: copy ── */}
+          <motion.div variants={containerVariants} initial="hidden" animate="visible">
+            {/* Pill badge */}
+            <motion.div variants={itemVariants} className="mb-6">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/25 bg-primary/8 text-primary text-xs font-semibold tracking-wide uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                ML-Powered Edge Security
+              </span>
             </motion.div>
-          ))}
-        </motion.div>
 
-        {/* Enhanced Hero Mockup */}
-        <motion.div
-          variants={itemVariants}
-          className="mt-20 relative"
-          animate={{ y: [0, -15, 0] }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-            ease: easeOut,
-            type: "spring",
-            stiffness: 40,
-            damping: 8
-          }}
-        >
-          <div className="bg-linear-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-2xl border border-blue-500/30 rounded-2xl shadow-3xl p-8 max-w-3xl mx-auto ring-1 ring-blue-400/20 hover:ring-blue-400/40 transition-all duration-500 group">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
+            {/* Headline */}
+            <motion.h1
+              variants={itemVariants}
+              className="text-4xl md:text-5xl lg:text-[3.4rem] font-display font-bold tracking-tight leading-[1.1] mb-6 text-foreground"
+            >
+              Intelligent Edge{" "}
+              <span className="relative">
+                <span className="bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                  Security.
+                </span>
+              </span>
+              <br />
+              <span className="text-foreground/70">Zero Trust.</span>{" "}
+              <span className="text-foreground/50 text-3xl md:text-4xl lg:text-[2.6rem]">Zero Latency.</span>
+            </motion.h1>
+
+            {/* Subheading */}
+            <motion.p
+              variants={itemVariants}
+              className="text-base md:text-lg text-muted-foreground leading-relaxed mb-8 max-w-lg"
+            >
+              Revolutionary AI-powered threat detection that operates entirely at the edge.
+              Real-time responses, complete data privacy, and transparent explainable AI —
+              built for enterprise scale.
+            </motion.p>
+
+            {/* CTA buttons */}
+            <motion.div variants={itemVariants} className="flex flex-wrap gap-3 mb-10">
+              <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow" asChild>
+                <Link href="/register">
+                  <Shield className="h-4 w-4" />
+                  Start Protected
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button variant="outline" size="lg" className="gap-2" asChild>
+                <Link href="/login">
+                  <Activity className="h-4 w-4" />
+                  Live Demo
+                </Link>
+              </Button>
+            </motion.div>
+
+            {/* Stats row */}
+            <motion.div variants={itemVariants} className="flex flex-wrap gap-6">
+              {stats.map((stat) => (
+                <div key={stat.label} className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <stat.icon className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
+                </div>
+              ))}
+            </motion.div>
+          </motion.div>
+
+          {/* ── Right column: dashboard mockup ── */}
+          <motion.div
+            initial={{ opacity: 0, x: 40, y: 10 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3, ease: easeOut }}
+            className="relative"
+          >
+            {/* Glow behind card */}
+            <div className="absolute inset-0 bg-primary/10 rounded-3xl blur-3xl scale-95 -z-10" />
+
+            {/* Main dashboard card */}
+            <div className="relative bg-card border border-border rounded-2xl shadow-2xl shadow-black/10 dark:shadow-black/40 overflow-hidden">
+
+              {/* Window chrome */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-400" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                  <div className="w-3 h-3 rounded-full bg-green-400" />
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1 bg-background rounded-md border border-border">
+                  <Shield className="h-3 w-3 text-primary" />
+                  <span className="text-xs font-mono text-muted-foreground">edgepulse.local / dashboard</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-xs text-muted-foreground">Live</span>
+                </div>
+              </div>
+
+              {/* Dashboard content */}
+              <div className="p-4 bg-background/50">
+
+                {/* Top stat row */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { label: "Devices", value: "1,247", delta: "+3", color: "text-primary" },
+                    { label: "Threats Blocked", value: "89", delta: "today", color: "text-destructive" },
+                    { label: "Avg Response", value: "312ms", delta: "↓18%", color: "text-green-600 dark:text-green-400" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-card rounded-xl border border-border p-3">
+                      <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
+                      <p className={`text-lg font-bold font-mono ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-muted-foreground/70">{s.delta}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Critical threat banner */}
                 <motion.div
-                  className="w-4 h-4 bg-red-500 rounded-full shadow-lg shadow-red-500/50"
-                  animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+                  className="flex items-center gap-3 p-3 mb-4 rounded-xl bg-destructive/8 border border-destructive/20"
+                  animate={{ opacity: [0.8, 1, 0.8] }}
                   transition={{ duration: 2, repeat: Infinity }}
-                />
-                <span className="font-mono text-sm font-bold text-red-400">CRITICAL THREAT DETECTED</span>
+                >
+                  <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-destructive">CRITICAL — Process Injection Detected</p>
+                    <p className="text-xs text-muted-foreground truncate">dev-laptop-07 · Confidence 0.97 · Blocked automatically</p>
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground shrink-0">0ms</span>
+                </motion.div>
+
+                {/* Anomaly score bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-medium text-foreground">Anomaly Score</span>
+                    <span className="text-xs font-mono font-bold text-destructive">0.97</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-linear-to-r from-yellow-500 via-orange-500 to-destructive rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: "97%" }}
+                      transition={{ duration: 1.2, delay: 0.8, ease: "easeOut" }}
+                    />
+                  </div>
+                </div>
+
+                {/* SHAP contribution bars */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-foreground mb-2">SHAP Feature Contributions</p>
+                  <div className="space-y-2">
+                    {[
+                      { label: "CPU Spike", pct: 34, color: "bg-destructive" },
+                      { label: "Network Anomaly", pct: 28, color: "bg-orange-500" },
+                      { label: "Disk I/O", pct: 19, color: "bg-yellow-500" },
+                      { label: "Memory Usage", pct: 11, color: "bg-primary" },
+                    ].map((f, i) => (
+                      <div key={f.label} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0">{f.label}</span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <motion.div
+                            className={`h-full ${f.color} rounded-full`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${f.pct}%` }}
+                            transition={{ duration: 0.8, delay: 1 + i * 0.1, ease: "easeOut" }}
+                          />
+                        </div>
+                        <span className="text-xs font-mono text-muted-foreground w-8 text-right">{f.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live event feed */}
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-2">Live Event Feed</p>
+                  <div className="space-y-1.5">
+                    {threatEvents.map((ev, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 1.2 + i * 0.15 }}
+                        className="flex items-center gap-2 text-xs"
+                      >
+                        <span className="font-mono text-muted-foreground/60 w-10 shrink-0">{ev.time}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ev.severity === "critical" ? "bg-destructive" : "bg-orange-500"}`} />
+                        <span className="text-muted-foreground flex-1 truncate">{ev.event}</span>
+                        <span className="font-mono text-muted-foreground/50 truncate">{ev.device}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <span className="text-blue-400 text-sm font-mono bg-blue-500/10 px-3 py-1 rounded-lg">dev-laptop-01</span>
             </div>
 
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-blue-300">Anomaly Confidence</span>
-                <span className="font-mono text-2xl text-red-400 font-bold">0.97</span>
-              </div>
-              <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden">
+            {/* Enhanced floating accent cards with improved animations */}
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 1, duration: 0.5, type: "spring", stiffness: 300 }}
+              whileHover={{ y: -8, scale: 1.05, rotate: 2 }}
+              className="absolute -top-4 -right-4 bg-card border border-border rounded-xl px-3 py-2 shadow-lg hover-lift"
+            >
+              <div className="flex items-center gap-2">
                 <motion.div
-                  className="bg-linear-to-r from-amber-500 to-orange-500 h-3 rounded-full shadow-lg shadow-amber-500/50"
-                  style={{ width: "97%" }}
-                  initial={{ scaleX: 0 }}
-                  animate={{ scaleX: 1 }}
-                  transition={{ duration: 1.5, delay: 0.8, type: "spring", stiffness: 100 }}
-                />
+                  animate={{ rotate: [0, 360] }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                >
+                  <Cpu className="h-3.5 w-3.5 text-primary" />
+                </motion.div>
+                <span className="text-xs font-semibold text-foreground">Edge Agent</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               </div>
-              <div className="grid grid-cols-3 gap-4 text-xs">
-                <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg">
-                  <div className="text-red-400 font-semibold mb-1">CPU Spike</div>
-                  <div className="text-red-300">34% contribution</div>
-                </div>
-                <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-lg">
-                  <div className="text-orange-400 font-semibold mb-1">Network Anomaly</div>
-                  <div className="text-orange-300">28% contribution</div>
-                </div>
-                <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
-                  <div className="text-yellow-400 font-semibold mb-1">Disk I/O</div>
-                  <div className="text-yellow-300">19% contribution</div>
-                </div>
+              <p className="text-xs text-muted-foreground mt-0.5">2.1MB · Offline Ready</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 1.2, duration: 0.5, type: "spring", stiffness: 300 }}
+              whileHover={{ y: -8, scale: 1.05, rotate: -2 }}
+              className="absolute -bottom-4 -left-4 bg-card border border-border rounded-xl px-3 py-2 shadow-lg hover-lift"
+            >
+              <div className="flex items-center gap-2">
+                <motion.div
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Wifi className="h-3.5 w-3.5 text-primary" />
+                </motion.div>
+                <span className="text-xs font-semibold text-foreground">Zero Cloud Dependency</span>
               </div>
-            </div>
-          </div>
-        </motion.div>
+              <p className="text-xs text-muted-foreground mt-0.5">All inference runs locally</p>
+            </motion.div>
+          </motion.div>
+
+        </div>
       </motion.div>
     </section>
   );
