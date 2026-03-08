@@ -5,19 +5,18 @@ import {
     ShieldAlert,
     MonitorSmartphone,
     Zap,
-    TrendingUp,
     Shield,
-    Clock,
+    TrendingUp,
     AlertTriangle,
     CheckCircle2,
+    Clock,
+    ArrowUpRight,
+    ArrowDownRight,
+    Activity,
 } from "lucide-react";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { AlertFeed } from "@/components/dashboard/alert-feed";
-import { DeviceList } from "@/components/dashboard/device-list";
-import { ShapPanel } from "@/components/dashboard/shap-panel";
-import { LiveFeed } from "@/components/dashboard/live-feed";
 import { ThreatChart } from "@/components/dashboard/threat-chart";
-import { QuickActions } from "@/components/dashboard/quick-actions";
+import { AlertFeed } from "@/components/dashboard/alert-feed";
+import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
 
 const stats = [
@@ -30,7 +29,6 @@ const stats = [
         accent: "text-primary",
         accentBg: "bg-primary/10",
         accentBorder: "border-primary/20",
-        chart: [40, 55, 50, 60, 65, 70, 75, 80, 72, 85, 90, 88],
     },
     {
         title: "Active Alerts",
@@ -41,7 +39,6 @@ const stats = [
         accent: "text-destructive",
         accentBg: "bg-destructive/10",
         accentBorder: "border-destructive/20",
-        chart: [20, 35, 28, 45, 55, 60, 58, 70, 65, 80, 78, 89],
     },
     {
         title: "Mean Response",
@@ -52,7 +49,6 @@ const stats = [
         accent: "text-green-500",
         accentBg: "bg-green-500/10",
         accentBorder: "border-green-500/20",
-        chart: [800, 750, 700, 650, 600, 550, 500, 450, 420, 380, 340, 312],
     },
     {
         title: "Threats Blocked",
@@ -63,22 +59,20 @@ const stats = [
         accent: "text-violet-500",
         accentBg: "bg-violet-500/10",
         accentBorder: "border-violet-500/20",
-        chart: [120, 145, 160, 180, 200, 215, 225, 240, 260, 280, 310, 341],
     },
 ];
 
-const criticalMetrics = [
-    { label: "Critical Alerts", value: "3", icon: AlertTriangle, color: "text-destructive" },
-    { label: "Incidents Today", value: "12", icon: ShieldAlert, color: "text-orange-500" },
-    { label: "Resolved", value: "77", icon: CheckCircle2, color: "text-green-500" },
-    { label: "Avg Resolve Time", value: "4.2m", icon: Clock, color: "text-primary" },
-    { label: "Detection Rate", value: "99.9%", icon: TrendingUp, color: "text-violet-500" },
+const incidentSummary = [
+    { label: "Critical", value: 3, color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
+    { label: "Resolved Today", value: 77, color: "text-green-500", bg: "bg-green-500/10", icon: CheckCircle2 },
+    { label: "Avg Resolve", value: "4.2m", color: "text-primary", bg: "bg-primary/10", icon: Clock },
+    { label: "Detection Rate", value: "99.9%", color: "text-violet-500", bg: "bg-violet-500/10", icon: TrendingUp },
 ];
 
 export default function DashboardPage() {
     return (
-        <div className="space-y-6 max-w-[1600px]">
-            {/* Page header */}
+        <div className="space-y-6 max-w-[1400px]">
+            {/* Header */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -90,53 +84,77 @@ export default function DashboardPage() {
                         Security Overview
                     </h1>
                     <p className="text-sm text-muted-foreground mt-0.5">
-                        {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                        {new Date().toLocaleDateString("en-US", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                        })}
                     </p>
                 </div>
 
-                {/* Critical metrics strip */}
-                <div className="hidden xl:flex items-center gap-1 bg-card border border-border rounded-2xl px-4 py-2.5 divide-x divide-border">
-                    {criticalMetrics.map((m) => (
-                        <div key={m.label} className="flex items-center gap-2 px-3 first:pl-0 last:pr-0">
-                            <m.icon className={`h-3.5 w-3.5 ${m.color}`} />
-                            <div>
-                                <p className={`text-sm font-bold font-display ${m.color}`}>{m.value}</p>
-                                <p className="text-[10px] text-muted-foreground leading-none">{m.label}</p>
-                            </div>
-                        </div>
-                    ))}
+                {/* Live badge */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+                    <Activity className="h-3.5 w-3.5 text-green-500" />
+                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                        Live Monitoring
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                 </div>
             </motion.div>
 
-            {/* Stat cards row */}
+            {/* Stat cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, i) => (
-                    <StatCard key={stat.title} {...stat} index={i} />
+                    <motion.div
+                        key={stat.title}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.07, duration: 0.4 }}
+                        whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                        className="bg-card border border-border rounded-2xl p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow"
+                    >
+                        <div className="flex items-start justify-between mb-4">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}>
+                                <stat.icon className={`h-5 w-5 ${stat.accent}`} />
+                            </div>
+                            <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive ? "text-green-600 dark:text-green-400 bg-green-500/10" : "text-destructive bg-destructive/10"}`}>
+                                {stat.deltaPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                {stat.delta}
+                            </span>
+                        </div>
+                        <p className="text-2xl font-bold font-display text-foreground mb-0.5">{stat.value}</p>
+                        <p className="text-xs text-muted-foreground">{stat.title}</p>
+                    </motion.div>
                 ))}
             </div>
 
-            {/* Main grid */}
+            {/* Incident summary strip */}
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.4 }}
+                className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+            >
+                {incidentSummary.map((item) => (
+                    <div key={item.label} className={`flex items-center gap-3 p-3.5 rounded-xl border border-border ${item.bg}`}>
+                        <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+                        <div>
+                            <p className={`text-lg font-bold font-display ${item.color}`}>{item.value}</p>
+                            <p className="text-xs text-muted-foreground">{item.label}</p>
+                        </div>
+                    </div>
+                ))}
+            </motion.div>
+
+            {/* Main content: chart + alerts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                {/* Left column - 2/3 width */}
                 <div className="xl:col-span-2 space-y-5">
                     <ThreatChart />
                     <AlertFeed />
                 </div>
-
-                {/* Right column - 1/3 width */}
                 <div className="space-y-5">
-                    <QuickActions />
                     <ShapPanel />
-                </div>
-            </div>
-
-            {/* Bottom grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                <div className="xl:col-span-2">
-                    <DeviceList />
-                </div>
-                <div className="space-y-5">
-                    <LiveFeed />
                     <SystemHealth />
                 </div>
             </div>
