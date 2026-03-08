@@ -178,7 +178,7 @@ export function Hero() {
             </motion.p>
 
             {/* CTA buttons */}
-            <motion.div variants={itemVariants} className="flex flex-wrap gap-3 mb-10">
+            <motion.div variants={itemVariants} whileHover={{ x: 4 }} transition={{ duration: 0.2, type: "spring", stiffness: 400 }} className="flex flex-wrap gap-3 mb-10">
               <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow" asChild>
                 <Link href="/register">
                   <Shield className="h-4 w-4" />

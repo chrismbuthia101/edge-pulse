@@ -154,7 +154,7 @@ export function Trust() {
               </motion.div>
 
               {/* Animated value */}
-              <motion.p
+              <motion.div
                 className={`text-2xl font-bold font-display ${metric.accent} mb-0.5 relative`}
                 initial={{ opacity: 0 }}
                 animate={isInView ? { opacity: 1 } : {}}
@@ -168,7 +168,7 @@ export function Trust() {
                   animate={isInView ? { width: "100%" } : {}}
                   transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
                 />
-              </motion.p>
+              </motion.div>
               <motion.p
                 className="text-sm font-semibold text-foreground mb-0.5"
                 initial={{ opacity: 0, x: -10 }}

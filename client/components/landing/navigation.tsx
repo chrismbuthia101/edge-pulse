@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
-import { Shield, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Logo } from "@/components/ui/logo";
 
 const navItems = [
   { label: "Features", href: "#features" },
@@ -71,11 +72,11 @@ export function Navigation() {
           >
             <Link href="/" className="flex items-center gap-2 group" aria-label="EdgePulse Home">
               <motion.div
-                className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/15 transition-colors"
+                className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/15 transition-colors"
                 whileHover={{ rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 0.5 }}
               >
-                <Shield className="h-4 w-4 text-primary" />
+                <Logo className="h-7 w-7 text-primary" />
               </motion.div>
               <motion.span
                 className="text-lg font-display font-bold text-foreground"
