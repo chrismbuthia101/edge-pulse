@@ -71,19 +71,19 @@ const incidentSummary = [
 
 export default function DashboardPage() {
     return (
-        <div className="space-y-6 max-w-[1400px]">
+        <div className="space-y-4 lg:space-y-6 max-w-[1400px]">
             {/* Header */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="flex items-start justify-between"
+                className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
             >
-                <div>
-                    <h1 className="text-2xl font-display font-bold text-foreground">
+                <div className="min-w-0">
+                    <h1 className="text-xl lg:text-2xl font-display font-bold text-foreground">
                         Security Overview
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
+                    <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
                         {new Date().toLocaleDateString("en-US", {
                             weekday: "long",
                             year: "numeric",
@@ -94,7 +94,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Live badge */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0">
                     <Activity className="h-3.5 w-3.5 text-green-500" />
                     <span className="text-xs font-medium text-green-600 dark:text-green-400">
                         Live Monitoring
@@ -104,7 +104,7 @@ export default function DashboardPage() {
             </motion.div>
 
             {/* Stat cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
                 {stats.map((stat, i) => (
                     <motion.div
                         key={stat.title}
@@ -112,19 +112,20 @@ export default function DashboardPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.07, duration: 0.4 }}
                         whileHover={{ y: -2, transition: { duration: 0.15 } }}
-                        className="bg-card border border-border rounded-2xl p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow"
+                        className="bg-card border border-border rounded-xl lg:rounded-2xl p-4 lg:p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow"
                     >
-                        <div className="flex items-start justify-between mb-4">
-                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}>
-                                <stat.icon className={`h-5 w-5 ${stat.accent}`} />
+                        <div className="flex items-start justify-between mb-3 lg:mb-4">
+                            <div className={`w-8 lg:w-10 h-8 lg:h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}>
+                                <stat.icon className={`h-4 lg:h-5 w-4 lg:w-5 ${stat.accent}`} />
                             </div>
-                            <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive ? "text-green-600 dark:text-green-400 bg-green-500/10" : "text-destructive bg-destructive/10"}`}>
+                            <span className={`flex items-center gap-1 text-[10px] lg:text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive ? "text-green-600 dark:text-green-400 bg-green-500/10" : "text-destructive bg-destructive/10"}`}>
                                 {stat.deltaPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                                {stat.delta}
+                                <span className="hidden sm:inline">{stat.delta}</span>
+                                <span className="sm:hidden">{stat.delta.split(' ')[0]}</span>
                             </span>
                         </div>
-                        <p className="text-2xl font-bold font-display text-foreground mb-0.5">{stat.value}</p>
-                        <p className="text-xs text-muted-foreground">{stat.title}</p>
+                        <p className="text-lg lg:text-2xl font-bold font-display text-foreground mb-0.5">{stat.value}</p>
+                        <p className="text-[10px] lg:text-xs text-muted-foreground">{stat.title}</p>
                     </motion.div>
                 ))}
             </div>
@@ -134,26 +135,26 @@ export default function DashboardPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3, duration: 0.4 }}
-                className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+                className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3"
             >
                 {incidentSummary.map((item) => (
-                    <div key={item.label} className={`flex items-center gap-3 p-3.5 rounded-xl border border-border ${item.bg}`}>
-                        <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
-                        <div>
-                            <p className={`text-lg font-bold font-display ${item.color}`}>{item.value}</p>
-                            <p className="text-xs text-muted-foreground">{item.label}</p>
+                    <div key={item.label} className={`flex items-center gap-2 lg:gap-3 p-3 lg:p-3.5 rounded-xl border border-border ${item.bg}`}>
+                        <item.icon className={`h-3.5 lg:h-4 w-3.5 lg:w-4 shrink-0 ${item.color}`} />
+                        <div className="min-w-0">
+                            <p className={`text-sm lg:text-lg font-bold font-display ${item.color} truncate`}>{item.value}</p>
+                            <p className="text-[10px] lg:text-xs text-muted-foreground">{item.label}</p>
                         </div>
                     </div>
                 ))}
             </motion.div>
 
             {/* Main content: chart + alerts */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                <div className="xl:col-span-2 space-y-5">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-5">
+                <div className="xl:col-span-2 space-y-4 lg:space-y-5">
                     <ThreatChart />
                     <AlertFeed />
                 </div>
-                <div className="space-y-5">
+                <div className="space-y-4 lg:space-y-5">
                     <ShapPanel />
                     <SystemHealth />
                 </div>

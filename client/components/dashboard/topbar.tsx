@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 
-export function TopBar() {
+interface TopBarProps {
+    onMobileMenuToggle?: () => void;
+}
+
+export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const [searchOpen, setSearchOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [user, setUser] = useState<{ email?: string; full_name?: string } | null>(null);
@@ -37,38 +41,48 @@ export function TopBar() {
     ];
 
     return (
-        <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-30">
+        <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
+            {/* Mobile menu button - only visible on mobile */}
+            <button
+                onClick={onMobileMenuToggle}
+                className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+
             {/* Breadcrumb / page indicator */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-4 w-4 text-primary" />
-                <span className="text-foreground font-medium">Dashboard</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+                <Shield className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-foreground font-medium truncate">Dashboard</span>
             </div>
 
-            {/* Live status badge */}
+            {/* Live status badge - hidden on small mobile */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-xs font-medium text-green-600 dark:text-green-400">All Systems Operational</span>
             </div>
 
-            <div className="flex-1" />
+            <div className="flex-1 min-w-0" />
 
-            {/* Search */}
+            {/* Search - improved mobile handling */}
             <div className="relative">
                 <AnimatePresence>
                     {searchOpen ? (
                         <motion.div
                             initial={{ width: 0, opacity: 0 }}
-                            animate={{ width: 280, opacity: 1 }}
+                            animate={{ width: "calc(100vw - 2rem)", opacity: 1 }}
                             exit={{ width: 0, opacity: 0 }}
                             transition={{ duration: 0.25 }}
-                            className="overflow-hidden"
+                            className="absolute right-0 top-1/2 -translate-y-1/2 overflow-hidden sm:relative sm:top-0 sm:translate-y-0 sm:w-auto"
                         >
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                                 <Input
                                     autoFocus
                                     placeholder="Search devices, alerts..."
-                                    className="pl-9 pr-8 h-9 text-sm"
+                                    className="pl-9 pr-8 h-9 text-sm w-full sm:w-64"
                                 />
                                 <button
                                     onClick={() => setSearchOpen(false)}
@@ -86,7 +100,7 @@ export function TopBar() {
                 </AnimatePresence>
             </div>
 
-            {/* Command palette hint */}
+            {/* Command palette hint - hidden on mobile */}
             <button className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60 transition-colors">
                 <Command className="h-3 w-3" />
                 <span>K</span>
@@ -113,7 +127,7 @@ export function TopBar() {
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                                 transition={{ duration: 0.15 }}
-                                className="absolute right-0 top-full mt-2 w-80 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden max-h-[80vh] sm:max-h-none"
                             >
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                                     <span className="text-sm font-semibold text-foreground">Notifications</span>
@@ -154,12 +168,12 @@ export function TopBar() {
             <ThemeToggle />
 
             {/* User avatar */}
-            <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <div className="flex items-center gap-2.5 ml-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <span className="text-xs font-bold text-primary">{initials}</span>
                 </div>
-                <div className="hidden md:block">
-                    <p className="text-xs font-medium text-foreground leading-none mb-0.5">
+                <div className="hidden md:block min-w-0">
+                    <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
                         {user?.full_name ?? user?.email?.split("@")[0] ?? "User"}
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-none">Administrator</p>

@@ -29,25 +29,25 @@ export function AlertFeed() {
     const filtered = filter === "ALL" ? mockAlerts : mockAlerts.filter((a) => a.status === filter);
 
     return (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    <h3 className="text-sm font-semibold text-foreground">Active Alerts</h3>
-                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                    <h3 className="text-sm font-semibold text-foreground truncate">Active Alerts</h3>
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30 shrink-0">
                         {mockAlerts.filter((a) => a.status === "PENDING").length}
                     </span>
                 </div>
 
                 {/* Filter tabs */}
-                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 min-w-0 overflow-x-auto">
                     {(["ALL", "PENDING", "IN_REVIEW", "CLOSED"] as const).map((f) => (
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
                             className={cn(
-                                "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                                "px-2 lg:px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap",
                                 filter === f
                                     ? "bg-card text-foreground shadow-sm"
                                     : "text-muted-foreground hover:text-foreground"
@@ -60,7 +60,7 @@ export function AlertFeed() {
             </div>
 
             {/* Alert list */}
-            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[350px] lg:max-h-[420px] overflow-y-auto">
                 <AnimatePresence mode="popLayout">
                     {filtered.map((alert, i) => {
                         const sev = severityConfig[alert.severity];
@@ -75,30 +75,30 @@ export function AlertFeed() {
                                 exit={{ opacity: 0, x: 16 }}
                                 transition={{ delay: i * 0.04, duration: 0.25 }}
                                 className={cn(
-                                    "group px-5 py-3.5 hover:bg-muted/30 cursor-pointer transition-colors",
+                                    "group px-4 lg:px-5 py-3 lg:py-3.5 hover:bg-muted/30 cursor-pointer transition-colors",
                                     isSelected && "bg-muted/50"
                                 )}
                                 onClick={() => setSelectedId(isSelected ? null : alert.id)}
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className={cn("w-2 h-2 rounded-full shrink-0", sev.dot)} />
+                                <div className="flex items-start gap-2 lg:gap-3">
+                                    <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", sev.dot)} />
 
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-0.5">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 mb-1 gap-1">
                                             <span className="text-sm font-medium text-foreground truncate">
                                                 {alert.title}
                                             </span>
-                                            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", sev.bg, sev.color, sev.border)}>
+                                            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border w-fit shrink-0", sev.bg, sev.color, sev.border)}>
                                                 {sev.label}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-xs text-muted-foreground">
                                             <span className="flex items-center gap-1">
-                                                <MonitorSmartphone className="h-3 w-3" />
-                                                {alert.device}
+                                                <MonitorSmartphone className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">{alert.device}</span>
                                             </span>
                                             <span className="flex items-center gap-1">
-                                                <Clock className="h-3 w-3" />
+                                                <Clock className="h-3 w-3 shrink-0" />
                                                 {alert.time}
                                             </span>
                                             <span className="text-primary font-medium">
@@ -107,7 +107,7 @@ export function AlertFeed() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                         <button className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center hover:bg-green-500/20 transition-colors">
                                             <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                                         </button>
@@ -117,7 +117,7 @@ export function AlertFeed() {
                                     </div>
                                     <ChevronRight
                                         className={cn(
-                                            "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                                            "h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 mt-0.5",
                                             isSelected && "rotate-90"
                                         )}
                                     />
@@ -133,7 +133,7 @@ export function AlertFeed() {
                                             transition={{ duration: 0.2 }}
                                             className="overflow-hidden"
                                         >
-                                            <div className="mt-3 pt-3 border-t border-border grid grid-cols-3 gap-3">
+                                            <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-3 gap-3">
                                                 <div>
                                                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Category</p>
                                                     <p className="text-xs font-medium text-foreground">{alert.category}</p>
@@ -156,8 +156,8 @@ export function AlertFeed() {
                                                         </span>
                                                     </div>
                                                 </div>
-                                                <div className="col-span-3 pt-2">
-                                                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs">
+                                                <div className="col-span-1 sm:col-span-3 pt-2">
+                                                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs w-full sm:w-auto">
                                                         <Eye className="h-3 w-3" />
                                                         View Full Analysis
                                                     </Button>
@@ -173,11 +173,11 @@ export function AlertFeed() {
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+            <div className="px-4 lg:px-5 py-3 border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
                     Showing {filtered.length} of {mockAlerts.length} alerts
                 </p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 w-full sm:w-auto justify-center">
                     View All Alerts
                     <ChevronRight className="h-3 w-3" />
                 </Button>
