@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Eye, EyeOff, Shield, Clock, ArrowRight, Fingerprint } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Clock, ArrowRight, Fingerprint } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Logo } from "@/components/ui/logo";
 import { toast } from "sonner";
+import Image from "next/image";
+import { useSearchParams } from "next/navigation";
+
 const securityQuotes = [
   { text: "Security is not a product, but a process.", author: "Bruce Schneier" },
   { text: "The only truly secure system is one that is powered off.", author: "Gene Spafford" },
@@ -26,9 +29,10 @@ const trustBadges = [
   { icon: Fingerprint, label: "Zero-trust" },
 ];
 
-export default function LoginPage() {
+export function LoginPage() {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,9 +62,9 @@ export default function LoginPage() {
       return;
     }
 
-    toast.success("Login successful! Redirecting to dashboard...");
-    router.push("/dashboard");
-    router.refresh();
+    const next = searchParams.get("next") ?? "/dashboard";
+    toast.success("Login successful!");
+    router.push(next);
   };
 
   const handleGoogleLogin = async () => {
@@ -105,28 +109,15 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Center visual — pulsing shield */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative flex items-center justify-center">
-            {/* Outer rings */}
-            {[1, 2, 3].map((ring) => (
-              <motion.div
-                key={ring}
-                className="absolute rounded-full border border-primary/15"
-                style={{ width: ring * 100 + 80, height: ring * 100 + 80 }}
-                animate={{ scale: [1, 1.04, 1], opacity: [0.4, 0.7, 0.4] }}
-                transition={{ duration: 3 + ring, repeat: Infinity, delay: ring * 0.4 }}
-              />
-            ))}
-            {/* Core */}
-            <motion.div
-              className="w-24 h-24 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center shadow-xl shadow-primary/10"
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Shield className="w-12 h-12 text-primary" />
-            </motion.div>
-          </div>
+        {/* Center visual — login image */}
+        <div className="absolute top-24 left-12 right-12 bottom-24 flex items-center justify-center">
+          <Image
+            src="/images/login-img.png"
+            alt="Login illustration"
+            className="w-full h-full object-cover rounded-2xl"
+            width={500}
+            height={500}
+          />
         </div>
 
         {/* Quote rotator */}
@@ -182,12 +173,12 @@ export default function LoginPage() {
         </div>
 
         {/* Form area */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex flex-col p-8 pt-4 lg:items-center lg:justify-center">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: "easeOut" }}
-            className="w-full max-w-[400px]"
+            className="w-full max-w-[400px] mx-auto"
           >
             {/* Header */}
             <div className="mb-8">
@@ -340,18 +331,40 @@ export default function LoginPage() {
               </div>
             </form>
 
-            {/* Trust badges */}
-            <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 mt-8 pt-6 border-t border-border">
-              {trustBadges.map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Icon className="h-3 w-3 text-primary/70" />
-                  {label}
-                </div>
-              ))}
-            </div>
           </motion.div>
+        </div>
+
+        {/* Mobile image section */}
+        <div className="lg:hidden flex flex-col items-center justify-center p-8 pt-4 flex-1">
+          <div className="relative flex items-center justify-center w-full max-w-[300px] mb-8">
+            <Image
+              src="/images/login-img.png"
+              alt="Login illustration"
+              className="w-full h-auto object-cover rounded-2xl"
+              width={400}
+              height={150}
+            />
+          </div>
+
+          {/* Trust badges */}
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 mt-auto">
+            {trustBadges.map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Icon className="h-3 w-3 text-primary/70" />
+                {label}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div >
+  );
+}
+
+export default function LoginPageWrapper() {
+  return (
+    <Suspense>
+      <LoginPage />
+    </Suspense>
   );
 }

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { toast } from "sonner";
+import Image from "next/image";
 
 const passwordRequirements = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -97,7 +98,7 @@ export default function RegisterPage() {
         </div>
 
         {/* Form */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex flex-col p-8 pt-4 lg:items-center lg:justify-center">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -314,6 +315,19 @@ export default function RegisterPage() {
             </form>
           </motion.div>
         </div>
+
+        {/* Mobile image section */}
+        <div className="lg:hidden flex flex-col items-center justify-center p-8 pt-4 flex-1">
+          <div className="relative flex items-center justify-center w-full max-w-[300px] mb-8">
+            <Image
+              src="/images/reg-img.png"
+              alt="Register illustration"
+              className="w-full h-auto object-contain rounded-2xl"
+              width={400}
+              height={150}
+            />
+          </div>
+        </div>
       </div>
 
       {/* ── Right decorative panel ── */}
@@ -329,33 +343,15 @@ export default function RegisterPage() {
         </svg>
         <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/8 rounded-full blur-[90px] pointer-events-none" />
 
-        {/* Feature callouts */}
-        <div className="relative z-10 space-y-4 w-full max-w-xs">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-6">
-            Why EdgePulse
-          </p>
-          {[
-            { title: "Edge-native ML inference", desc: "2MB agent, no cloud round-trips" },
-            { title: "SHAP explainability", desc: "Every detection is fully transparent" },
-            { title: "Offline-ready", desc: "Works air-gapped, no internet required" },
-            { title: "Compliance-ready", desc: "GDPR, HIPAA, SOC 2 out of the box" },
-          ].map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + i * 0.1, duration: 0.5 }}
-              className="flex items-start gap-3 bg-card/60 backdrop-blur-sm border border-border rounded-xl px-4 py-3"
-            >
-              <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                <p className="text-xs text-muted-foreground">{item.desc}</p>
-              </div>
-            </motion.div>
-          ))}
+        {/* Logo image */}
+        <div className="relative z-10 flex items-center justify-center w-full h-full">
+          <Image
+            src="/images/reg-img.png"
+            alt="Register illustration"
+            className="w-full h-full object-contain rounded-2xl"
+            width={400}
+            height={400}
+          />
         </div>
       </div>
     </div>
