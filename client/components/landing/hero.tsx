@@ -180,14 +180,14 @@ export function Hero() {
             {/* CTA buttons */}
             <motion.div variants={itemVariants} whileHover={{ x: 4 }} transition={{ duration: 0.2, type: "spring", stiffness: 400 }} className="flex flex-wrap gap-3 mb-10">
               <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow" asChild>
-                <Link href="/register">
+                <Link href="/auth/register">
                   <Shield className="h-4 w-4" />
                   Start Protected
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button variant="outline" size="lg" className="gap-2" asChild>
-                <Link href="/login">
+                <Link href="/auth/login">
                   <Activity className="h-4 w-4" />
                   Live Demo
                 </Link>

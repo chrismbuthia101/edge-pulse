@@ -63,7 +63,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
     const handleLogout = async () => {
         await supabase.auth.signOut();
         toast.success("Logged out successfully");
-        router.push("/login");
+        router.push("/auth/login");
     };
 
     return (

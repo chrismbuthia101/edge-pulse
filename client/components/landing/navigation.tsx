@@ -134,7 +134,7 @@ export function Navigation() {
                 whileTap={{ scale: 0.95 }}
               >
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/login">Sign In</Link>
+                  <Link href="/auth/login">Sign In</Link>
                 </Button>
               </motion.div>
               <motion.div
@@ -142,7 +142,7 @@ export function Navigation() {
                 whileTap={{ scale: 0.95 }}
               >
                 <Button size="sm" asChild>
-                  <Link href="/register">Get Started</Link>
+                  <Link href="/auth/register">Get Started</Link>
                 </Button>
               </motion.div>
             </div>
@@ -239,7 +239,7 @@ export function Navigation() {
                     className="flex-1"
                   >
                     <Button variant="outline" size="sm" className="w-full" asChild>
-                      <Link href="/login">Sign In</Link>
+                      <Link href="/auth/login">Sign In</Link>
                     </Button>
                   </motion.div>
                   <motion.div
@@ -248,7 +248,7 @@ export function Navigation() {
                     className="flex-1"
                   >
                     <Button size="sm" className="w-full" asChild>
-                      <Link href="/register">Get Started</Link>
+                      <Link href="/auth/register">Get Started</Link>
                     </Button>
                   </motion.div>
                 </motion.div>

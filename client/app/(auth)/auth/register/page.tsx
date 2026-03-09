@@ -69,14 +69,39 @@ export default function RegisterPage() {
     toast.success("Account created successfully! Redirecting to login page...");
 
     setTimeout(() => {
-      router.push("/login");
+      router.push("/auth/login");
       router.refresh();
     }, 2000);
   };
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* ── Left form panel ── */}
+      {/* ── Left decorative panel ── */}
+      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-muted/20 border-r border-border flex-col justify-center items-center p-12">
+        {/* Grid */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <defs>
+            <pattern id="reg-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--border))" strokeWidth="0.6" opacity="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#reg-grid)" />
+        </svg>
+        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/8 rounded-full blur-[90px] pointer-events-none" />
+
+        {/* Logo image */}
+        <div className="relative z-10 flex items-center justify-center w-full h-full">
+          <Image
+            src="/images/reg-img.png"
+            alt="Register illustration"
+            className="w-full h-full object-contain rounded-2xl"
+            width={400}
+            height={400}
+          />
+        </div>
+      </div>
+
+      {/* ── Right form panel ── */}
       <div className="flex-1 flex flex-col">
         {/* Top bar */}
         <div className="flex items-center justify-between px-8 py-5">
@@ -92,7 +117,7 @@ export default function RegisterPage() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:block">Have an account?</span>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/login">Sign In →</Link>
+              <Link href="/auth/login">Sign In →</Link>
             </Button>
           </div>
         </div>
@@ -330,30 +355,6 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* ── Right decorative panel ── */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-muted/20 border-l border-border flex-col justify-center items-center p-12">
-        {/* Grid */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          <defs>
-            <pattern id="reg-grid" width="48" height="48" patternUnits="userSpaceOnUse">
-              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--border))" strokeWidth="0.6" opacity="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#reg-grid)" />
-        </svg>
-        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/8 rounded-full blur-[90px] pointer-events-none" />
-
-        {/* Logo image */}
-        <div className="relative z-10 flex items-center justify-center w-full h-full">
-          <Image
-            src="/images/reg-img.png"
-            alt="Register illustration"
-            className="w-full h-full object-contain rounded-2xl"
-            width={400}
-            height={400}
-          />
-        </div>
-      </div>
     </div>
   );
 }

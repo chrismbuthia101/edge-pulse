@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
         setIsLoading(true);
 
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${location.origin}/reset-password`,
+            redirectTo: `${location.origin}/auth/reset-password`,
         });
 
         if (error) {
@@ -139,7 +139,7 @@ export default function ForgotPasswordPage() {
                     <div className="hidden lg:block" />
                     <div className="flex items-center gap-3">
                         <Button variant="ghost" size="sm" asChild>
-                            <Link href="/login">
+                            <Link href="/auth/login">
                                 <ArrowLeft className="h-3.5 w-3.5 mr-1" />
                                 Back to login
                             </Link>
@@ -212,7 +212,7 @@ export default function ForgotPasswordPage() {
                                     <div className="mt-8 pt-6 border-t border-border text-center">
                                         <p className="text-sm text-muted-foreground">
                                             Remember your password?{" "}
-                                            <Link href="/login" className="text-primary hover:underline underline-offset-4">
+                                            <Link href="/auth/login" className="text-primary hover:underline underline-offset-4">
                                                 Sign in →
                                             </Link>
                                         </p>
@@ -258,7 +258,7 @@ export default function ForgotPasswordPage() {
                                         Use a different email
                                     </Button>
                                     <Button variant="ghost" className="w-full h-10" asChild>
-                                        <Link href="/login">
+                                        <Link href="/auth/login">
                                             <ArrowLeft className="h-4 w-4 mr-2" />
                                             Back to sign in
                                         </Link>

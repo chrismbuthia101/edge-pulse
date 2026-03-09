@@ -70,9 +70,12 @@ export function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
 
+    const next = searchParams.get("next") ?? "/dashboard";
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${location.origin}/dashboard` },
+      options: {
+        redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      },
     });
 
     if (error) {
@@ -240,7 +243,7 @@ export function LoginPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                  <Link href="/forgot-password" className="text-xs text-primary hover:underline underline-offset-4">
+                  <Link href="/auth/forgot-password" className="text-xs text-primary hover:underline underline-offset-4">
                     Forgot password?
                   </Link>
                 </div>
@@ -316,7 +319,7 @@ export function LoginPage() {
                     className="text-xs sm:text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:border-primary/50 hover:bg-primary/5 hover:shadow-md"
                     asChild
                   >
-                    <Link href="/register">
+                    <Link href="/auth/register">
                       <motion.span
                         className="flex items-center gap-3"
                         whileHover={{ x: 1 }}
