@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Shield,
@@ -10,29 +10,34 @@ import {
     Filter,
     RefreshCw,
     Download,
+    WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import type { TelemetryEvent } from "@/lib/supabase/types";
 
 const eventTypes = ["all", "threat", "auth", "device", "ok"] as const;
 type EventType = (typeof eventTypes)[number];
 
-const baseEvents = [
-    { id: "1", type: "threat" as EventType, icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", title: "Process injection blocked", device: "dev-laptop-07", time: new Date(Date.now() - 120000).toLocaleTimeString(), severity: "critical" },
-    { id: "2", type: "threat" as EventType, icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Unusual outbound traffic detected", device: "srv-prod-01", time: new Date(Date.now() - 300000).toLocaleTimeString(), severity: "high" },
-    { id: "3", type: "device" as EventType, icon: MonitorSmartphone, color: "text-primary", bg: "bg-primary/10 border-primary/20", title: "New device enrolled", device: "dev-macbook-12", time: new Date(Date.now() - 540000).toLocaleTimeString(), severity: "info" },
-    { id: "4", type: "auth" as EventType, icon: Lock, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20", title: "Auth brute-force blocked", device: "ws-finance-03", time: new Date(Date.now() - 660000).toLocaleTimeString(), severity: "high" },
-    { id: "5", type: "ok" as EventType, icon: Shield, color: "text-green-500", bg: "bg-green-500/10 border-green-500/20", title: "Threat neutralized automatically", device: "gw-primary", time: new Date(Date.now() - 900000).toLocaleTimeString(), severity: "ok" },
-    { id: "6", type: "threat" as EventType, icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", title: "Privilege escalation attempt", device: "srv-db-02", time: new Date(Date.now() - 1080000).toLocaleTimeString(), severity: "critical" },
-    { id: "7", type: "ok" as EventType, icon: Shield, color: "text-green-500", bg: "bg-green-500/10 border-green-500/20", title: "ML model updated to v2.4.1", device: "All devices", time: new Date(Date.now() - 1440000).toLocaleTimeString(), severity: "ok" },
-    { id: "8", type: "auth" as EventType, icon: Lock, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20", title: "Suspicious login from new location", device: "ws-eng-05", time: new Date(Date.now() - 1800000).toLocaleTimeString(), severity: "medium" },
-    { id: "9", type: "device" as EventType, icon: MonitorSmartphone, color: "text-primary", bg: "bg-primary/10 border-primary/20", title: "Device health check passed", device: "srv-backup-01", time: new Date(Date.now() - 2100000).toLocaleTimeString(), severity: "info" },
-    { id: "10", type: "threat" as EventType, icon: AlertTriangle, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20", title: "Port scan detected on subnet", device: "gw-failover", time: new Date(Date.now() - 2400000).toLocaleTimeString(), severity: "high" },
-];
+// ── Map telemetry / alert data to display event ───────────────────────────────
+interface LiveEvent {
+    id: string;
+    type: EventType;
+    iconName: "AlertTriangle" | "Shield" | "MonitorSmartphone" | "Lock";
+    color: string;
+    bg: string;
+    title: string;
+    device: string;
+    time: string;
+    severity: string;
+}
 
-const newLiveEvents = [
-    { id: "11", type: "threat" as EventType, icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", title: "Ransomware signature detected", device: "ws-finance-02", severity: "critical" },
-    { id: "12", type: "ok" as EventType, icon: Shield, color: "text-green-500", bg: "bg-green-500/10 border-green-500/20", title: "Automated quarantine successful", device: "srv-prod-02", severity: "ok" },
-];
+const iconMap = {
+    AlertTriangle,
+    Shield,
+    MonitorSmartphone,
+    Lock,
+};
 
 const severityColor: Record<string, string> = {
     critical: "text-destructive bg-destructive/10 border-destructive/25",
@@ -42,26 +47,156 @@ const severityColor: Record<string, string> = {
     ok: "text-green-500 bg-green-500/10 border-green-500/25",
 };
 
+// Classify incoming alert_record row into a LiveEvent
+function alertToLiveEvent(row: Record<string, unknown>): LiveEvent {
+    const severity = (row.severity as string) ?? "info";
+    const isCritical = severity === "critical";
+    const isHigh = severity === "high";
+    const isThreat = isCritical || isHigh;
+    const source = (row.telemetry_source as string) ?? "";
+    const isAuth = source === "PROCESS" && !isThreat;
+
+    return {
+        id: row.id as string,
+        type: isThreat ? "threat" : isAuth ? "auth" : "ok",
+        iconName: isThreat ? "AlertTriangle" : isAuth ? "Lock" : "Shield",
+        color: isCritical
+            ? "text-destructive"
+            : isHigh
+                ? "text-orange-500"
+                : isAuth
+                    ? "text-amber-500"
+                    : "text-green-500",
+        bg: isCritical
+            ? "bg-destructive/10 border-destructive/20"
+            : isHigh
+                ? "bg-orange-500/10 border-orange-500/20"
+                : isAuth
+                    ? "bg-amber-500/10 border-amber-500/20"
+                    : "bg-green-500/10 border-green-500/20",
+        title: (row.title as string) ?? "Security event",
+        device: (row.device_name as string) ?? "Unknown",
+        time: new Date(row.created_at as string).toLocaleTimeString(),
+        severity: severity === "low" ? "info" : severity,
+    };
+}
+
+// Classify incoming telemetry_event row
+function telemetryToLiveEvent(row: TelemetryEvent): LiveEvent {
+    const isDevice = row.source === "RESOURCE";
+    return {
+        id: row.id,
+        type: isDevice ? "device" : "ok",
+        iconName: isDevice ? "MonitorSmartphone" : "Shield",
+        color: isDevice ? "text-primary" : "text-green-500",
+        bg: isDevice ? "bg-primary/10 border-primary/20" : "bg-green-500/10 border-green-500/20",
+        title: `Telemetry received (${row.source})`,
+        device: row.device_id,
+        time: new Date(row.collected_at).toLocaleTimeString(),
+        severity: "info",
+    };
+}
+
 export default function LivePage() {
-    const [events, setEvents] = useState(baseEvents);
+    const [events, setEvents] = useState<LiveEvent[]>([]);
     const [filter, setFilter] = useState<EventType>("all");
     const [paused, setPaused] = useState(false);
-    const [eventIdx, setEventIdx] = useState(0);
+    const [connected, setConnected] = useState(false);
+    const [todayStats, setTodayStats] = useState({
+        total: 0,
+        critical: 0,
+        blocked: 0,
+    });
+
+    const supabase = createClient();
+    const supabaseRef = useRef(supabase);
+    const pausedRef = useRef(paused);
 
     useEffect(() => {
-        if (paused) return;
-        const interval = setInterval(() => {
-            if (eventIdx < newLiveEvents.length) {
-                const ev = newLiveEvents[eventIdx];
-                setEvents((prev) => [
-                    { ...ev, time: new Date().toLocaleTimeString() },
-                    ...prev.slice(0, 19),
-                ]);
-                setEventIdx((i) => i + 1);
+        pausedRef.current = paused;
+    }, [paused]);
+
+    // ── Initial data fetch ────────────────────────────────────────────────────
+    useEffect(() => {
+        const sb = supabaseRef.current;
+        let mounted = true;
+
+        const fetchInitial = async () => {
+            // Fetch recent 50 alerts as initial live feed
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const { data } = await sb
+                .from("alert_records")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(50);
+
+            if (data && mounted) {
+                const liveEvents = data.map((row) =>
+                    alertToLiveEvent(row as Record<string, unknown>)
+                );
+                setEvents(liveEvents);
+
+                // Compute today stats
+                const todayEvents = data.filter(
+                    (r) => new Date(r.created_at as string) >= today
+                );
+                setTodayStats({
+                    total: todayEvents.length,
+                    critical: todayEvents.filter((r) => r.severity === "critical").length,
+                    blocked: data.filter((r) => r.status === "CLOSED").length,
+                });
             }
-        }, 6000);
-        return () => clearInterval(interval);
-    }, [paused, eventIdx]);
+        };
+
+        fetchInitial();
+
+        // ── Supabase Realtime: alert_records ─────────────────────────────────────
+        const alertChannel = sb
+            .channel("live-feed-alerts")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "alert_records" },
+                (payload) => {
+                    if (!mounted || pausedRef.current) return;
+                    const ev = alertToLiveEvent(payload.new as Record<string, unknown>);
+                    setEvents((prev) => [ev, ...prev.slice(0, 99)]);
+                    setTodayStats((s) => ({
+                        ...s,
+                        total: s.total + 1,
+                        critical:
+                            s.critical + ((payload.new as { severity: string }).severity === "critical" ? 1 : 0),
+                    }));
+                }
+            )
+            .subscribe((status) => {
+                if (mounted) setConnected(status === "SUBSCRIBED");
+            });
+
+        // ── Supabase Realtime: telemetry_events ───────────────────────────────────
+        const telemetryChannel = sb
+            .channel("live-feed-telemetry")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "telemetry_events" },
+                (payload) => {
+                    if (!mounted || pausedRef.current) return;
+                    const ev = telemetryToLiveEvent(payload.new as TelemetryEvent);
+                    // Only show device events in the feed (avoid flood)
+                    if (ev.type === "device") {
+                        setEvents((prev) => [ev, ...prev.slice(0, 99)]);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            mounted = false;
+            sb.removeChannel(alertChannel);
+            sb.removeChannel(telemetryChannel);
+        };
+    }, []); // ✅ stable empty — supabaseRef is a ref
 
     const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
 
@@ -75,11 +210,21 @@ export default function LivePage() {
             >
                 <div>
                     <h1 className="text-2xl font-display font-bold text-foreground">Live Event Feed</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">Real-time security events across all devices</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                        Real-time security events across all devices
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPaused((p) => !p)}>
-                        <RefreshCw className={`h-3.5 w-3.5 ${!paused ? "animate-spin" : ""}`} style={{ animationDuration: "3s" }} />
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setPaused((p) => !p)}
+                    >
+                        <RefreshCw
+                            className={`h-3.5 w-3.5 ${!paused && connected ? "animate-spin" : ""}`}
+                            style={{ animationDuration: "3s" }}
+                        />
                         {paused ? "Resume" : "Pause"}
                     </Button>
                     <Button variant="outline" size="sm" className="gap-1.5">
@@ -92,10 +237,22 @@ export default function LivePage() {
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                    { label: "Events Today", value: "1,284", color: "text-foreground" },
-                    { label: "Critical", value: "3", color: "text-destructive" },
-                    { label: "Blocked", value: "89", color: "text-green-500" },
-                    { label: "Monitoring", value: "1,247 devices", color: "text-primary" },
+                    {
+                        label: "Events Today",
+                        value: todayStats.total > 0 ? todayStats.total.toLocaleString() : "—",
+                        color: "text-foreground",
+                    },
+                    {
+                        label: "Critical",
+                        value: todayStats.critical > 0 ? todayStats.critical.toString() : "—",
+                        color: "text-destructive",
+                    },
+                    {
+                        label: "Blocked",
+                        value: todayStats.blocked > 0 ? todayStats.blocked.toLocaleString() : "—",
+                        color: "text-green-500",
+                    },
+                    { label: "Stream", value: connected ? "Live" : "Offline", color: connected ? "text-green-500" : "text-destructive" },
                 ].map((s) => (
                     <div key={s.label} className="bg-card border border-border rounded-xl p-4">
                         <p className={`text-xl font-bold font-display ${s.color}`}>{s.value}</p>
@@ -106,10 +263,30 @@ export default function LivePage() {
 
             {/* Live indicator + filters */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                        {paused ? "Stream Paused" : "Streaming Live"}
+                <div
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${connected && !paused
+                        ? "bg-green-500/10 border-green-500/20"
+                        : paused
+                            ? "bg-amber-500/10 border-amber-500/20"
+                            : "bg-destructive/10 border-destructive/20"
+                        }`}
+                >
+                    {connected && !paused ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    ) : paused ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    ) : (
+                        <WifiOff className="h-3 w-3 text-destructive" />
+                    )}
+                    <span
+                        className={`text-xs font-medium ${connected && !paused
+                            ? "text-green-600 dark:text-green-400"
+                            : paused
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-destructive"
+                            }`}
+                    >
+                        {connected && !paused ? "Streaming Live" : paused ? "Stream Paused" : "Connecting…"}
                     </span>
                 </div>
                 <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
@@ -118,7 +295,9 @@ export default function LivePage() {
                         <button
                             key={t}
                             onClick={() => setFilter(t)}
-                            className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${filter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${filter === t
+                                ? "bg-card text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
                             {t}
@@ -131,38 +310,61 @@ export default function LivePage() {
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="divide-y divide-border max-h-[600px] overflow-y-auto">
                     <AnimatePresence mode="popLayout">
-                        {filtered.map((ev) => (
-                            <motion.div
-                                key={ev.id}
-                                layout
-                                initial={{ opacity: 0, y: -20, backgroundColor: "hsl(var(--primary) / 0.05)" }}
-                                animate={{ opacity: 1, y: 0, backgroundColor: "transparent" }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
-                            >
-                                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${ev.bg}`}>
-                                    <ev.icon className={`h-3.5 w-3.5 ${ev.color}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground">{ev.title}</p>
-                                    <p className="text-xs text-muted-foreground font-mono">{ev.device}</p>
-                                </div>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${severityColor[ev.severity]}`}>
-                                    {ev.severity}
-                                </span>
-                                <span className="text-xs font-mono text-muted-foreground/60 shrink-0 w-20 text-right">{ev.time}</span>
-                            </motion.div>
-                        ))}
+                        {filtered.map((ev) => {
+                            const IconComponent = iconMap[ev.iconName];
+                            return (
+                                <motion.div
+                                    key={ev.id}
+                                    layout
+                                    initial={{ opacity: 0, y: -20, backgroundColor: "hsl(var(--primary) / 0.05)" }}
+                                    animate={{ opacity: 1, y: 0, backgroundColor: "transparent" }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
+                                >
+                                    <div
+                                        className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${ev.bg}`}
+                                    >
+                                        <IconComponent className={`h-3.5 w-3.5 ${ev.color}`} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-foreground">{ev.title}</p>
+                                        <p className="text-xs text-muted-foreground font-mono">{ev.device}</p>
+                                    </div>
+                                    <span
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${severityColor[ev.severity] ?? severityColor.info}`}
+                                    >
+                                        {ev.severity}
+                                    </span>
+                                    <span className="text-xs font-mono text-muted-foreground/60 shrink-0 w-20 text-right">
+                                        {ev.time}
+                                    </span>
+                                </motion.div>
+                            );
+                        })}
                     </AnimatePresence>
                     {filtered.length === 0 && (
                         <div className="py-16 text-center text-muted-foreground text-sm">
-                            No events matching this filter.
+                            {connected
+                                ? "No events matching this filter."
+                                : "Connecting to live stream…"}
                         </div>
                     )}
                 </div>
-                <div className="px-5 py-3 border-t border-border">
-                    <p className="text-xs text-muted-foreground">Showing {filtered.length} events · Auto-refreshing every 6s</p>
+                <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                        Showing {filtered.length} events
+                    </p>
+                    <div
+                        className={`flex items-center gap-1 text-xs ${connected ? "text-green-500" : "text-muted-foreground"
+                            }`}
+                    >
+                        <span
+                            className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"
+                                }`}
+                        />
+                        {connected ? "Supabase Realtime" : "Offline"}
+                    </div>
                 </div>
             </div>
         </div>

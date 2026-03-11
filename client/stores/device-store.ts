@@ -11,17 +11,24 @@ interface DeviceStore {
 export const useDeviceStore = create<DeviceStore>((set) => ({
   devices: [],
   onlineCount: 0,
-  
-  updateDevice: (device: Device) => set((state) => ({
-    devices: state.devices.map(d => 
-      d.id === device.id ? device : d
-    ),
-    onlineCount: state.devices.filter(d => d.id !== device.id && d.status === 'online').length +
-                  (device.status === 'online' ? 1 : 0),
-  })),
-  
-  setDevices: (devices: Device[]) => set({
-    devices,
-    onlineCount: devices.filter(d => d.status === 'online').length,
-  }),
+
+  updateDevice: (device: Device) =>
+    set((state) => {
+      const devices = state.devices.map((d) =>
+        d.id === device.id ? device : d
+      );
+      // Add device if it doesn't exist yet (INSERT event)
+      const exists = state.devices.some((d) => d.id === device.id);
+      const updated = exists ? devices : [...devices, device];
+      return {
+        devices: updated,
+        onlineCount: updated.filter((d) => d.status === 'online').length,
+      };
+    }),
+
+  setDevices: (devices: Device[]) =>
+    set({
+      devices,
+      onlineCount: devices.filter((d) => d.status === 'online').length,
+    }),
 }));

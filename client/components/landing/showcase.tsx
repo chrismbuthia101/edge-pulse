@@ -69,17 +69,23 @@ export function Showcase() {
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const { scrollYProgress } = useScroll({
     target: ref,
-    offset: ["start end", "end start"]
+    offset: ["start end", "end start"],
   });
 
-  const parallaxY = useTransform(scrollYProgress, [0, 1], [30, -30]);
+  const headerParallaxY = useTransform(scrollYProgress, [0, 1], [30, -30]);
+  const ctaBannerY = useTransform(scrollYProgress, [0, 1], [50, -50]);
+  const ctaTestimonialsY = useTransform(scrollYProgress, [0, 1], [30, -30]);
 
   return (
-    <section ref={ref} id="how-it-works" className="py-24 bg-muted/30 border-y border-border relative overflow-hidden">
+    <section
+      ref={ref}
+      id="how-it-works"
+      className="py-24 bg-muted/30 border-y border-border relative overflow-hidden"
+    >
       <div className="max-w-6xl mx-auto px-6">
-        {/* Enhanced section header with parallax */}
+        {/* Section header with parallax */}
         <motion.div
-          style={{ y: parallaxY }}
+          style={{ y: headerParallaxY }}
           initial={{ opacity: 0, y: 24 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, type: "spring", stiffness: 300 }}
@@ -112,7 +118,7 @@ export function Showcase() {
           </motion.p>
         </motion.div>
 
-        {/* Enhanced showcase items with staggered animations */}
+        {/* Showcase items */}
         <motion.div
           variants={showcaseVariants}
           initial="hidden"
@@ -123,9 +129,10 @@ export function Showcase() {
             <motion.div
               key={index}
               variants={itemVariants}
-              className={`grid lg:grid-cols-2 gap-12 items-center ${index % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}
+              className={`grid lg:grid-cols-2 gap-12 items-center ${index % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""
+                }`}
             >
-              {/* Enhanced visual mockup with interactive animations */}
+              {/* Visual mockup */}
               <motion.div
                 className="relative"
                 whileHover={{ scale: 1.02 }}
@@ -135,16 +142,16 @@ export function Showcase() {
                   className="absolute inset-0 bg-primary/6 rounded-3xl blur-3xl scale-90 -z-10"
                   animate={{
                     scale: [0.9, 1, 0.9],
-                    opacity: [0.6, 0.8, 0.6]
+                    opacity: [0.6, 0.8, 0.6],
                   }}
                   transition={{
                     duration: 4,
                     repeat: Infinity,
-                    delay: index * 0.5
+                    delay: index * 0.5,
                   }}
                 />
                 <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/25 group">
-                  {/* Window bar with enhanced animations */}
+                  {/* Window bar */}
                   <div className="flex items-center gap-1.5 px-4 py-3 border-b border-border bg-muted/50">
                     <div className="flex items-center gap-1.5">
                       <motion.div
@@ -170,14 +177,12 @@ export function Showcase() {
                     </div>
                   </div>
 
-                  {/* Enhanced placeholder content area */}
-                  <div className={`aspect-16/10 ${item.accentBg} flex flex-col items-center justify-center gap-4 p-8 relative overflow-hidden`}>
-                    {/* Animated background pattern */}
+                  {/* Placeholder content */}
+                  <div
+                    className={`aspect-video ${item.accentBg} flex flex-col items-center justify-center gap-4 p-8 relative overflow-hidden`}
+                  >
                     <motion.div
                       className="absolute inset-0 opacity-10"
-                      style={{
-                        backgroundImage: `radial-gradient(circle at 20% 50%, ${item.accent.replace('text-', '').replace('600', '500').replace('400', '500')} 0%, transparent 50%), radial-gradient(circle at 80% 80%, ${item.accent.replace('text-', '').replace('600', '500').replace('400', '500')} 0%, transparent 50%)`
-                      }}
                       animate={{ scale: [1, 1.1, 1] }}
                       transition={{ duration: 4, repeat: Infinity }}
                     />
@@ -187,11 +192,13 @@ export function Showcase() {
                       whileHover={{ rotate: 360 }}
                       transition={{ duration: 0.8, ease: "easeInOut" }}
                     >
-                      <item.icon className={`w-10 h-10 ${item.accent} group-hover:scale-110 transition-transform duration-300`} />
+                      <item.icon
+                        className={`w-10 h-10 ${item.accent} group-hover:scale-110 transition-transform duration-300`}
+                      />
                     </motion.div>
                     <div className="text-center relative z-10">
                       <motion.p
-                        className={`text-sm font-semibold ${item.accent} group-hover:scale-105 transition-transform duration-300`}
+                        className={`text-sm font-semibold ${item.accent}`}
                         whileHover={{ y: -2 }}
                       >
                         {item.title}
@@ -199,7 +206,6 @@ export function Showcase() {
                       <p className="text-xs text-muted-foreground mt-1">{item.tagline}</p>
                     </div>
 
-                    {/* Enhanced simulated UI rows with staggered animations */}
                     <div className="w-full max-w-xs space-y-2 mt-2 relative z-10">
                       {[85, 60, 75, 45].map((w, i) => (
                         <motion.div
@@ -207,21 +213,27 @@ export function Showcase() {
                           initial={{ scaleX: 0 }}
                           whileInView={{ scaleX: 1 }}
                           viewport={{ once: true }}
-                          transition={{ delay: 0.3 + i * 0.1, duration: 0.5, ease: "easeOut" }}
+                          transition={{
+                            delay: 0.3 + i * 0.1,
+                            duration: 0.5,
+                            ease: "easeOut",
+                          }}
                           style={{ originX: 0 }}
                           className="h-1.5 bg-border rounded-full overflow-hidden relative"
                         >
                           <motion.div
-                            className={`h-full rounded-full ${index === 0 ? "bg-primary/50" : "bg-violet-500/50"} relative`}
+                            className={`h-full rounded-full ${index === 0 ? "bg-primary/50" : "bg-violet-500/50"
+                              } relative`}
                             style={{ width: `${w}%` }}
-                            whileHover={{ width: `${Math.min(w + 10, 100)}%` }}
-                            transition={{ duration: 0.3 }}
                           >
-                            {/* Shimmer effect */}
                             <motion.div
                               className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
                               animate={{ x: [-100, 200] }}
-                              transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+                              transition={{
+                                duration: 1.5,
+                                repeat: Infinity,
+                                delay: i * 0.2,
+                              }}
                             />
                           </motion.div>
                         </motion.div>
@@ -239,10 +251,10 @@ export function Showcase() {
                 </div>
               </motion.div>
 
-              {/* Enhanced copy with staggered animations */}
+              {/* Copy */}
               <motion.div className="space-y-6">
                 <motion.div
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${item.accentBorder} ${item.accentBg} group-hover:scale-105 transition-transform duration-300`}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${item.accentBorder} ${item.accentBg}`}
                   whileHover={{ rotate: [0, 2, -2, 0] }}
                   transition={{ duration: 0.5 }}
                 >
@@ -283,7 +295,10 @@ export function Showcase() {
                       key={i}
                       initial={{ opacity: 0, x: -10 }}
                       animate={isInView ? { opacity: 1, x: 0 } : {}}
-                      transition={{ delay: 0.7 + index * 0.1 + i * 0.08, duration: 0.4 }}
+                      transition={{
+                        delay: 0.7 + index * 0.1 + i * 0.08,
+                        duration: 0.4,
+                      }}
                       className="flex items-start gap-2.5 text-sm text-foreground group"
                     >
                       <motion.div
@@ -292,9 +307,7 @@ export function Showcase() {
                       >
                         <CheckCircle2 className={`h-4 w-4 mt-0.5 shrink-0 ${item.accent}`} />
                       </motion.div>
-                      <motion.span
-                        className="group-hover:translate-x-1 transition-transform duration-200"
-                      >
+                      <motion.span className="group-hover:translate-x-1 transition-transform duration-200">
                         {f}
                       </motion.span>
                     </motion.li>
@@ -323,24 +336,19 @@ export function Showcase() {
           ))}
         </motion.div>
 
-        {/* Enhanced CTA banner with parallax and interactive effects */}
+        {/* CTA banner */}
         <motion.div
-          style={{ y: useTransform(scrollYProgress, [0, 1], [50, -50]) }}
+          style={{ y: ctaBannerY }}
           initial={{ opacity: 0, y: 32 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, type: "spring", stiffness: 300 }}
           className="mt-24 relative overflow-hidden bg-card border border-border rounded-3xl p-10 md:p-14 text-center group"
           whileHover={{ scale: 1.02 }}
         >
-          {/* Enhanced background accents */}
           <motion.div
             className="absolute inset-0 bg-linear-to-br from-primary/5 via-transparent to-primary/3 pointer-events-none"
             animate={{
-              background: [
-                "linear-gradient(to bottom right, rgba(var(--primary-rgb), 0.05), transparent, rgba(var(--primary-rgb), 0.03))",
-                "linear-gradient(to bottom right, rgba(var(--primary-rgb), 0.08), transparent, rgba(var(--primary-rgb), 0.05))",
-                "linear-gradient(to bottom right, rgba(var(--primary-rgb), 0.05), transparent, rgba(var(--primary-rgb), 0.03))"
-              ]
+              opacity: [0.6, 1, 0.6],
             }}
             transition={{ duration: 4, repeat: Infinity }}
           />
@@ -377,17 +385,15 @@ export function Showcase() {
               privacy-first edge security. No cloud required.
             </motion.p>
             <motion.div
+              style={{ y: ctaTestimonialsY }}
               initial={{ opacity: 0, y: 10 }}
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.4, duration: 0.5 }}
               className="flex flex-col sm:flex-row gap-3 justify-center"
             >
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-              >
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                 <Button size="lg" className="gap-2 shadow-lg shadow-primary/15 group" asChild>
-                  <Link href="/register">
+                  <Link href="/auth/register">
                     Start Free Trial
                     <motion.div
                       whileHover={{ x: 4 }}
@@ -398,12 +404,9 @@ export function Showcase() {
                   </Link>
                 </Button>
               </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-              >
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                 <Button variant="outline" size="lg" asChild>
-                  <Link href="/login">Schedule Demo</Link>
+                  <Link href="/auth/login">Schedule Demo</Link>
                 </Button>
               </motion.div>
             </motion.div>
