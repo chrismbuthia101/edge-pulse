@@ -14,12 +14,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import type { TelemetryEvent } from "@/lib/supabase/types";
 
 const eventTypes = ["all", "threat", "auth", "device", "ok"] as const;
 type EventType = (typeof eventTypes)[number];
 
-// ── Map telemetry / alert data to display event ───────────────────────────────
 interface LiveEvent {
     id: string;
     type: EventType;
@@ -30,6 +30,7 @@ interface LiveEvent {
     device: string;
     time: string;
     severity: string;
+    rawCreatedAt: string;
 }
 
 const iconMap = {
@@ -47,7 +48,6 @@ const severityColor: Record<string, string> = {
     ok: "text-green-500 bg-green-500/10 border-green-500/25",
 };
 
-// Classify incoming alert_record row into a LiveEvent
 function alertToLiveEvent(row: Record<string, unknown>): LiveEvent {
     const severity = (row.severity as string) ?? "info";
     const isCritical = severity === "critical";
@@ -78,10 +78,10 @@ function alertToLiveEvent(row: Record<string, unknown>): LiveEvent {
         device: (row.device_name as string) ?? "Unknown",
         time: new Date(row.created_at as string).toLocaleTimeString(),
         severity: severity === "low" ? "info" : severity,
+        rawCreatedAt: row.created_at as string,
     };
 }
 
-// Classify incoming telemetry_event row
 function telemetryToLiveEvent(row: TelemetryEvent): LiveEvent {
     const isDevice = row.source === "RESOURCE";
     return {
@@ -94,6 +94,7 @@ function telemetryToLiveEvent(row: TelemetryEvent): LiveEvent {
         device: row.device_id,
         time: new Date(row.collected_at).toLocaleTimeString(),
         severity: "info",
+        rawCreatedAt: row.collected_at,
     };
 }
 
@@ -102,27 +103,19 @@ export default function LivePage() {
     const [filter, setFilter] = useState<EventType>("all");
     const [paused, setPaused] = useState(false);
     const [connected, setConnected] = useState(false);
-    const [todayStats, setTodayStats] = useState({
-        total: 0,
-        critical: 0,
-        blocked: 0,
-    });
+    const [todayStats, setTodayStats] = useState({ total: 0, critical: 0, blocked: 0 });
 
     const supabase = createClient();
     const supabaseRef = useRef(supabase);
     const pausedRef = useRef(paused);
 
-    useEffect(() => {
-        pausedRef.current = paused;
-    }, [paused]);
+    useEffect(() => { pausedRef.current = paused; }, [paused]);
 
-    // ── Initial data fetch ────────────────────────────────────────────────────
     useEffect(() => {
         const sb = supabaseRef.current;
         let mounted = true;
 
         const fetchInitial = async () => {
-            // Fetch recent 50 alerts as initial live feed
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
@@ -133,15 +126,9 @@ export default function LivePage() {
                 .limit(50);
 
             if (data && mounted) {
-                const liveEvents = data.map((row) =>
-                    alertToLiveEvent(row as Record<string, unknown>)
-                );
+                const liveEvents = data.map((row) => alertToLiveEvent(row as Record<string, unknown>));
                 setEvents(liveEvents);
-
-                // Compute today stats
-                const todayEvents = data.filter(
-                    (r) => new Date(r.created_at as string) >= today
-                );
+                const todayEvents = data.filter((r) => new Date(r.created_at as string) >= today);
                 setTodayStats({
                     total: todayEvents.length,
                     critical: todayEvents.filter((r) => r.severity === "critical").length,
@@ -152,7 +139,6 @@ export default function LivePage() {
 
         fetchInitial();
 
-        // ── Supabase Realtime: alert_records ─────────────────────────────────────
         const alertChannel = sb
             .channel("live-feed-alerts")
             .on(
@@ -165,8 +151,7 @@ export default function LivePage() {
                     setTodayStats((s) => ({
                         ...s,
                         total: s.total + 1,
-                        critical:
-                            s.critical + ((payload.new as { severity: string }).severity === "critical" ? 1 : 0),
+                        critical: s.critical + ((payload.new as { severity: string }).severity === "critical" ? 1 : 0),
                     }));
                 }
             )
@@ -174,7 +159,6 @@ export default function LivePage() {
                 if (mounted) setConnected(status === "SUBSCRIBED");
             });
 
-        // ── Supabase Realtime: telemetry_events ───────────────────────────────────
         const telemetryChannel = sb
             .channel("live-feed-telemetry")
             .on(
@@ -183,7 +167,6 @@ export default function LivePage() {
                 (payload) => {
                     if (!mounted || pausedRef.current) return;
                     const ev = telemetryToLiveEvent(payload.new as TelemetryEvent);
-                    // Only show device events in the feed (avoid flood)
                     if (ev.type === "device") {
                         setEvents((prev) => [ev, ...prev.slice(0, 99)]);
                     }
@@ -196,9 +179,32 @@ export default function LivePage() {
             sb.removeChannel(alertChannel);
             sb.removeChannel(telemetryChannel);
         };
-    }, []); // ✅ stable empty — supabaseRef is a ref
+    }, []);
 
     const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
+
+    // CSV export for live feed
+    const handleExport = () => {
+        const rows = [
+            ["Time", "Title", "Device", "Severity", "Type"],
+            ...filtered.map((e) => [
+                new Date(e.rawCreatedAt).toISOString(),
+                `"${e.title}"`,
+                e.device,
+                e.severity,
+                e.type,
+            ]),
+        ];
+        const csv = rows.map((r) => r.join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `edgepulse-live-feed-${new Date().toISOString().split("T")[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success("Live feed exported as CSV");
+    };
 
     return (
         <div className="max-w-[1200px] space-y-6">
@@ -227,9 +233,9 @@ export default function LivePage() {
                         />
                         {paused ? "Resume" : "Pause"}
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5">
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
                         <Download className="h-3.5 w-3.5" />
-                        Export
+                        Export CSV
                     </Button>
                 </div>
             </motion.div>
@@ -237,21 +243,9 @@ export default function LivePage() {
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                    {
-                        label: "Events Today",
-                        value: todayStats.total > 0 ? todayStats.total.toLocaleString() : "—",
-                        color: "text-foreground",
-                    },
-                    {
-                        label: "Critical",
-                        value: todayStats.critical > 0 ? todayStats.critical.toString() : "—",
-                        color: "text-destructive",
-                    },
-                    {
-                        label: "Blocked",
-                        value: todayStats.blocked > 0 ? todayStats.blocked.toLocaleString() : "—",
-                        color: "text-green-500",
-                    },
+                    { label: "Events Today", value: todayStats.total > 0 ? todayStats.total.toLocaleString() : "—", color: "text-foreground" },
+                    { label: "Critical", value: todayStats.critical > 0 ? todayStats.critical.toString() : "—", color: "text-destructive" },
+                    { label: "Blocked", value: todayStats.blocked > 0 ? todayStats.blocked.toLocaleString() : "—", color: "text-green-500" },
                     { label: "Stream", value: connected ? "Live" : "Offline", color: connected ? "text-green-500" : "text-destructive" },
                 ].map((s) => (
                     <div key={s.label} className="bg-card border border-border rounded-xl p-4">
@@ -265,10 +259,10 @@ export default function LivePage() {
             <div className="flex items-center justify-between">
                 <div
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${connected && !paused
-                        ? "bg-green-500/10 border-green-500/20"
-                        : paused
-                            ? "bg-amber-500/10 border-amber-500/20"
-                            : "bg-destructive/10 border-destructive/20"
+                            ? "bg-green-500/10 border-green-500/20"
+                            : paused
+                                ? "bg-amber-500/10 border-amber-500/20"
+                                : "bg-destructive/10 border-destructive/20"
                         }`}
                 >
                     {connected && !paused ? (
@@ -280,10 +274,10 @@ export default function LivePage() {
                     )}
                     <span
                         className={`text-xs font-medium ${connected && !paused
-                            ? "text-green-600 dark:text-green-400"
-                            : paused
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-destructive"
+                                ? "text-green-600 dark:text-green-400"
+                                : paused
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-destructive"
                             }`}
                     >
                         {connected && !paused ? "Streaming Live" : paused ? "Stream Paused" : "Connecting…"}
@@ -296,8 +290,8 @@ export default function LivePage() {
                             key={t}
                             onClick={() => setFilter(t)}
                             className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${filter === t
-                                ? "bg-card text-foreground shadow-sm"
-                                : "text-muted-foreground hover:text-foreground"
+                                    ? "bg-card text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
                             {t}
@@ -322,9 +316,7 @@ export default function LivePage() {
                                     transition={{ duration: 0.3 }}
                                     className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
                                 >
-                                    <div
-                                        className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${ev.bg}`}
-                                    >
+                                    <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${ev.bg}`}>
                                         <IconComponent className={`h-3.5 w-3.5 ${ev.color}`} />
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -332,7 +324,8 @@ export default function LivePage() {
                                         <p className="text-xs text-muted-foreground font-mono">{ev.device}</p>
                                     </div>
                                     <span
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${severityColor[ev.severity] ?? severityColor.info}`}
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${severityColor[ev.severity] ?? severityColor.info
+                                            }`}
                                     >
                                         {ev.severity}
                                     </span>
@@ -345,24 +338,14 @@ export default function LivePage() {
                     </AnimatePresence>
                     {filtered.length === 0 && (
                         <div className="py-16 text-center text-muted-foreground text-sm">
-                            {connected
-                                ? "No events matching this filter."
-                                : "Connecting to live stream…"}
+                            {connected ? "No events matching this filter." : "Connecting to live stream…"}
                         </div>
                     )}
                 </div>
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                        Showing {filtered.length} events
-                    </p>
-                    <div
-                        className={`flex items-center gap-1 text-xs ${connected ? "text-green-500" : "text-muted-foreground"
-                            }`}
-                    >
-                        <span
-                            className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"
-                                }`}
-                        />
+                    <p className="text-xs text-muted-foreground">Showing {filtered.length} events</p>
+                    <div className={`flex items-center gap-1 text-xs ${connected ? "text-green-500" : "text-muted-foreground"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
                         {connected ? "Supabase Realtime" : "Offline"}
                     </div>
                 </div>

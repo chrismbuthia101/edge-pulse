@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
     User,
@@ -13,12 +13,16 @@ import {
     Eye,
     EyeOff,
     CheckCircle2,
+    CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { createClient } from "@/lib/supabase/client";
+import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
 type Tab = "profile" | "notifications" | "security" | "appearance" | "agents";
 
@@ -41,17 +45,97 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
+    const supabase = createClient();
+    const supabaseRef = useRef(supabase);
+    const { setTheme, theme } = useTheme();
+
     const [activeTab, setActiveTab] = useState<Tab>("profile");
+    const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-    const [showNewPassword, setShowNewPassword] = useState(false);
+
+    // Profile fields
+    const [fullName, setFullName] = useState("");
+    const [jobTitle, setJobTitle] = useState("");
+    const [email, setEmail] = useState("");
+    const [org, setOrg] = useState("EdgePulse Enterprise");
+
+    // Notification toggles
     const [notifToggles, setNotifToggles] = useState<Record<string, boolean>>(
         Object.fromEntries(notificationSettings.map((n) => [n.id, n.defaultOn]))
     );
 
-    const handleSave = () => {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
+    // Security (password change)
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+
+    // Agent config
+    const [telemetryInterval, setTelemetryInterval] = useState("30");
+
+    // Load current user
+    useEffect(() => {
+        supabaseRef.current = supabase;
+    }, [supabase]);
+
+    useEffect(() => {
+        const loadUser = async () => {
+            const { data } = await supabaseRef.current.auth.getUser();
+
+            if (data.user) {
+                setEmail(data.user.email ?? "");
+                setFullName(data.user.user_metadata?.full_name ?? "");
+                setJobTitle(data.user.user_metadata?.job_title ?? "Security Operations Lead");
+            }
+        };
+
+        loadUser();
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            if (activeTab === "profile") {
+                const { error } = await supabase.auth.updateUser({
+                    email: email !== "" ? email : undefined,
+                    data: {
+                        full_name: fullName,
+                        job_title: jobTitle,
+                    },
+                });
+                if (error) throw error;
+                toast.success("Profile updated successfully");
+            } else if (activeTab === "security") {
+                if (!newPassword) { toast.error("Enter a new password"); setSaving(false); return; }
+                const { error } = await supabase.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+                setCurrentPassword("");
+                setNewPassword("");
+                toast.success("Password updated successfully");
+            } else if (activeTab === "notifications") {
+                // Persist notification prefs to user metadata
+                const { error } = await supabase.auth.updateUser({
+                    data: { notification_prefs: notifToggles },
+                });
+                if (error) throw error;
+                toast.success("Notification preferences saved");
+            } else if (activeTab === "agents") {
+                const { error } = await supabase.auth.updateUser({
+                    data: { agent_telemetry_interval: parseInt(telemetryInterval) },
+                });
+                if (error) throw error;
+                toast.success("Agent configuration saved");
+            } else {
+                toast.success("Settings saved");
+            }
+
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+        } catch (err: unknown) {
+            toast.error((err as Error).message ?? "Failed to save settings");
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -75,9 +159,12 @@ export default function SettingsPage() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
+                                aria-current={activeTab === tab.id ? "page" : undefined}
                                 className={cn(
                                     "flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                                    activeTab === tab.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                    activeTab === tab.id
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                                 )}
                             >
                                 <tab.icon className="h-4 w-4 shrink-0" />
@@ -87,7 +174,7 @@ export default function SettingsPage() {
                     </nav>
                 </motion.div>
 
-                {/* Content */}
+                {/* Content panel */}
                 <motion.div
                     key={activeTab}
                     initial={{ opacity: 0, y: 8 }}
@@ -95,6 +182,7 @@ export default function SettingsPage() {
                     transition={{ duration: 0.2 }}
                     className="flex-1 bg-card border border-border rounded-2xl p-6"
                 >
+                    {/* ── Profile ── */}
                     {activeTab === "profile" && (
                         <div className="space-y-6">
                             <div>
@@ -103,20 +191,41 @@ export default function SettingsPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label>Full Name</Label>
-                                    <Input defaultValue="John Administrator" className="h-9" />
+                                    <Label htmlFor="fullName">Full Name</Label>
+                                    <Input
+                                        id="fullName"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                        className="h-9"
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Job Title</Label>
-                                    <Input defaultValue="Security Operations Lead" className="h-9" />
+                                    <Label htmlFor="jobTitle">Job Title</Label>
+                                    <Input
+                                        id="jobTitle"
+                                        value={jobTitle}
+                                        onChange={(e) => setJobTitle(e.target.value)}
+                                        className="h-9"
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Email Address</Label>
-                                    <Input defaultValue="admin@company.com" type="email" className="h-9" />
+                                    <Label htmlFor="email">Email Address</Label>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="h-9"
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Organization</Label>
-                                    <Input defaultValue="EdgePulse Enterprise" className="h-9" />
+                                    <Label htmlFor="org">Organization</Label>
+                                    <Input
+                                        id="org"
+                                        value={org}
+                                        onChange={(e) => setOrg(e.target.value)}
+                                        className="h-9"
+                                    />
                                 </div>
                             </div>
                             <div className="space-y-1.5">
@@ -128,6 +237,7 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {/* ── Notifications ── */}
                     {activeTab === "notifications" && (
                         <div className="space-y-6">
                             <div>
@@ -136,14 +246,19 @@ export default function SettingsPage() {
                             </div>
                             <div className="space-y-4">
                                 {notificationSettings.map((setting) => (
-                                    <div key={setting.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                                    <div
+                                        key={setting.id}
+                                        className="flex items-center justify-between py-3 border-b border-border last:border-0"
+                                    >
                                         <div>
                                             <p className="text-sm font-medium text-foreground">{setting.label}</p>
                                             <p className="text-xs text-muted-foreground">{setting.desc}</p>
                                         </div>
                                         <Switch
                                             checked={notifToggles[setting.id]}
-                                            onCheckedChange={(v) => setNotifToggles((prev) => ({ ...prev, [setting.id]: v }))}
+                                            onCheckedChange={(v) =>
+                                                setNotifToggles((prev) => ({ ...prev, [setting.id]: v }))
+                                            }
                                         />
                                     </div>
                                 ))}
@@ -151,39 +266,67 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {/* ── Security ── */}
                     {activeTab === "security" && (
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-base font-semibold text-foreground mb-1">Security Settings</h2>
-                                <p className="text-sm text-muted-foreground">Manage your password and session settings</p>
+                                <p className="text-sm text-muted-foreground">Change your password and session settings</p>
                             </div>
                             <div className="space-y-4">
                                 <div className="space-y-1.5">
-                                    <Label>Current Password</Label>
+                                    <Label htmlFor="currentPassword">Current Password</Label>
                                     <div className="relative">
                                         <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input type={showCurrentPassword ? "text" : "password"} className="pl-10 pr-10 h-9" placeholder="Enter current password" />
-                                        <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowCurrentPassword((p) => !p)}>
+                                        <Input
+                                            id="currentPassword"
+                                            type={showCurrentPassword ? "text" : "password"}
+                                            className="pl-10 pr-10 h-9"
+                                            placeholder="Enter current password"
+                                            value={currentPassword}
+                                            onChange={(e) => setCurrentPassword(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                            onClick={() => setShowCurrentPassword((p) => !p)}
+                                            aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                                        >
                                             {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                         </button>
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>New Password</Label>
+                                    <Label htmlFor="newPassword">New Password</Label>
                                     <div className="relative">
                                         <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input type={showNewPassword ? "text" : "password"} className="pl-10 pr-10 h-9" placeholder="Enter new password" />
-                                        <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowNewPassword((p) => !p)}>
+                                        <Input
+                                            id="newPassword"
+                                            type={showNewPassword ? "text" : "password"}
+                                            className="pl-10 pr-10 h-9"
+                                            placeholder="Enter new password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                            onClick={() => setShowNewPassword((p) => !p)}
+                                            aria-label={showNewPassword ? "Hide password" : "Show password"}
+                                        >
                                             {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                         </button>
                                     </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Must be at least 8 characters with uppercase, number and special character.
+                                    </p>
                                 </div>
                                 <div className="pt-4 border-t border-border space-y-3">
                                     <p className="text-sm font-medium text-foreground">Session Settings</p>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="text-sm text-foreground">Auto-logout after inactivity</p>
-                                            <p className="text-xs text-muted-foreground">Automatically sign out after 30 minutes of inactivity</p>
+                                            <p className="text-xs text-muted-foreground">Automatically sign out after 30 minutes</p>
                                         </div>
                                         <Switch defaultChecked />
                                     </div>
@@ -199,6 +342,7 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {/* ── Appearance ── */}
                     {activeTab === "appearance" && (
                         <div className="space-y-6">
                             <div>
@@ -209,9 +353,21 @@ export default function SettingsPage() {
                                 <div>
                                     <p className="text-sm font-medium text-foreground mb-3">Theme</p>
                                     <div className="grid grid-cols-3 gap-3">
-                                        {["Light", "Dark", "System"].map((t) => (
-                                            <button key={t} className="p-4 rounded-xl border border-border hover:border-primary/50 transition-colors text-sm font-medium text-center">
-                                                {t}
+                                        {(["light", "dark", "system"] as const).map((t) => (
+                                            <button
+                                                key={t}
+                                                onClick={() => setTheme(t)}
+                                                className={cn(
+                                                    "p-4 rounded-xl border transition-colors text-sm font-medium text-center capitalize",
+                                                    theme === t
+                                                        ? "border-primary/50 bg-primary/5 text-primary"
+                                                        : "border-border hover:border-primary/30"
+                                                )}
+                                            >
+                                                {t === "system" ? "System" : t.charAt(0).toUpperCase() + t.slice(1)}
+                                                {theme === t && (
+                                                    <CheckCircle className="h-3 w-3 inline-block ml-1.5 text-primary" />
+                                                )}
                                             </button>
                                         ))}
                                     </div>
@@ -236,6 +392,7 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {/* ── Agent Config ── */}
                     {activeTab === "agents" && (
                         <div className="space-y-6">
                             <div>
@@ -246,11 +403,21 @@ export default function SettingsPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <Label>Current Agent Version</Label>
-                                        <div className="h-9 px-3 flex items-center bg-muted/50 border border-border rounded-md text-sm font-mono text-green-500">v2.4.1</div>
+                                        <div className="h-9 px-3 flex items-center bg-muted/50 border border-border rounded-md text-sm font-mono text-green-500">
+                                            v2.4.1
+                                        </div>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label>Telemetry Interval</Label>
-                                        <Input defaultValue="30" type="number" className="h-9" />
+                                        <Label htmlFor="telemetryInterval">Telemetry Interval (seconds)</Label>
+                                        <Input
+                                            id="telemetryInterval"
+                                            value={telemetryInterval}
+                                            onChange={(e) => setTelemetryInterval(e.target.value)}
+                                            type="number"
+                                            min="5"
+                                            max="300"
+                                            className="h-9"
+                                        />
                                     </div>
                                 </div>
                                 <div className="pt-4 border-t border-border space-y-3">
@@ -277,11 +444,16 @@ export default function SettingsPage() {
                     {/* Save button */}
                     <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">Changes are saved to your account</p>
-                        <Button onClick={handleSave} className="gap-2 min-w-[100px]">
+                        <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-[100px]">
                             {saved ? (
                                 <>
                                     <CheckCircle2 className="h-4 w-4" />
                                     Saved!
+                                </>
+                            ) : saving ? (
+                                <>
+                                    <Save className="h-4 w-4 animate-spin" />
+                                    Saving...
                                 </>
                             ) : (
                                 <>

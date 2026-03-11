@@ -13,21 +13,41 @@ import {
     WifiOff,
     Loader2,
 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
-import type { Alert, Device, RealtimeAlertPayload, RealtimeDevicePayload } from "@/lib/supabase/types";
+import type {
+    Alert,
+    Device,
+    RealtimeAlertPayload,
+    RealtimeDevicePayload,
+} from "@/lib/supabase/types";
 
 type ConnStatus = "live" | "offline" | "syncing";
+
+// Breadcrumb label map
+const BREADCRUMB_MAP: Record<string, string> = {
+    "/dashboard": "Overview",
+    "/dashboard/alerts": "Alerts",
+    "/dashboard/alerts/rules": "Alert Rules",
+    "/dashboard/devices": "Device Fleet",
+    "/dashboard/insights": "ML Insights",
+    "/dashboard/live": "Live Feed",
+    "/dashboard/notifications": "Notifications",
+    "/dashboard/settings": "Settings",
+};
 
 interface TopBarProps {
     onMobileMenuToggle?: () => void;
 }
 
 export function TopBar({ onMobileMenuToggle }: TopBarProps) {
+    const router = useRouter();
+    const pathname = usePathname();
     const [searchOpen, setSearchOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [user, setUser] = useState<{ email?: string; full_name?: string } | null>(null);
@@ -35,7 +55,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const [connStatus, setConnStatus] = useState<ConnStatus>("live");
     const [queuedCount, setQueuedCount] = useState(0);
 
-    const { alerts, setAlerts, addAlert, updateAlert, unreadCount } = useAlertStore();
+    const { alerts, setAlerts, addAlert, updateAlert, unreadCount, markRead } = useAlertStore();
     const { setDevices, updateDevice } = useDeviceStore();
 
     const supabase = createClient();
@@ -159,7 +179,6 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         // Browser online/offline events
         const handleOnline = () => {
             setConnStatus("syncing");
-            // Refetch to catch up on anything missed while offline
             fetchAlerts();
             fetchDevices();
             fetchSyncQueue();
@@ -180,6 +199,25 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         };
     }, [addAlert, setAlerts, setDevices, updateAlert, updateDevice]);
 
+    // Mark all alerts as read
+    const handleMarkAllRead = () => {
+        alerts.forEach((a) => {
+            if (a.status !== "CLOSED") markRead(a.id);
+        });
+        setNotifOpen(false);
+    };
+
+    // Dynamic breadcrumb label
+    const breadcrumbLabel = (() => {
+        // Exact match first
+        if (BREADCRUMB_MAP[pathname]) return BREADCRUMB_MAP[pathname];
+        // Startswith match (longer paths)
+        const match = Object.entries(BREADCRUMB_MAP)
+            .filter(([k]) => pathname.startsWith(k) && k !== "/dashboard")
+            .sort((a, b) => b[0].length - a[0].length)[0];
+        return match ? match[1] : "Dashboard";
+    })();
+
     // ── Derived ───────────────────────────────────────────────────────────────
     const initials = user?.full_name
         ? user.full_name
@@ -190,7 +228,6 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
             .slice(0, 2)
         : user?.email?.[0]?.toUpperCase() ?? "U";
 
-    // Recent 4 alerts for the notification dropdown (from live store)
     const recentNotifs = alerts.slice(0, 4);
 
     // ── Connectivity badge config ─────────────────────────────────────────────
@@ -229,10 +266,10 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 </svg>
             </button>
 
-            {/* Breadcrumb */}
+            {/* Dynamic Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
                 <Shield className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-foreground font-medium truncate">Dashboard</span>
+                <span className="text-foreground font-medium truncate">{breadcrumbLabel}</span>
             </div>
 
             {/* Persistent connectivity status badge */}
@@ -319,7 +356,10 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                                 transition={{ duration: 0.15 }}
-                                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden max-h-[80vh] sm:max-h-none"
+                                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                                onKeyDown={(e) => {
+                                    if (e.key === "Escape") setNotifOpen(false);
+                                }}
                             >
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                                     <span className="text-sm font-semibold text-foreground">
@@ -330,9 +370,12 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                             </span>
                                         )}
                                     </span>
-                                    <span className="text-xs text-primary hover:underline cursor-pointer">
+                                    <button
+                                        onClick={handleMarkAllRead}
+                                        className="text-xs text-primary hover:underline cursor-pointer"
+                                    >
                                         Mark all read
-                                    </span>
+                                    </button>
                                 </div>
                                 <div className="divide-y divide-border max-h-80 overflow-y-auto">
                                     {recentNotifs.length === 0 ? (
@@ -344,29 +387,34 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                             <div
                                                 key={alert.id}
                                                 className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    markRead(alert.id);
+                                                    setNotifOpen(false);
+                                                    router.push("/dashboard/alerts");
+                                                }}
                                             >
                                                 <div
                                                     className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${alert.severity === "critical"
-                                                        ? "bg-destructive/15"
-                                                        : alert.severity === "high"
-                                                            ? "bg-orange-500/15"
-                                                            : alert.severity === "medium"
-                                                                ? "bg-amber-500/15"
-                                                                : "bg-primary/15"
+                                                            ? "bg-destructive/15"
+                                                            : alert.severity === "high"
+                                                                ? "bg-orange-500/15"
+                                                                : alert.severity === "medium"
+                                                                    ? "bg-amber-500/15"
+                                                                    : "bg-primary/15"
                                                         }`}
                                                 >
                                                     {alert.severity === "critical" || alert.severity === "high" ? (
                                                         <AlertTriangle
                                                             className={`h-3 w-3 ${alert.severity === "critical"
-                                                                ? "text-destructive"
-                                                                : "text-orange-500"
+                                                                    ? "text-destructive"
+                                                                    : "text-orange-500"
                                                                 }`}
                                                         />
                                                     ) : (
                                                         <MonitorSmartphone
                                                             className={`h-3 w-3 ${alert.severity === "medium"
-                                                                ? "text-amber-500"
-                                                                : "text-primary"
+                                                                    ? "text-amber-500"
+                                                                    : "text-primary"
                                                                 }`}
                                                         />
                                                     )}
@@ -385,7 +433,13 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                     )}
                                 </div>
                                 <div className="px-4 py-2.5 border-t border-border">
-                                    <button className="text-xs text-primary hover:underline w-full text-center">
+                                    <button
+                                        className="text-xs text-primary hover:underline w-full text-center"
+                                        onClick={() => {
+                                            setNotifOpen(false);
+                                            router.push("/dashboard/notifications");
+                                        }}
+                                    >
                                         View all notifications
                                     </button>
                                 </div>
