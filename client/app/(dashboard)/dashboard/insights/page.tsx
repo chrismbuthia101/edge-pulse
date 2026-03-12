@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     Brain,
@@ -47,6 +47,10 @@ const modelHistory = [
 const maxImportance = Math.max(...topFeatures.map((f) => f.importance));
 
 export default function InsightsPage() {
+    useEffect(() => {
+        document.title = "ML Insights - EdgePulse";
+    }, []);
+
     const [selectedFeature, setSelectedFeature] = useState<number | null>(null);
 
     return (

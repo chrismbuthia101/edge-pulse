@@ -26,6 +26,10 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "EdgePulse — Real-time intelligence at the edge",
   description: "ML-powered behavioral anomaly detection for enterprise devices. Real-time. Offline-capable. Explainable by design.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

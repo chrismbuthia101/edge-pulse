@@ -306,7 +306,7 @@ export function AlertRow({
                                     className="gap-1.5 h-7 text-xs w-full sm:w-auto"
                                     asChild
                                 >
-                                    <Link href={`/dashboard/alerts`}>
+                                    <Link href={`/dashboard/alerts/${alert.id}`}>
                                         <Eye className="h-3 w-3" />
                                         View Full Analysis
                                     </Link>

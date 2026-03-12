@@ -45,6 +45,10 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
+    useEffect(() => {
+        document.title = "Settings - EdgePulse";
+    }, []);
+
     const supabase = createClient();
     const supabaseRef = useRef(supabase);
     const { setTheme, theme } = useTheme();

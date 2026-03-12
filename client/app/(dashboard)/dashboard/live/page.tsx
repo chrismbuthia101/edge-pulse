@@ -99,6 +99,10 @@ function telemetryToLiveEvent(row: TelemetryEvent): LiveEvent {
 }
 
 export default function LivePage() {
+    useEffect(() => {
+        document.title = "Live Feed - EdgePulse";
+    }, []);
+
     const [events, setEvents] = useState<LiveEvent[]>([]);
     const [filter, setFilter] = useState<EventType>("all");
     const [paused, setPaused] = useState(false);
@@ -259,10 +263,10 @@ export default function LivePage() {
             <div className="flex items-center justify-between">
                 <div
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${connected && !paused
-                            ? "bg-green-500/10 border-green-500/20"
-                            : paused
-                                ? "bg-amber-500/10 border-amber-500/20"
-                                : "bg-destructive/10 border-destructive/20"
+                        ? "bg-green-500/10 border-green-500/20"
+                        : paused
+                            ? "bg-amber-500/10 border-amber-500/20"
+                            : "bg-destructive/10 border-destructive/20"
                         }`}
                 >
                     {connected && !paused ? (
@@ -274,10 +278,10 @@ export default function LivePage() {
                     )}
                     <span
                         className={`text-xs font-medium ${connected && !paused
-                                ? "text-green-600 dark:text-green-400"
-                                : paused
-                                    ? "text-amber-600 dark:text-amber-400"
-                                    : "text-destructive"
+                            ? "text-green-600 dark:text-green-400"
+                            : paused
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-destructive"
                             }`}
                     >
                         {connected && !paused ? "Streaming Live" : paused ? "Stream Paused" : "Connecting…"}
@@ -290,8 +294,8 @@ export default function LivePage() {
                             key={t}
                             onClick={() => setFilter(t)}
                             className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${filter === t
-                                    ? "bg-card text-foreground shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground"
+                                ? "bg-card text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
                             {t}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ChevronRight,
@@ -140,6 +140,10 @@ function AlertRulesModal({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 export default function AlertsPage() {
+    useEffect(() => {
+        document.title = "Security Alerts - EdgePulse";
+    }, []);
+
     const { alerts, updateAlert } = useAlertStore();
     const supabase = createClient();
 

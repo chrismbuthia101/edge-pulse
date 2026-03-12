@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     MonitorSmartphone,
@@ -169,6 +169,10 @@ function IsolateModal({ deviceName, open, onClose, onConfirm }: {
 }
 
 export default function DevicesPage() {
+    useEffect(() => {
+        document.title = "Device Fleet - EdgePulse";
+    }, []);
+
     const storeDevices = useDeviceStore((s) => s.devices);
     const supabase = createClient();
     const router = useRouter();

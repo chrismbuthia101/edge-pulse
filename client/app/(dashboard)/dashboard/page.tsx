@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 import {
     ShieldAlert,
     MonitorSmartphone,
@@ -22,6 +23,10 @@ import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
 export default function DashboardPage() {
+    useEffect(() => {
+        document.title = "Security Dashboard - EdgePulse";
+    }, []);
+
     // ── Live store data ────────────────────────────────────────────────────────
     const alerts = useAlertStore((s) => s.alerts);
     const pendingCount = useAlertStore((s) => s.pendingCount);
@@ -176,8 +181,8 @@ export default function DashboardPage() {
                             </div>
                             <span
                                 className={`flex items-center gap-1 text-[10px] lg:text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive
-                                        ? "text-green-600 dark:text-green-400 bg-green-500/10"
-                                        : "text-destructive bg-destructive/10"
+                                    ? "text-green-600 dark:text-green-400 bg-green-500/10"
+                                    : "text-destructive bg-destructive/10"
                                     }`}
                             >
                                 {stat.deltaPositive ? (

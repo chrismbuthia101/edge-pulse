@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Bell,
@@ -30,6 +30,10 @@ const allNotifications = [
 type NotifFilter = "all" | "unread" | "critical" | "info";
 
 export default function NotificationsPage() {
+    useEffect(() => {
+        document.title = "Notifications - EdgePulse";
+    }, []);
+
     const [notifications, setNotifications] = useState(allNotifications);
     const [filter, setFilter] = useState<NotifFilter>("all");
 
