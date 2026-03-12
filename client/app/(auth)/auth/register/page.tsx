@@ -35,6 +35,9 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const metRequirements = passwordRequirements.filter((r) => r.test(password));
   const passwordStrength = metRequirements.length;
@@ -44,14 +47,39 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (password !== confirmPassword) { toast.error("Passwords do not match"); return; }
-    if (passwordStrength < 3) { toast.error("Password is too weak"); return; }
+    // Clear previous errors
+    setPasswordError(null);
+    setEmailError(null);
+    setNameError(null);
 
-    setIsLoading(true);
-
+    // Validate name
     const form = new FormData(e.currentTarget);
     const fullName = form.get("name") as string;
     const email = form.get("email") as string;
+
+    if (!fullName || fullName.trim().length < 2) {
+      setNameError("Name must be at least 2 characters long");
+      return;
+    }
+
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return;
+    }
+
+    // Validate password
+    if (password !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+    if (passwordStrength < 8) {
+      setPasswordError("Password is too weak.");
+      return;
+    }
+
+    setIsLoading(true);
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -62,7 +90,13 @@ export default function RegisterPage() {
     setIsLoading(false);
 
     if (error) {
-      toast.error(error.message);
+      if (error.message.includes("email")) {
+        setEmailError(error.message);
+      } else if (error.message.includes("password")) {
+        setPasswordError(error.message);
+      } else {
+        toast.error(error.message);
+      }
       return;
     }
 
@@ -72,6 +106,32 @@ export default function RegisterPage() {
       router.push("/auth/login");
       router.refresh();
     }, 2000);
+  };
+
+  // Real-time validation functions
+  const validateName = (name: string) => {
+    if (!name || name.trim().length < 2) {
+      setNameError("Name must be at least 2 characters long");
+    } else {
+      setNameError(null);
+    }
+  };
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      setEmailError("Please enter a valid email address");
+    } else {
+      setEmailError(null);
+    }
+  };
+
+  const validatePassword = (pwd: string) => {
+    if (pwd.length > 0 && passwordStrength < 3) {
+      setPasswordError("Password is too weak. Please meet at least 3 requirements.");
+    } else {
+      setPasswordError(null);
+    }
   };
 
   return (
@@ -144,52 +204,90 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="name">Full Name</Label>
                 <div className="relative">
-                  <User className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "name" ? "text-primary" : "text-muted-foreground"}`} />
+                  <User className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "name" ? "text-primary" : nameError ? "text-destructive" : "text-muted-foreground"}`} />
                   <Input
                     id="name"
                     name="name"
                     type="text"
                     placeholder="Jane Smith"
-                    className="pl-10 h-10"
+                    className={`pl-10 h-10 ${nameError ? "border-destructive focus-visible:border-destructive" : ""}`}
                     required
                     onFocus={() => setFocusedField("name")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={(e) => {
+                      setFocusedField(null);
+                      validateName(e.target.value);
+                    }}
+                    onChange={(e) => {
+                      if (nameError) validateName(e.target.value);
+                    }}
                   />
                 </div>
+                {nameError && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-xs text-destructive"
+                  >
+                    {nameError}
+                  </motion.p>
+                )}
               </div>
 
               {/* Email */}
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email Address</Label>
                 <div className="relative">
-                  <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-primary" : "text-muted-foreground"}`} />
+                  <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-primary" : emailError ? "text-destructive" : "text-muted-foreground"}`} />
                   <Input
                     id="email"
                     name="email"
                     type="email"
                     placeholder="you@company.com"
-                    className="pl-10 h-10"
+                    className={`pl-10 h-10 ${emailError ? "border-destructive focus-visible:border-destructive" : ""}`}
                     required
                     onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={(e) => {
+                      setFocusedField(null);
+                      validateEmail(e.target.value);
+                    }}
+                    onChange={(e) => {
+                      if (emailError) validateEmail(e.target.value);
+                    }}
                   />
                 </div>
+                {emailError && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-xs text-destructive"
+                  >
+                    {emailError}
+                  </motion.p>
+                )}
               </div>
 
               {/* Password */}
               <div className="space-y-1.5">
                 <Label>Password</Label>
                 <div className="relative">
-                  <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-primary" : "text-muted-foreground"}`} />
+                  <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-primary" : passwordError ? "text-destructive" : "text-muted-foreground"}`} />
                   <Input
                     type={showPassword ? "text" : "password"}
-                    className="pl-10 pr-10 h-10"
+                    className={`pl-10 pr-10 h-10 ${passwordError ? "border-destructive focus-visible:border-destructive" : ""}`}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (passwordError) validatePassword(e.target.value);
+                    }}
                     placeholder="Create a strong password"
                     required
                     onFocus={() => setFocusedField("password")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      validatePassword(password);
+                    }}
                   />
                   <button
                     type="button"
@@ -199,6 +297,16 @@ export default function RegisterPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                {passwordError && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-xs text-destructive"
+                  >
+                    {passwordError}
+                  </motion.p>
+                )}
 
                 {/* Strength bar */}
                 <AnimatePresence>

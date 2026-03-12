@@ -7,19 +7,19 @@ import {
     Search,
     Command,
     X,
-    Shield,
     AlertTriangle,
     MonitorSmartphone,
     WifiOff,
     Loader2,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
+import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import type {
     Alert,
     Device,
@@ -29,17 +29,6 @@ import type {
 
 type ConnStatus = "live" | "offline" | "syncing";
 
-// Breadcrumb label map
-const BREADCRUMB_MAP: Record<string, string> = {
-    "/dashboard": "Overview",
-    "/dashboard/alerts": "Alerts",
-    "/dashboard/alerts/rules": "Alert Rules",
-    "/dashboard/devices": "Device Fleet",
-    "/dashboard/insights": "ML Insights",
-    "/dashboard/live": "Live Feed",
-    "/dashboard/notifications": "Notifications",
-    "/dashboard/settings": "Settings",
-};
 
 interface TopBarProps {
     onMobileMenuToggle?: () => void;
@@ -47,7 +36,6 @@ interface TopBarProps {
 
 export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const router = useRouter();
-    const pathname = usePathname();
     const [searchOpen, setSearchOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [user, setUser] = useState<{ email?: string; full_name?: string } | null>(null);
@@ -207,16 +195,6 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         setNotifOpen(false);
     };
 
-    // Dynamic breadcrumb label
-    const breadcrumbLabel = (() => {
-        // Exact match first
-        if (BREADCRUMB_MAP[pathname]) return BREADCRUMB_MAP[pathname];
-        // Startswith match (longer paths)
-        const match = Object.entries(BREADCRUMB_MAP)
-            .filter(([k]) => pathname.startsWith(k) && k !== "/dashboard")
-            .sort((a, b) => b[0].length - a[0].length)[0];
-        return match ? match[1] : "Dashboard";
-    })();
 
     // ── Derived ───────────────────────────────────────────────────────────────
     const initials = user?.full_name
@@ -267,10 +245,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
             </button>
 
             {/* Dynamic Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
-                <Shield className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-foreground font-medium truncate">{breadcrumbLabel}</span>
-            </div>
+            <DynamicBreadcrumb />
 
             {/* Persistent connectivity status badge */}
             <div
@@ -395,26 +370,26 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                             >
                                                 <div
                                                     className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${alert.severity === "critical"
-                                                            ? "bg-destructive/15"
-                                                            : alert.severity === "high"
-                                                                ? "bg-orange-500/15"
-                                                                : alert.severity === "medium"
-                                                                    ? "bg-amber-500/15"
-                                                                    : "bg-primary/15"
+                                                        ? "bg-destructive/15"
+                                                        : alert.severity === "high"
+                                                            ? "bg-orange-500/15"
+                                                            : alert.severity === "medium"
+                                                                ? "bg-amber-500/15"
+                                                                : "bg-primary/15"
                                                         }`}
                                                 >
                                                     {alert.severity === "critical" || alert.severity === "high" ? (
                                                         <AlertTriangle
                                                             className={`h-3 w-3 ${alert.severity === "critical"
-                                                                    ? "text-destructive"
-                                                                    : "text-orange-500"
+                                                                ? "text-destructive"
+                                                                : "text-orange-500"
                                                                 }`}
                                                         />
                                                     ) : (
                                                         <MonitorSmartphone
                                                             className={`h-3 w-3 ${alert.severity === "medium"
-                                                                    ? "text-amber-500"
-                                                                    : "text-primary"
+                                                                ? "text-amber-500"
+                                                                : "text-primary"
                                                                 }`}
                                                         />
                                                     )}

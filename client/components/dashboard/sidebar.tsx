@@ -66,6 +66,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
         router.push("/auth/login");
     };
 
+    // Close mobile sidebar when navigating to a new route
+    const handleNavigation = () => {
+        if (window.innerWidth < 1024 && onMobileClose) {
+            onMobileClose();
+        }
+    };
+
     return (
         <>
             {/* Mobile overlay */}
@@ -144,6 +151,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
                             {group.items.map((item) => {
                                 const isActive = pathname === item.href;
+                                const badgeCount = item.badge === "12" ? "12" : item.badge;
+
                                 return (
                                     <Link
                                         key={item.href}
@@ -151,9 +160,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                         className={cn(
                                             "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-all duration-200 group relative",
                                             isActive
-                                                ? "bg-primary/10 text-primary"
+                                                ? "bg-primary/10 text-primary shadow-sm"
                                                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                                         )}
+                                        aria-current={isActive ? "page" : undefined}
+                                        onClick={handleNavigation}
                                     >
                                         {isActive && (
                                             <motion.div
@@ -163,7 +174,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                         )}
                                         <item.icon
                                             className={cn(
-                                                "h-4 w-4 shrink-0",
+                                                "h-4 w-4 shrink-0 transition-colors",
                                                 isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                                             )}
                                         />
@@ -180,17 +191,42 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                                 </motion.span>
                                             )}
                                         </AnimatePresence>
-                                        {!collapsed && item.badge && (
-                                            <span
+                                        {!collapsed && badgeCount && (
+                                            <motion.span
+                                                initial={{ opacity: 0, scale: 0.8 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.8 }}
                                                 className={cn(
-                                                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                                                    item.badge === "LIVE"
+                                                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse",
+                                                    badgeCount === "LIVE"
                                                         ? "bg-green-500/15 text-green-500 border border-green-500/30"
                                                         : "bg-destructive/15 text-destructive border border-destructive/30"
                                                 )}
                                             >
-                                                {item.badge}
-                                            </span>
+                                                {badgeCount}
+                                            </motion.span>
+                                        )}
+                                        {/* Collapsed state indicators */}
+                                        {collapsed && badgeCount && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0 }}
+                                                className={cn(
+                                                    "absolute -top-1 -right-1 w-2 h-2 rounded-full",
+                                                    badgeCount === "LIVE"
+                                                        ? "bg-green-500"
+                                                        : "bg-destructive"
+                                                )}
+                                            />
+                                        )}
+                                        {collapsed && isActive && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0 }}
+                                                className="absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 pointer-events-none"
+                                            />
                                         )}
                                     </Link>
                                 );

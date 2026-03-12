@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopBar } from "@/components/dashboard/topbar";
 
@@ -9,15 +9,27 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    // Initialize sidebar state from localStorage or default to false
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("sidebar-collapsed");
+            return saved !== null ? JSON.parse(saved) : false;
+        }
+        return false;
+    });
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+    // Save sidebar state to localStorage when it changes
+    useEffect(() => {
+        localStorage.setItem("sidebar-collapsed", JSON.stringify(sidebarCollapsed));
+    }, [sidebarCollapsed]);
 
     return (
         <div className="min-h-screen bg-background flex">
             <Sidebar
                 collapsed={sidebarCollapsed}
                 onToggle={() => {
-                    setSidebarCollapsed((p) => !p);
+                    setSidebarCollapsed((p: boolean) => !p);
                     // Close mobile sidebar when toggling desktop state
                     if (window.innerWidth < 1024) {
                         setMobileSidebarOpen(false);

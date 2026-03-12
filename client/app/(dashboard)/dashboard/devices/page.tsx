@@ -382,29 +382,81 @@ export default function DevicesPage() {
                         return (
                             <motion.div key={device.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}>
                                 {/* Mobile card */}
-                                <div className="lg:hidden p-4 space-y-2 hover:bg-muted/30 cursor-pointer"
+                                <div className="lg:hidden p-4 space-y-3 hover:bg-muted/30 cursor-pointer transition-colors"
                                     onClick={() => router.push(`/dashboard/devices/${device.id}`)}>
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="relative w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
                                                 <DeviceIcon type={device.type} />
-                                                <div className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-card", state.dot)} />
+                                                <div className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card", state.dot)} />
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-medium font-mono">{device.name}</p>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-medium font-mono truncate">{device.name}</p>
                                                 <p className="text-xs text-muted-foreground">{device.lastSeen}</p>
                                             </div>
                                         </div>
-                                        <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", risk.bg, risk.color)}>{risk.label}</span>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-full", risk.bg, risk.color)}>{risk.label}</span>
+                                            {device.alerts > 0 && (
+                                                <div className="flex items-center gap-1 text-xs text-destructive">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    <span className="font-bold">{device.alerts}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                                        <span className={cn("font-medium", state.color)}>{state.label}</span>
-                                        <span>{device.os}</span>
-                                        <span className="font-mono">{device.ip}</span>
-                                        {device.syncQueueDepth > 0 && (
-                                            <span className="text-amber-500">{device.syncQueueDepth} queued</span>
-                                        )}
+
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="space-y-1">
+                                            <p className="text-muted-foreground">Status</p>
+                                            <p className={cn("font-semibold", state.color)}>{state.label}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-muted-foreground">OS</p>
+                                            <p className="font-medium truncate">{device.os}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-muted-foreground">IP</p>
+                                            <p className="font-mono truncate">{device.ip}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-muted-foreground">Agent</p>
+                                            <p className={cn("font-mono", device.agent === "v2.4.1" ? "text-green-500" : "text-amber-500")}>
+                                                {device.agent}
+                                            </p>
+                                        </div>
                                     </div>
+
+                                    {/* Mobile performance bars */}
+                                    {device.status === "online" && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-muted-foreground w-12">CPU</span>
+                                                <MiniBar value={device.cpu} color={device.cpu > 80 ? "bg-destructive" : "bg-primary"} />
+                                                <span className="text-[10px] font-mono text-muted-foreground">{device.cpu}%</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-muted-foreground w-12">RAM</span>
+                                                <MiniBar value={device.mem} color={device.mem > 80 ? "bg-orange-500" : "bg-violet-500"} />
+                                                <span className="text-[10px] font-mono text-muted-foreground">{device.mem}%</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Mobile sync queue indicator */}
+                                    {device.syncQueueDepth > 0 && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs text-muted-foreground">Sync Queue</span>
+                                            <span className={cn(
+                                                "text-xs font-bold px-2 py-1 rounded-full border",
+                                                device.syncQueueDepth > 10
+                                                    ? "text-destructive bg-destructive/10 border-destructive/20"
+                                                    : "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                                            )}>
+                                                {device.syncQueueDepth} events
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Desktop row */}
