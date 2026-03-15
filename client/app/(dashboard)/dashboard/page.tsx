@@ -25,6 +25,9 @@ import { DetectionThresholdSlider } from "@/components/dashboard/detection-thres
 import { TelemetryRetention } from "@/components/dashboard/telemetry-retention";
 import { PrivacyModeIndicator } from "@/components/dashboard/privacy-mode-indicator";
 import { PurgeDeviceData } from "@/components/dashboard/purge-device-data";
+import { DynamicThreatLevel } from "@/components/dashboard/dynamic-threat-level";
+import { AttackCategoryChart } from "@/components/dashboard/attack-category-chart";
+import { OnlineOfflineDetection } from "@/components/dashboard/online-offline-detection";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -240,6 +243,20 @@ export default function DashboardPage() {
                 <div className="space-y-4 lg:space-y-5">
                     <ShapPanel />
                     <SystemHealth />
+                </div>
+            </div>
+
+            {/* Analytics Section */}
+            <div className="space-y-4 lg:space-y-5">
+                <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    <h2 className="text-lg font-semibold text-foreground">Analytics</h2>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
+                    <DynamicThreatLevel />
+                    <AttackCategoryChart />
+                    <OnlineOfflineDetection />
                 </div>
             </div>
 
