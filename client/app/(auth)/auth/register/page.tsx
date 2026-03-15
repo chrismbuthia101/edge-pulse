@@ -157,6 +157,7 @@ export default function RegisterPage() {
             className="w-full h-full object-contain rounded-2xl"
             width={400}
             height={400}
+            priority
           />
         </div>
       </div>
@@ -458,6 +459,7 @@ export default function RegisterPage() {
               className="w-full h-auto object-contain rounded-2xl"
               width={400}
               height={150}
+              priority
             />
           </div>
         </div>

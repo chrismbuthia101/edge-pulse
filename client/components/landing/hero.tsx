@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { motion, Variants, easeOut, useScroll, useTransform } from "framer-motion";
+import { motion, Variants, easeOut, useScroll, useTransform, useReducedMotion } from "framer-motion";
 import { ArrowRight, Shield, Zap, Brain, Activity, AlertTriangle, Cpu, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -40,6 +40,7 @@ const threatEvents = [
 ];
 
 export function Hero() {
+  const shouldReduceMotion = useReducedMotion();
   const { scrollY } = useScroll();
   const parallaxY = useTransform(scrollY, [0, 1000], [0, -150]);
   const parallaxScale = useTransform(scrollY, [0, 1000], [1, 0.8]);
@@ -57,11 +58,59 @@ export function Hero() {
           duration: 8 + ((seed * 9301) % 10),
           delay: ((seed * 49297) % 8),
           size: 1 + ((seed * 1111) % 4),
-          type: i % 3 === 0 ? "glow" : i % 3 === 1 ? "float" : "pulse",
+          type: (i % 3 === 0 ? "glow" : i % 3 === 1 ? "float" : "pulse") as "glow" | "float" | "pulse",
         };
       }),
     []
   );
+
+  // Reduce particles on mobile for performance
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const displayParticles = isMobile ? particles.slice(0, 8) : particles;
+
+  interface Particle {
+    id: number;
+    left: number;
+    top: number;
+    xMovement: number;
+    yMovement: number;
+    duration: number;
+    delay: number;
+    size: number;
+    type: "glow" | "float" | "pulse";
+  };
+
+  // Disable animations when reduced motion is preferred
+  const getAnimationVariants = (p: Particle) => {
+    if (shouldReduceMotion) return {};
+    return {
+      glow: {
+        y: [0, -100, 0],
+        x: [0, p.xMovement, 0],
+        opacity: [0, 0.8, 0],
+        scale: [1, 1.5, 1],
+      },
+      float: {
+        y: [0, -60, 0],
+        x: [0, p.xMovement * 0.5, 0],
+        opacity: [0, 0.6, 0],
+        rotate: [0, 180, 360],
+      },
+      pulse: {
+        y: [0, -40, 0],
+        x: [0, p.xMovement * 0.3, 0],
+        opacity: [0, 0.4, 0],
+        scale: [1, 0.5, 1],
+      },
+    };
+  };
 
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden bg-background pt-20">
@@ -82,29 +131,9 @@ export function Hero() {
         </svg>
 
         {/* Enhanced floating particles with different types */}
-        {particles.map((p) => {
-          const animationVariants = {
-            glow: {
-              y: [0, -100, 0],
-              x: [0, p.xMovement, 0],
-              opacity: [0, 0.8, 0],
-              scale: [1, 1.5, 1],
-            },
-            float: {
-              y: [0, -60, 0],
-              x: [0, p.xMovement * 0.5, 0],
-              opacity: [0, 0.6, 0],
-              rotate: [0, 180, 360],
-            },
-            pulse: {
-              y: [0, -40, 0],
-              x: [0, p.xMovement * 0.3, 0],
-              opacity: [0, 0.4, 0],
-              scale: [1, 0.5, 1],
-            },
-          };
-
-          const currentAnimation = animationVariants[p.type as keyof typeof animationVariants];
+        {displayParticles.map((p: Particle) => {
+          const variants = getAnimationVariants(p);
+          const currentVariant = shouldReduceMotion ? {} : variants[p.type];
 
           return (
             <motion.div
@@ -121,8 +150,8 @@ export function Hero() {
                 width: p.size,
                 height: p.size,
               }}
-              animate={currentAnimation}
-              transition={{
+              animate={shouldReduceMotion ? {} : currentVariant}
+              transition={shouldReduceMotion ? {} : {
                 duration: p.duration,
                 repeat: Infinity,
                 delay: p.delay,
@@ -136,24 +165,27 @@ export function Hero() {
 
       {/* Main content — two columns with parallax */}
       <motion.div
-        style={{ y: parallaxY, scale: parallaxScale }}
+        style={{
+          y: shouldReduceMotion ? 0 : parallaxY,
+          scale: shouldReduceMotion ? 1 : parallaxScale
+        }}
         className="relative z-10 w-full max-w-7xl mx-auto px-6 py-16"
       >
         <div className="grid lg:grid-cols-2 gap-16 items-center">
 
           {/* ── Left column: copy ── */}
-          <motion.div variants={containerVariants} initial="hidden" animate="visible">
+          <motion.div variants={shouldReduceMotion ? {} : containerVariants} initial="hidden" animate="visible">
             {/* Pill badge */}
-            <motion.div variants={itemVariants} className="mb-6">
+            <motion.div variants={shouldReduceMotion ? {} : itemVariants} className="mb-6">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/25 bg-primary/8 text-primary text-xs font-semibold tracking-wide uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span className={`w-1.5 h-1.5 rounded-full bg-primary ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
                 ML-Powered Edge Security
               </span>
             </motion.div>
 
             {/* Headline */}
             <motion.h1
-              variants={itemVariants}
+              variants={shouldReduceMotion ? {} : itemVariants}
               className="text-4xl md:text-5xl lg:text-[3.4rem] font-display font-bold tracking-tight leading-[1.1] mb-6 text-foreground"
             >
               Intelligent Edge{" "}
@@ -169,7 +201,7 @@ export function Hero() {
 
             {/* Subheading */}
             <motion.p
-              variants={itemVariants}
+              variants={shouldReduceMotion ? {} : itemVariants}
               className="text-base md:text-lg text-muted-foreground leading-relaxed mb-8 max-w-lg"
             >
               Revolutionary AI-powered threat detection that operates entirely at the edge.
@@ -178,7 +210,7 @@ export function Hero() {
             </motion.p>
 
             {/* CTA buttons */}
-            <motion.div variants={itemVariants} whileHover={{ x: 4 }} transition={{ duration: 0.2, type: "spring", stiffness: 400 }} className="flex flex-wrap gap-3 mb-10">
+            <motion.div variants={shouldReduceMotion ? {} : itemVariants} whileHover={shouldReduceMotion ? {} : { x: 4 }} transition={{ duration: 0.2, type: "spring", stiffness: 400 }} className="flex flex-wrap gap-3 mb-10">
               <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow" asChild>
                 <Link href="/auth/register">
                   <Shield className="h-4 w-4" />
@@ -195,7 +227,7 @@ export function Hero() {
             </motion.div>
 
             {/* Stats row */}
-            <motion.div variants={itemVariants} className="flex flex-wrap gap-6">
+            <motion.div variants={shouldReduceMotion ? {} : itemVariants} className="flex flex-wrap gap-6">
               {stats.map((stat) => (
                 <div key={stat.label} className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 
 const services = [
     { name: "ML Inference Engine", status: "operational", latency: "12ms" },
@@ -20,8 +21,8 @@ const statusConfig = {
 };
 
 export function SystemHealth() {
-    const operational = services.filter((s) => s.status === "operational").length;
-    const total = services.length;
+    const operational = useMemo(() => services.filter((s) => s.status === "operational").length, []);
+    const total = useMemo(() => services.length, []);
     const uptime = 99.94;
 
     return (

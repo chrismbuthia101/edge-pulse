@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     AlertTriangle,
@@ -84,16 +84,16 @@ export function AlertFeed() {
     const updateAlert = useAlertStore((s) => s.updateAlert);
     const supabase = createClient();
 
-    // Map store status to filter values
-    const filtered = alerts.filter((a) => {
+    // Map store status to filter values - memoized for performance
+    const filtered = useMemo(() => alerts.filter((a) => {
         if (filter === "ALL") return a.status !== "CLOSED";
         if (filter === "PENDING") return a.status === "PENDING";
         if (filter === "IN_REVIEW") return a.status === "ACKNOWLEDGED" || a.status === "INVESTIGATED";
         if (filter === "CLOSED") return a.status === "CLOSED";
         return true;
-    });
+    }), [alerts, filter]);
 
-    const pendingCount = alerts.filter((a) => a.status === "PENDING").length;
+    const pendingCount = useMemo(() => alerts.filter((a) => a.status === "PENDING").length, [alerts]);
 
     // Resolve alert
     const handleResolve = async (e: React.MouseEvent, alertId: string, currentStatus: AlertStatus) => {

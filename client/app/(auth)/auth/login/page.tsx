@@ -41,7 +41,9 @@ export function LoginPage() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentQuote((prev) => (prev + 1) % securityQuotes.length);
+      if (!document.hidden) {
+        setCurrentQuote((prev) => (prev + 1) % securityQuotes.length);
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -120,6 +122,7 @@ export function LoginPage() {
             className="w-full h-full object-cover rounded-2xl"
             width={500}
             height={500}
+            priority
           />
         </div>
 
@@ -346,6 +349,7 @@ export function LoginPage() {
               className="w-full h-auto object-cover rounded-2xl"
               width={400}
               height={150}
+              priority
             />
           </div>
 

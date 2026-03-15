@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Bell,
@@ -187,6 +187,41 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         };
     }, [addAlert, setAlerts, setDevices, updateAlert, updateDevice]);
 
+    // Memoize derived values to prevent unnecessary re-renders
+    const initials = useMemo(() => {
+        if (!user) return "U";
+        return user.full_name
+            ? user.full_name
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2)
+            : user.email?.[0]?.toUpperCase() ?? "U";
+    }, [user]);
+
+    const recentNotifs = useMemo(() => alerts.slice(0, 4), [alerts]);
+
+    const connConfig = useMemo(() => ({
+        live: {
+            icon: <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />,
+            label: "Live",
+            classes: "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400",
+        },
+        offline: {
+            icon: <WifiOff className="h-3 w-3" />,
+            label: queuedCount > 0 ? `Offline — ${queuedCount} events queued` : "Offline",
+            classes: "bg-destructive/10 border-destructive/20 text-destructive",
+        },
+        syncing: {
+            icon: <Loader2 className="h-3 w-3 animate-spin" />,
+            label: "Syncing",
+            classes: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
+        },
+    }), [queuedCount]);
+
+    const conn = connConfig[connStatus];
+
     // Handle keyboard navigation for notifications
     const handleNotificationKeyDown = (e: React.KeyboardEvent, alertIndex: number) => {
         if (e.key === 'ArrowDown') {
@@ -212,47 +247,13 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
 
     // Mark all alerts as read
-    const handleMarkAllRead = () => {
+    const handleMarkAllRead = useCallback(() => {
         alerts.forEach((a) => {
             if (a.status !== "CLOSED") markRead(a.id);
         });
         setNotifOpen(false);
-    };
+    }, [alerts, markRead]);
 
-    // ── Derived ───────────────────────────────────────────────────────────────
-    const initials = user?.full_name
-        ? user.full_name
-            .split(" ")
-            .map((n: string) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2)
-        : user?.email?.[0]?.toUpperCase() ?? "U";
-
-    const recentNotifs = alerts.slice(0, 4);
-
-    // ── Connectivity badge config ─────────────────────────────────────────────
-    const connConfig: Record<
-        ConnStatus,
-        { icon: React.ReactNode; label: string; classes: string }
-    > = {
-        live: {
-            icon: <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />,
-            label: "Live",
-            classes: "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400",
-        },
-        offline: {
-            icon: <WifiOff className="h-3 w-3" />,
-            label: queuedCount > 0 ? `Offline — ${queuedCount} events queued` : "Offline",
-            classes: "bg-destructive/10 border-destructive/20 text-destructive",
-        },
-        syncing: {
-            icon: <Loader2 className="h-3 w-3 animate-spin" />,
-            label: "Syncing",
-            classes: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
-        },
-    };
-    const conn = connConfig[connStatus];
 
     return (
         <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">

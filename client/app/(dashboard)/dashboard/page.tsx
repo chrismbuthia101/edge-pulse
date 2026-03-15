@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import type { Alert } from "@/lib/supabase/types";
 import {
     ShieldAlert,
     MonitorSmartphone,
@@ -42,24 +43,43 @@ export default function DashboardPage() {
     const devices = useDeviceStore((s) => s.devices);
     const onlineCount = useDeviceStore((s) => s.onlineCount);
 
-    // Derived stats
-    const activeAlerts = alerts.filter((a) => a.status !== "CLOSED").length || 89;
-    const threatsBlocked = alerts.filter((a) => a.status === "CLOSED").length || 2341;
-    const criticalCount = alerts.filter((a) => a.severity === "critical" && a.status !== "CLOSED").length;
+    // Derived stats - memoized for performance
+    const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length || 89, [alerts]);
+    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length || 2341, [alerts]);
+    const criticalCount = useMemo(() => alerts.filter((a) => a.severity === "critical" && a.status !== "CLOSED").length, [alerts]);
 
     // Average inference latency from recent alerts
-    const latencyAlerts = alerts.filter((a) => a.inference_latency_ms > 0).slice(0, 50);
-    const avgLatency = latencyAlerts.length > 0
-        ? Math.round(latencyAlerts.reduce((sum, a) => sum + a.inference_latency_ms, 0) / latencyAlerts.length)
-        : 312;
+    const latencyAlerts = useMemo(() => alerts.filter((a) => a.inference_latency_ms > 0).slice(0, 50), [alerts]);
+    const avgLatency = useMemo(() => latencyAlerts.length > 0
+        ? Math.round(latencyAlerts.reduce((sum: number, a: Alert) => sum + a.inference_latency_ms, 0) / latencyAlerts.length)
+        : 312, [latencyAlerts]);
 
     // Resolved today
-    const today = new Date().toDateString();
-    const resolvedToday = alerts.filter(
+    const today = useMemo(() => new Date().toDateString(), []);
+    const resolvedToday = useMemo(() => alerts.filter(
         (a) => a.status === "CLOSED" && a.closed_at && new Date(a.closed_at).toDateString() === today
-    ).length;
+    ).length, [alerts, today]);
 
-    const stats = [
+    interface StatCard {
+        title: string;
+        value: string;
+        delta: string;
+        deltaPositive: boolean;
+        icon: React.ComponentType<React.SVGAttributes<SVGSVGElement>>;
+        accent: string;
+        accentBg: string;
+        accentBorder: string;
+        href: string | null;
+    }
+
+    interface IncidentItem {
+        label: string;
+        value: number | string;
+        color: string;
+        bg: string;
+        icon: React.ComponentType<React.SVGAttributes<SVGSVGElement>>;
+    }
+    const stats = useMemo(() => [
         {
             title: "Total Devices",
             value: devices.length > 0 ? devices.length.toLocaleString() : "1,247",
@@ -104,9 +124,9 @@ export default function DashboardPage() {
             accentBorder: "border-violet-500/20",
             href: null,
         },
-    ];
+    ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, threatsBlocked, resolvedToday]);
 
-    const incidentSummary = [
+    const incidentSummary = useMemo(() => [
         {
             label: "Critical",
             value: criticalCount,
@@ -135,7 +155,7 @@ export default function DashboardPage() {
             bg: "bg-violet-500/10",
             icon: TrendingUp,
         },
-    ];
+    ], [criticalCount, resolvedToday, avgLatency]);
 
     return (
         <div className="space-y-4 lg:space-y-6 max-w-[1400px]">
@@ -172,7 +192,7 @@ export default function DashboardPage() {
 
             {/* Stat cards — read from stores */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-                {stats.map((stat, i) => (
+                {stats.map((stat: StatCard, i: number) => (
                     <motion.div
                         key={stat.title}
                         initial={{ opacity: 0, y: 20 }}
@@ -218,7 +238,7 @@ export default function DashboardPage() {
                 transition={{ delay: 0.3, duration: 0.4 }}
                 className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3"
             >
-                {incidentSummary.map((item) => (
+                {incidentSummary.map((item: IncidentItem) => (
                     <div
                         key={item.label}
                         className={`flex items-center gap-2 lg:gap-3 p-3 lg:p-3.5 rounded-xl border border-border ${item.bg}`}
