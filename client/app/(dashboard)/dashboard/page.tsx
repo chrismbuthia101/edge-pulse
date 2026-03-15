@@ -19,6 +19,12 @@ import { ThreatChart } from "@/components/dashboard/threat-chart";
 import { AlertFeed } from "@/components/dashboard/alert-feed";
 import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
+import { LogIntegrityPanel } from "@/components/dashboard/log-integrity-panel";
+import { ForensicExport } from "@/components/dashboard/forensic-export";
+import { DetectionThresholdSlider } from "@/components/dashboard/detection-threshold-slider";
+import { TelemetryRetention } from "@/components/dashboard/telemetry-retention";
+import { PrivacyModeIndicator } from "@/components/dashboard/privacy-mode-indicator";
+import { PurgeDeviceData } from "@/components/dashboard/purge-device-data";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -234,6 +240,23 @@ export default function DashboardPage() {
                 <div className="space-y-4 lg:space-y-5">
                     <ShapPanel />
                     <SystemHealth />
+                </div>
+            </div>
+
+            {/* Security & Forensics Section */}
+            <div className="space-y-4 lg:space-y-5">
+                <div className="flex items-center gap-2 mb-3">
+                    <Shield className="h-4 w-4 text-primary" />
+                    <h2 className="text-lg font-semibold text-foreground">Security & Forensics</h2>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
+                    <LogIntegrityPanel />
+                    <ForensicExport />
+                    <DetectionThresholdSlider />
+                    <TelemetryRetention />
+                    <PrivacyModeIndicator />
+                    <PurgeDeviceData />
                 </div>
             </div>
         </div>
