@@ -187,6 +187,30 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         };
     }, [addAlert, setAlerts, setDevices, updateAlert, updateDevice]);
 
+    // Handle keyboard navigation for notifications
+    const handleNotificationKeyDown = (e: React.KeyboardEvent, alertIndex: number) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextIndex = (alertIndex + 1) % recentNotifs.length;
+            const nextElement = document.querySelector(`[data-notification-item="${nextIndex}"]`) as HTMLElement;
+            nextElement?.focus();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const prevIndex = alertIndex === 0 ? recentNotifs.length - 1 : alertIndex - 1;
+            const prevElement = document.querySelector(`[data-notification-item="${prevIndex}"]`) as HTMLElement;
+            prevElement?.focus();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const alert = recentNotifs[alertIndex];
+            if (alert) {
+                markRead(alert.id);
+                setNotifOpen(false);
+                router.push("/dashboard/alerts");
+            }
+        }
+    };
+
+
     // Mark all alerts as read
     const handleMarkAllRead = () => {
         alerts.forEach((a) => {
@@ -194,7 +218,6 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
         });
         setNotifOpen(false);
     };
-
 
     // ── Derived ───────────────────────────────────────────────────────────────
     const initials = user?.full_name
@@ -302,8 +325,12 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
             </div>
 
             {/* Command palette hint */}
-            <button className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60 transition-colors">
-                <Command className="h-3 w-3" />
+            <button
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+                aria-label="Open command palette (Press K)"
+                type="button"
+            >
+                <Command className="h-3 w-3" aria-hidden="true" />
                 <span>K</span>
             </button>
 
@@ -318,7 +345,10 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 >
                     <Bell className="h-4 w-4" />
                     {unreadCount > 0 && (
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-card" />
+                        <span
+                            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-card"
+                            aria-label={`${unreadCount} unread notifications`}
+                        />
                     )}
                 </Button>
 
@@ -358,15 +388,20 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                             No notifications
                                         </div>
                                     ) : (
-                                        recentNotifs.map((alert) => (
+                                        recentNotifs.map((alert, index) => (
                                             <div
                                                 key={alert.id}
-                                                className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                                                data-notification-item={index}
+                                                className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus:bg-muted/50 focus:outline-none"
                                                 onClick={() => {
                                                     markRead(alert.id);
                                                     setNotifOpen(false);
                                                     router.push("/dashboard/alerts");
                                                 }}
+                                                onKeyDown={(e) => handleNotificationKeyDown(e, index)}
+                                                tabIndex={0}
+                                                role="button"
+                                                aria-label={`Notification: ${alert.title} from ${alert.device_name}`}
                                             >
                                                 <div
                                                     className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${alert.severity === "critical"
@@ -428,7 +463,10 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
             {/* User avatar */}
             <div className="flex items-center gap-2.5 ml-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <div
+                    className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"
+                    aria-label={`User: ${user?.full_name ?? user?.email?.split("@")[0] ?? "User"}`}
+                >
                     <span className="text-xs font-bold text-primary">{initials}</span>
                 </div>
                 <div className="hidden md:block min-w-0">

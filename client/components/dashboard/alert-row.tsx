@@ -24,6 +24,8 @@ const severityConfig = {
         bg: "bg-destructive/10",
         border: "border-destructive/20",
         dot: "bg-destructive",
+        icon: "⚠️",
+        ariaLabel: "Critical severity alert",
     },
     high: {
         label: "High",
@@ -31,6 +33,8 @@ const severityConfig = {
         bg: "bg-orange-500/10",
         border: "border-orange-500/20",
         dot: "bg-orange-500",
+        icon: "⚡",
+        ariaLabel: "High severity alert",
     },
     medium: {
         label: "Medium",
@@ -38,6 +42,8 @@ const severityConfig = {
         bg: "bg-amber-500/10",
         border: "border-amber-500/20",
         dot: "bg-amber-500",
+        icon: "⚠️",
+        ariaLabel: "Medium severity alert",
     },
     low: {
         label: "Low",
@@ -45,6 +51,8 @@ const severityConfig = {
         bg: "bg-primary/10",
         border: "border-primary/20",
         dot: "bg-primary",
+        icon: "ℹ️",
+        ariaLabel: "Low severity alert",
     },
 };
 
@@ -158,9 +166,21 @@ export function AlertRow({
                 compact && "py-2"
             )}
             onClick={() => onSelect(isSelected ? null : alert.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect(isSelected ? null : alert.id);
+                }
+            }}
+            aria-label={`${sev.ariaLabel}: ${alert.title} from ${alert.device_name}`}
         >
             <div className="flex items-start gap-2 lg:gap-3">
-                <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", sev.dot)} />
+                <div
+                    className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", sev.dot)}
+                    aria-hidden="true"
+                />
 
                 <div className="flex-1 min-w-0">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 mb-1 gap-1">
@@ -174,8 +194,10 @@ export function AlertRow({
                                 sev.color,
                                 sev.border
                             )}
+                            aria-label={`Severity: ${sev.label}`}
                         >
-                            {sev.label}
+                            <span className="sr-only">Severity: </span>
+                            {sev.icon} {sev.label}
                         </span>
                         {/* Anomaly score badge */}
                         <span
@@ -183,20 +205,24 @@ export function AlertRow({
                                 "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border w-fit shrink-0",
                                 confidenceBadgeClass(alert.anomaly_score ?? alert.confidence)
                             )}
+                            aria-label={`Confidence: ${((alert.anomaly_score ?? alert.confidence) * 100).toFixed(0)}%`}
                         >
+                            <span className="sr-only">Confidence: </span>
                             {((alert.anomaly_score ?? alert.confidence) * 100).toFixed(0)}%
                         </span>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                            <MonitorSmartphone className="h-3 w-3 shrink-0" />
+                            <MonitorSmartphone className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span className="truncate">{alert.device_name}</span>
                         </span>
                         <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            {relativeTime(alert.created_at)}
+                            <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <span aria-label={`Created ${relativeTime(alert.created_at)}`}>
+                                {relativeTime(alert.created_at)}
+                            </span>
                         </span>
-                        <span className="text-muted-foreground/70 hidden sm:inline">
+                        <span className="text-muted-foreground/70 hidden sm:inline" aria-label={`Status: ${alert.status.replace("_", " ")}`}>
                             {alert.status.replace("_", " ")}
                         </span>
                     </div>

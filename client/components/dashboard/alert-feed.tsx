@@ -154,17 +154,20 @@ export function AlertFeed() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
                     <h3 className="text-sm font-semibold text-foreground truncate">Active Alerts</h3>
                     {pendingCount > 0 && (
-                        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30 shrink-0">
+                        <span
+                            className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30 shrink-0"
+                            aria-label={`${pendingCount} pending alerts`}
+                        >
                             {pendingCount}
                         </span>
                     )}
                 </div>
 
                 {/* Filter tabs */}
-                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 min-w-0 overflow-x-auto">
+                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 min-w-0 overflow-x-auto" role="tablist" aria-label="Alert filters">
                     {(["ALL", "PENDING", "IN_REVIEW", "CLOSED"] as const).map((f) => (
                         <button
                             key={f}
@@ -175,6 +178,9 @@ export function AlertFeed() {
                                     ? "bg-card text-foreground shadow-sm"
                                     : "text-muted-foreground hover:text-foreground"
                             )}
+                            role="tab"
+                            aria-selected={filter === f}
+                            aria-controls="alert-list"
                         >
                             {f === "IN_REVIEW" ? "Review" : f.charAt(0) + f.slice(1).toLowerCase()}
                         </button>
@@ -183,7 +189,12 @@ export function AlertFeed() {
             </div>
 
             {/* Alert list */}
-            <div className="divide-y divide-border max-h-[350px] lg:max-h-[420px] overflow-y-auto">
+            <div
+                className="divide-y divide-border max-h-[350px] lg:max-h-[420px] overflow-y-auto"
+                id="alert-list"
+                role="tabpanel"
+                aria-label={`Filtered alerts: ${filter.toLowerCase()}`}
+            >
                 <AnimatePresence mode="popLayout">
                     {filtered.map((alert, i) => {
                         const sev = severityConfig[alert.severity] ?? severityConfig.medium;

@@ -43,7 +43,7 @@ export default function DashboardLayout({
                     } ml-0 ${mobileSidebarOpen ? "lg:backdrop-blur-none backdrop-blur-sm" : ""}`}
             >
                 <TopBar onMobileMenuToggle={() => setMobileSidebarOpen(!mobileSidebarOpen)} />
-                <main className="flex-1 p-4 lg:p-6 overflow-auto">{children}</main>
+                <main id="main-content" className="flex-1 p-4 lg:p-6 overflow-auto">{children}</main>
             </div>
         </div>
     );

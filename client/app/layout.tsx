@@ -3,6 +3,7 @@ import { Syne, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { SkipToContent } from "@/components/ui/skip-to-content";
 import "./globals.css";
 
 const syne = Syne({
@@ -49,6 +50,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider>
+            <SkipToContent />
             {children}
             <Toaster />
           </TooltipProvider>

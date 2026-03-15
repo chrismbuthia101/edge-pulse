@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 
 const navItems = [
     {
@@ -59,6 +60,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
     const pathname = usePathname();
     const router = useRouter();
     const supabase = createClient();
+    const focusTrapRef = useFocusTrap(mobileOpen || false);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -90,6 +92,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
             </AnimatePresence>
 
             <motion.aside
+                ref={focusTrapRef}
                 initial={false}
                 animate={{
                     width: collapsed ? 68 : 240,
@@ -97,10 +100,12 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                 transition={{ duration: 0.3, ease: "easeInOut" }}
                 className={`fixed left-0 top-0 h-screen bg-card border-r border-border z-40 flex flex-col overflow-hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                     }`}
+                role="navigation"
+                aria-label="Main navigation"
             >
                 {/* Logo area */}
                 <div className="h-16 flex items-center px-4 border-b border-border shrink-0">
-                    <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
+                    <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden" aria-label="EdgePulse Dashboard">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                             <Logo className="h-5 w-5 text-primary" />
                         </div>
@@ -122,6 +127,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                         <button
                             onClick={onToggle}
                             className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                         >
                             {collapsed ? (
                                 <ChevronRight className="h-3.5 w-3.5" />
@@ -133,7 +139,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-none">
+                <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-none" aria-label="Main navigation">
                     {navItems.map((group) => (
                         <div key={group.group} className="mb-4">
                             <AnimatePresence>
@@ -269,7 +275,10 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
                 {/* Bottom actions */}
                 <div className="border-t border-border py-3 px-2 space-y-1">
-                    <button className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+                    <button
+                        className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        aria-label="Help & Support"
+                    >
                         <HelpCircle className="h-4 w-4 shrink-0" />
                         <AnimatePresence>
                             {!collapsed && (
@@ -287,6 +296,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                     <button
                         onClick={handleLogout}
                         className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors"
+                        aria-label="Sign out"
                     >
                         <LogOut className="h-4 w-4 shrink-0" />
                         <AnimatePresence>
