@@ -1,208 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-    Bell,
-    Search,
-    Command,
-    X,
     AlertTriangle,
-    MonitorSmartphone,
-    WifiOff,
+    Bell,
+    Command,
     Loader2,
+    MonitorSmartphone,
+    Search,
+    WifiOff,
+    X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
-import type {
-    Alert,
-    Device,
-    RealtimeAlertPayload,
-    RealtimeDevicePayload,
-} from "@/lib/supabase/types";
+import { useNotifications } from "@/lib/hooks/use-notifications";
+import type { ConnStatus } from "@/lib/hooks/use-notifications";
 
-type ConnStatus = "live" | "offline" | "syncing";
-
-
-interface TopBarProps {
-    onMobileMenuToggle?: () => void;
-}
-
-export function TopBar({ onMobileMenuToggle }: TopBarProps) {
-    const router = useRouter();
-    const [searchOpen, setSearchOpen] = useState(false);
-    const [notifOpen, setNotifOpen] = useState(false);
-    const [user, setUser] = useState<{ email?: string; full_name?: string } | null>(null);
-
-    const [connStatus, setConnStatus] = useState<ConnStatus>("live");
-    const [queuedCount, setQueuedCount] = useState(0);
-
-    const { alerts, setAlerts, addAlert, updateAlert, unreadCount, markRead } = useAlertStore();
-    const { setDevices, updateDevice } = useDeviceStore();
-
-    const supabase = createClient();
-    const supabaseRef = useRef(supabase);
-
-    useEffect(() => {
-        supabaseRef.current = supabase;
-    }, [supabase]);
-
-    useEffect(() => {
-        supabaseRef.current.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUser({
-                    email: data.user.email,
-                    full_name: data.user.user_metadata?.full_name,
-                });
-            }
-        });
-    }, []);
-
-    // Initial data fetch + Realtime subscriptions
-    useEffect(() => {
-        const sb = supabaseRef.current;
-        let mounted = true;
-
-        const fetchAlerts = async () => {
-            const { data, error } = await sb
-                .from("alert_records")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(100);
-
-            if (!error && data && mounted) {
-                setAlerts(data as Alert[]);
-            }
-        };
-
-        const fetchDevices = async () => {
-            const { data, error } = await sb
-                .from("devices")
-                .select("*")
-                .order("name", { ascending: true });
-
-            if (!error && data && mounted) {
-                setDevices(data as Device[]);
-            }
-        };
-
-        const fetchSyncQueue = async () => {
-            const { count, error } = await sb
-                .from("sync_queue")
-                .select("*", { count: "exact", head: true })
-                .in("status", ["PENDING", "FAILED"]);
-
-            if (!error && mounted) {
-                setQueuedCount(count ?? 0);
-            }
-        };
-
-        fetchAlerts();
-        fetchDevices();
-        fetchSyncQueue();
-
-        // Realtime: alerts channel
-        const alertsChannel = sb
-            .channel("realtime-alerts")
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "alert_records" },
-                (payload) => {
-                    if (!mounted) return;
-                    const p = payload as unknown as RealtimeAlertPayload;
-                    setConnStatus("live");
-
-                    if (p.eventType === "INSERT") {
-                        addAlert(p.new);
-                    } else if (p.eventType === "UPDATE") {
-                        updateAlert(p.new.id, p.new);
-                    }
-                }
-            )
-            .subscribe((status) => {
-                if (!mounted) return;
-                if (status === "SUBSCRIBED") setConnStatus("live");
-                if (status === "CLOSED" || status === "CHANNEL_ERROR") setConnStatus("offline");
-                if (status === "TIMED_OUT") setConnStatus("syncing");
-            });
-
-        // Realtime: devices channel
-        const devicesChannel = sb
-            .channel("realtime-devices")
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "devices" },
-                (payload) => {
-                    if (!mounted) return;
-                    const p = payload as unknown as RealtimeDevicePayload;
-                    if (p.eventType === "UPDATE" || p.eventType === "INSERT") {
-                        updateDevice(p.new);
-                    }
-                }
-            )
-            .subscribe();
-
-        // Realtime: sync_queue channel
-        const syncChannel = sb
-            .channel("realtime-sync-queue")
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "sync_queue" },
-                () => {
-                    if (!mounted) return;
-                    setConnStatus("syncing");
-                    fetchSyncQueue().then(() => {
-                        if (mounted) setConnStatus("live");
-                    });
-                }
-            )
-            .subscribe();
-
-        // Browser online/offline events
-        const handleOnline = () => {
-            setConnStatus("syncing");
-            fetchAlerts();
-            fetchDevices();
-            fetchSyncQueue();
-            setTimeout(() => setConnStatus("live"), 2000);
-        };
-        const handleOffline = () => setConnStatus("offline");
-
-        window.addEventListener("online", handleOnline);
-        window.addEventListener("offline", handleOffline);
-
-        return () => {
-            mounted = false;
-            sb.removeChannel(alertsChannel);
-            sb.removeChannel(devicesChannel);
-            sb.removeChannel(syncChannel);
-            window.removeEventListener("online", handleOnline);
-            window.removeEventListener("offline", handleOffline);
-        };
-    }, [addAlert, setAlerts, setDevices, updateAlert, updateDevice]);
-
-    // Memoize derived values to prevent unnecessary re-renders
-    const initials = useMemo(() => {
-        if (!user) return "U";
-        return user.full_name
-            ? user.full_name
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 2)
-            : user.email?.[0]?.toUpperCase() ?? "U";
-    }, [user]);
-
-    const recentNotifs = useMemo(() => alerts.slice(0, 4), [alerts]);
-
-    const connConfig = useMemo(() => ({
+function useConnConfig(status: ConnStatus, queuedCount: number, isLoading: boolean, hasError: boolean) {
+    const configs = {
         live: {
             icon: <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />,
             label: "Live",
@@ -218,46 +36,50 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
             label: "Syncing",
             classes: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
         },
-    }), [queuedCount]);
+    } satisfies Record<ConnStatus, { icon: React.ReactNode; label: string; classes: string }>;
 
-    const conn = connConfig[connStatus];
+    const base = configs[status];
 
-    // Handle keyboard navigation for notifications
-    const handleNotificationKeyDown = (e: React.KeyboardEvent, alertIndex: number) => {
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const nextIndex = (alertIndex + 1) % recentNotifs.length;
-            const nextElement = document.querySelector(`[data-notification-item="${nextIndex}"]`) as HTMLElement;
-            nextElement?.focus();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const prevIndex = alertIndex === 0 ? recentNotifs.length - 1 : alertIndex - 1;
-            const prevElement = document.querySelector(`[data-notification-item="${prevIndex}"]`) as HTMLElement;
-            prevElement?.focus();
-        } else if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            const alert = recentNotifs[alertIndex];
-            if (alert) {
-                markRead(alert.id);
-                setNotifOpen(false);
-                router.push("/dashboard/alerts");
-            }
-        }
-    };
+    if (isLoading) return { ...base, icon: <Loader2 className="h-3 w-3 animate-spin" />, label: "Loading…" };
+    if (hasError) return { ...base, icon: <WifiOff className="h-3 w-3" />, label: "Error" };
 
+    return base;
+}
 
-    // Mark all alerts as read
-    const handleMarkAllRead = useCallback(() => {
-        alerts.forEach((a) => {
-            if (a.status !== "CLOSED") markRead(a.id);
-        });
-        setNotifOpen(false);
-    }, [alerts, markRead]);
+interface TopBarProps {
+    onMobileMenuToggle?: () => void;
+}
 
+export function TopBar({ onMobileMenuToggle }: TopBarProps) {
+    const [searchOpen, setSearchOpen] = useState(false);
+
+    const {
+        initials,
+        displayName,
+
+        connStatus,
+        queuedCount,
+        isLoading,
+        hasError,
+
+        notifOpen,
+        toggleNotifications,
+        closeNotifications,
+        recentNotifs,
+        unreadCount,
+        handleMarkAllRead,
+        handleNotificationClick,
+        handleNotificationKeyDown,
+        handleViewAllNotifications,
+
+        onlineCount,
+    } = useNotifications();
+
+    const conn = useConnConfig(connStatus, queuedCount, isLoading, hasError);
 
     return (
         <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
-            {/* Mobile menu button */}
+            {/* Mobile menu toggle */}
             <button
                 onClick={onMobileMenuToggle}
                 className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -268,10 +90,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 </svg>
             </button>
 
-            {/* Dynamic Breadcrumb */}
             <DynamicBreadcrumb />
 
-            {/* Persistent connectivity status badge */}
+            {/* Connectivity badge */}
             <div
                 className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-300 ${conn.classes}`}
             >
@@ -286,6 +107,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 <AnimatePresence>
                     {searchOpen ? (
                         <motion.div
+                            key="search-open"
                             initial={{ width: 0, opacity: 0 }}
                             animate={{ width: "calc(100vw - 2rem)", opacity: 1 }}
                             exit={{ width: 0, opacity: 0 }}
@@ -296,11 +118,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                                 <Input
                                     autoFocus
-                                    placeholder="Search devices, alerts..."
+                                    placeholder="Search devices, alerts…"
                                     className="pl-9 pr-8 h-9 text-sm w-full sm:w-64"
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Escape") setSearchOpen(false);
-                                    }}
+                                    onKeyDown={(e) => { if (e.key === "Escape") setSearchOpen(false); }}
                                 />
                                 <button
                                     onClick={() => setSearchOpen(false)}
@@ -313,6 +133,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                         </motion.div>
                     ) : (
                         <Button
+                            key="search-closed"
                             variant="ghost"
                             size="icon"
                             className="h-9 w-9"
@@ -341,14 +162,16 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 relative"
-                    onClick={() => setNotifOpen(!notifOpen)}
+                    onClick={toggleNotifications}
                     aria-label={`${unreadCount} unread notifications`}
+                    aria-expanded={notifOpen}
+                    aria-haspopup="true"
                 >
                     <Bell className="h-4 w-4" />
                     {unreadCount > 0 && (
                         <span
                             className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-card"
-                            aria-label={`${unreadCount} unread notifications`}
+                            aria-hidden="true"
                         />
                     )}
                 </Button>
@@ -356,17 +179,20 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 <AnimatePresence>
                     {notifOpen && (
                         <>
-                            <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                            {/* Click-outside backdrop */}
+                            <div className="fixed inset-0 z-40" onClick={closeNotifications} />
+
                             <motion.div
                                 initial={{ opacity: 0, y: 8, scale: 0.95 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                                 transition={{ duration: 0.15 }}
                                 className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
-                                onKeyDown={(e) => {
-                                    if (e.key === "Escape") setNotifOpen(false);
-                                }}
+                                role="dialog"
+                                aria-label="Notifications"
+                                onKeyDown={(e) => { if (e.key === "Escape") closeNotifications(); }}
                             >
+                                {/* Panel header */}
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                                     <span className="text-sm font-semibold text-foreground">
                                         Notifications
@@ -378,11 +204,13 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                     </span>
                                     <button
                                         onClick={handleMarkAllRead}
-                                        className="text-xs text-primary hover:underline cursor-pointer"
+                                        className="text-xs text-primary hover:underline"
                                     >
                                         Mark all read
                                     </button>
                                 </div>
+
+                                {/* Notification items */}
                                 <div className="divide-y divide-border max-h-80 overflow-y-auto">
                                     {recentNotifs.length === 0 ? (
                                         <div className="px-4 py-6 text-center text-xs text-muted-foreground">
@@ -392,25 +220,18 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                         recentNotifs.map((alert, index) => (
                                             <div
                                                 key={alert.id}
-                                                data-notification-item={index}
+                                                data-notif-item={index}
                                                 className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus:bg-muted/50 focus:outline-none"
-                                                onClick={() => {
-                                                    markRead(alert.id);
-                                                    setNotifOpen(false);
-                                                    router.push("/dashboard/alerts");
-                                                }}
+                                                onClick={() => handleNotificationClick(alert.id)}
                                                 onKeyDown={(e) => handleNotificationKeyDown(e, index)}
                                                 tabIndex={0}
                                                 role="button"
-                                                aria-label={`Notification: ${alert.title} from ${alert.device_name}`}
+                                                aria-label={`${alert.title} from ${alert.device_name}`}
                                             >
                                                 <div
-                                                    className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${alert.severity === "critical"
-                                                        ? "bg-destructive/15"
-                                                        : alert.severity === "high"
-                                                            ? "bg-orange-500/15"
-                                                            : alert.severity === "medium"
-                                                                ? "bg-amber-500/15"
+                                                    className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${alert.severity === "critical" ? "bg-destructive/15"
+                                                        : alert.severity === "high" ? "bg-orange-500/15"
+                                                            : alert.severity === "medium" ? "bg-amber-500/15"
                                                                 : "bg-primary/15"
                                                         }`}
                                                 >
@@ -430,6 +251,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                                         />
                                                     )}
                                                 </div>
+
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-xs font-medium text-foreground truncate">
                                                         {alert.title}
@@ -439,17 +261,23 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                                                         {new Date(alert.created_at).toLocaleTimeString()}
                                                     </p>
                                                 </div>
+
+                                                {!alert.read && (
+                                                    <span
+                                                        className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5"
+                                                        aria-label="Unread"
+                                                    />
+                                                )}
                                             </div>
                                         ))
                                     )}
                                 </div>
+
+                                {/* Panel footer */}
                                 <div className="px-4 py-2.5 border-t border-border">
                                     <button
                                         className="text-xs text-primary hover:underline w-full text-center"
-                                        onClick={() => {
-                                            setNotifOpen(false);
-                                            router.push("/dashboard/notifications");
-                                        }}
+                                        onClick={handleViewAllNotifications}
                                     >
                                         View all notifications
                                     </button>
@@ -460,19 +288,33 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 </AnimatePresence>
             </div>
 
+            {/* Quick stats */}
+            <div className="hidden md:flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1 text-muted-foreground">
+                    <MonitorSmartphone className="h-4 w-4" />
+                    <span>{onlineCount}</span>
+                </div>
+                {queuedCount > 0 && (
+                    <div className="flex items-center gap-1 text-yellow-500">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>{queuedCount}</span>
+                    </div>
+                )}
+            </div>
+
             <ThemeToggle />
 
             {/* User avatar */}
             <div className="flex items-center gap-2.5 ml-2">
                 <div
                     className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"
-                    aria-label={`User: ${user?.full_name ?? user?.email?.split("@")[0] ?? "User"}`}
+                    aria-label={`User: ${displayName}`}
                 >
                     <span className="text-xs font-bold text-primary">{initials}</span>
                 </div>
                 <div className="hidden md:block min-w-0">
                     <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
-                        {user?.full_name ?? user?.email?.split("@")[0] ?? "User"}
+                        {displayName}
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-none">Administrator</p>
                 </div>

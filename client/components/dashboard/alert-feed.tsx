@@ -1,27 +1,27 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
     AlertTriangle,
+    Brain,
+    CheckCircle2,
     ChevronRight,
     Clock,
-    MonitorSmartphone,
-    CheckCircle2,
-    X,
-    Eye,
-    Brain,
     Cpu,
+    Eye,
+    Loader2,
+    MonitorSmartphone,
+    X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { useAlertStore } from "@/stores/alert-store";
-import { createClient } from "@/lib/supabase/client";
-import type { AlertStatus } from "@/lib/supabase/types";
-import { toast } from "sonner";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { type AlertFilter, useAlerts } from "@/lib/hooks/use-alerts";
+import type { AlertStatus } from "@/lib/supabase/types";
 
-const severityConfig = {
+// ─── Config ────────────────────────────────────────────────────────────────────
+
+const SEVERITY_CONFIG = {
     critical: {
         label: "Critical",
         color: "text-destructive",
@@ -50,112 +50,53 @@ const severityConfig = {
         border: "border-primary/20",
         dot: "bg-primary",
     },
+} as const;
+
+const FILTER_LABELS: Record<AlertFilter, string> = {
+    ALL: "All",
+    PENDING: "Pending",
+    IN_REVIEW: "Review",
+    CLOSED: "Closed",
 };
 
-// Status lifecycle: PENDING → ACKNOWLEDGED → INVESTIGATED → CLOSED
-const nextStatus: Record<AlertStatus, AlertStatus | null> = {
-    PENDING: "ACKNOWLEDGED",
-    ACKNOWLEDGED: "INVESTIGATED",
-    INVESTIGATED: "CLOSED",
-    CLOSED: null,
+const EMPTY_MESSAGES: Record<AlertFilter, string> = {
+    ALL: "No active alerts",
+    PENDING: "No pending alerts",
+    IN_REVIEW: "No alerts under review",
+    CLOSED: "No closed alerts",
 };
 
-const confidenceBadgeClass = (score: number) => {
+function confidenceBadgeClass(score: number) {
     if (score >= 0.9) return "text-destructive bg-destructive/10 border-destructive/25";
     if (score >= 0.7) return "text-orange-500 bg-orange-500/10 border-orange-500/25";
     return "text-amber-500 bg-amber-500/10 border-amber-500/25";
-};
+}
+
+// ─── Component ─────────────────────────────────────────────────────────────────
 
 export function AlertFeed() {
-    const [filter, setFilter] = useState<"ALL" | "PENDING" | "IN_REVIEW" | "CLOSED">("ALL");
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [currentTime, setCurrentTime] = useState(() => Date.now());
-
-    // Update current time every minute to keep relative times fresh
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setCurrentTime(Date.now());
-        }, 60000); // Update every minute
-
-        return () => clearInterval(interval);
-    }, []);
-
-    const alerts = useAlertStore((s) => s.alerts);
-    const updateAlert = useAlertStore((s) => s.updateAlert);
-    const supabase = createClient();
-
-    // Map store status to filter values - memoized for performance
-    const filtered = useMemo(() => alerts.filter((a) => {
-        if (filter === "ALL") return a.status !== "CLOSED";
-        if (filter === "PENDING") return a.status === "PENDING";
-        if (filter === "IN_REVIEW") return a.status === "ACKNOWLEDGED" || a.status === "INVESTIGATED";
-        if (filter === "CLOSED") return a.status === "CLOSED";
-        return true;
-    }), [alerts, filter]);
-
-    const pendingCount = useMemo(() => alerts.filter((a) => a.status === "PENDING").length, [alerts]);
-
-    // Resolve alert
-    const handleResolve = async (e: React.MouseEvent, alertId: string, currentStatus: AlertStatus) => {
-        e.stopPropagation();
-        const next = nextStatus[currentStatus];
-        if (!next) return;
-
-        const now = new Date().toISOString();
-        const updates: Record<string, string> = { status: next };
-        if (next === "ACKNOWLEDGED") updates.acknowledged_at = now;
-        if (next === "INVESTIGATED") updates.investigated_at = now;
-        if (next === "CLOSED") updates.closed_at = now;
-
-        updateAlert(alertId, updates as never);
-
-        const { error } = await supabase
-            .from("alert_records")
-            .update(updates)
-            .eq("id", alertId);
-
-        if (error) {
-            toast.error("Failed to update alert");
-            // revert optimistic update
-            updateAlert(alertId, { status: currentStatus });
-        }
-    };
-
-    // Dismiss alert
-    const handleDismiss = async (e: React.MouseEvent, alertId: string) => {
-        e.stopPropagation();
-        const now = new Date().toISOString();
-        updateAlert(alertId, { status: "CLOSED", closed_at: now } as never);
-
-        const { error } = await supabase
-            .from("alert_records")
-            .update({ status: "CLOSED", closed_at: now })
-            .eq("id", alertId);
-
-        if (error) {
-            toast.error("Failed to dismiss alert");
-            updateAlert(alertId, { status: "PENDING" } as never);
-        }
-    };
-
-    // Format relative time
-    const relativeTime = (iso: string) => {
-        const diff = currentTime - new Date(iso).getTime();
-        const m = Math.floor(diff / 60000);
-        if (m < 1) return "just now";
-        if (m < 60) return `${m}m ago`;
-        const h = Math.floor(m / 60);
-        if (h < 24) return `${h}h ago`;
-        return `${Math.floor(h / 24)}d ago`;
-    };
+    const {
+        alerts,
+        filtered,
+        pendingCount,
+        loading,
+        filter,
+        setFilter,
+        selectedId,
+        toggleSelected,
+        handleResolve,
+        handleDismiss,
+        relativeTime,
+    } = useAlerts();
 
     return (
         <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
-            {/* Header */}
+            {/* ── Header ── */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                     <AlertTriangle className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
                     <h3 className="text-sm font-semibold text-foreground truncate">Active Alerts</h3>
+
                     {pendingCount > 0 && (
                         <span
                             className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30 shrink-0"
@@ -164,11 +105,19 @@ export function AlertFeed() {
                             {pendingCount}
                         </span>
                     )}
+
+                    {loading && (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                    )}
                 </div>
 
                 {/* Filter tabs */}
-                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 min-w-0 overflow-x-auto" role="tablist" aria-label="Alert filters">
-                    {(["ALL", "PENDING", "IN_REVIEW", "CLOSED"] as const).map((f) => (
+                <div
+                    className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 overflow-x-auto"
+                    role="tablist"
+                    aria-label="Alert filters"
+                >
+                    {(["ALL", "PENDING", "IN_REVIEW", "CLOSED"] as AlertFilter[]).map((f) => (
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
@@ -182,23 +131,24 @@ export function AlertFeed() {
                             aria-selected={filter === f}
                             aria-controls="alert-list"
                         >
-                            {f === "IN_REVIEW" ? "Review" : f.charAt(0) + f.slice(1).toLowerCase()}
+                            {FILTER_LABELS[f]}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Alert list */}
+            {/* ── Alert list ── */}
             <div
-                className="divide-y divide-border max-h-[350px] lg:max-h-[420px] overflow-y-auto"
                 id="alert-list"
                 role="tabpanel"
                 aria-label={`Filtered alerts: ${filter.toLowerCase()}`}
+                className="divide-y divide-border max-h-[350px] lg:max-h-[420px] overflow-y-auto"
             >
                 <AnimatePresence mode="popLayout">
                     {filtered.map((alert, i) => {
-                        const sev = severityConfig[alert.severity] ?? severityConfig.medium;
+                        const sev = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.medium;
                         const isSelected = selectedId === alert.id;
+                        const score = alert.anomaly_score ?? alert.confidence;
 
                         return (
                             <motion.div
@@ -212,12 +162,13 @@ export function AlertFeed() {
                                     "group px-4 lg:px-5 py-3 lg:py-3.5 hover:bg-muted/30 cursor-pointer transition-colors",
                                     isSelected && "bg-muted/50"
                                 )}
-                                onClick={() => setSelectedId(isSelected ? null : alert.id)}
+                                onClick={() => toggleSelected(alert.id)}
                             >
                                 <div className="flex items-start gap-2 lg:gap-3">
                                     <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", sev.dot)} />
 
                                     <div className="flex-1 min-w-0">
+                                        {/* Title row */}
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 mb-1 gap-1">
                                             <span className="text-sm font-medium text-foreground truncate">
                                                 {alert.title}
@@ -232,16 +183,17 @@ export function AlertFeed() {
                                             >
                                                 {sev.label}
                                             </span>
-                                            {/* ── Anomaly score badge (Stage 1 item 29) ── */}
                                             <span
                                                 className={cn(
                                                     "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border w-fit shrink-0",
-                                                    confidenceBadgeClass(alert.anomaly_score ?? alert.confidence)
+                                                    confidenceBadgeClass(score)
                                                 )}
                                             >
-                                                {((alert.anomaly_score ?? alert.confidence) * 100).toFixed(0)}%
+                                                {(score * 100).toFixed(0)}%
                                             </span>
                                         </div>
+
+                                        {/* Meta row */}
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-xs text-muted-foreground">
                                             <span className="flex items-center gap-1">
                                                 <MonitorSmartphone className="h-3 w-3 shrink-0" />
@@ -257,11 +209,12 @@ export function AlertFeed() {
                                         </div>
                                     </div>
 
+                                    {/* Action buttons (visible on hover) */}
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                         <button
-                                            aria-label="Resolve alert"
+                                            aria-label="Advance alert status"
                                             className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center hover:bg-green-500/20 transition-colors"
-                                            onClick={(e) => handleResolve(e, alert.id, alert.status)}
+                                            onClick={(e) => handleResolve(e, alert.id, alert.status as AlertStatus)}
                                         >
                                             <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                                         </button>
@@ -273,6 +226,7 @@ export function AlertFeed() {
                                             <X className="h-3.5 w-3.5 text-destructive" />
                                         </button>
                                     </div>
+
                                     <ChevronRight
                                         className={cn(
                                             "h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 mt-0.5",
@@ -281,7 +235,7 @@ export function AlertFeed() {
                                     />
                                 </div>
 
-                                {/* Expanded detail — shows anomaly_score, model_id, agent version, lifecycle */}
+                                {/* Expanded detail panel */}
                                 <AnimatePresence>
                                     {isSelected && (
                                         <motion.div
@@ -298,7 +252,7 @@ export function AlertFeed() {
                                                     </p>
                                                     <p className="text-xs font-medium text-foreground">{alert.category}</p>
                                                 </div>
-                                                {/* ── Full lifecycle status (Stage 1 item 30) ── */}
+
                                                 <div>
                                                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
                                                         Status
@@ -307,7 +261,8 @@ export function AlertFeed() {
                                                         {alert.status.replace(/_/g, " ")}
                                                     </p>
                                                 </div>
-                                                {/* ── Anomaly score bar ── */}
+
+                                                {/* Anomaly score bar */}
                                                 <div>
                                                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
                                                         Anomaly Score
@@ -316,17 +271,15 @@ export function AlertFeed() {
                                                         <div className="flex-1 h-1 bg-muted rounded-full">
                                                             <div
                                                                 className="h-full bg-primary rounded-full"
-                                                                style={{
-                                                                    width: `${(alert.anomaly_score ?? alert.confidence) * 100}%`,
-                                                                }}
+                                                                style={{ width: `${score * 100}%` }}
                                                             />
                                                         </div>
                                                         <span className="text-xs font-mono font-bold text-primary">
-                                                            {((alert.anomaly_score ?? alert.confidence) * 100).toFixed(0)}%
+                                                            {(score * 100).toFixed(0)}%
                                                         </span>
                                                     </div>
                                                 </div>
-                                                {/* ── Model ID (Stage 1 item 31) ── */}
+
                                                 {alert.model_id && (
                                                     <div>
                                                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
@@ -335,7 +288,7 @@ export function AlertFeed() {
                                                         <p className="text-xs font-mono text-foreground">{alert.model_id}</p>
                                                     </div>
                                                 )}
-                                                {/* ── Agent version (Stage 1 item 31) ── */}
+
                                                 {alert.collection_agent_version && (
                                                     <div>
                                                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
@@ -346,7 +299,7 @@ export function AlertFeed() {
                                                         </p>
                                                     </div>
                                                 )}
-                                                {/* ── Inference latency ── */}
+
                                                 {alert.inference_latency_ms > 0 && (
                                                     <div>
                                                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
@@ -357,6 +310,7 @@ export function AlertFeed() {
                                                         </p>
                                                     </div>
                                                 )}
+
                                                 <div className="col-span-2 sm:col-span-3 pt-2">
                                                     <Button
                                                         size="sm"
@@ -364,7 +318,7 @@ export function AlertFeed() {
                                                         className="gap-1.5 h-7 text-xs w-full sm:w-auto"
                                                         asChild
                                                     >
-                                                        <Link href={`/dashboard/alerts`}>
+                                                        <Link href="/dashboard/alerts">
                                                             <Eye className="h-3 w-3" />
                                                             View Full Analysis
                                                         </Link>
@@ -379,20 +333,34 @@ export function AlertFeed() {
                     })}
                 </AnimatePresence>
 
-                {filtered.length === 0 && (
-                    <div className="py-16 text-center">
-                        <AlertTriangle className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
-                        <p className="text-sm text-muted-foreground">No alerts in this view</p>
+                {/* Loading state */}
+                {loading && alerts.length === 0 && (
+                    <div className="p-8 text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">Loading alerts…</p>
+                    </div>
+                )}
+
+                {/* Empty state */}
+                {!loading && filtered.length === 0 && (
+                    <div className="p-8 text-center">
+                        <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">{EMPTY_MESSAGES[filter]}</p>
                     </div>
                 )}
             </div>
 
-            {/* Footer */}
+            {/* ── Footer ── */}
             <div className="px-4 lg:px-5 py-3 border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
                     Showing {filtered.length} of {alerts.length} alerts
                 </p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 w-full sm:w-auto justify-center" asChild>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1 w-full sm:w-auto justify-center"
+                    asChild
+                >
                     <Link href="/dashboard/alerts">
                         View All Alerts
                         <ChevronRight className="h-3 w-3" />
