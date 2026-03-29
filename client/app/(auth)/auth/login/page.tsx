@@ -89,7 +89,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* ── Left decorative panel ── */}
-      <div className="hidden lg:flex lg:w-[52%] relative overflow-hidden bg-muted/20 border-r border-border">
+      <div className="hidden lg:flex lg:w-[52%] relative overflow-hidden bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 border-r border-border">
         {/* Grid pattern */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
@@ -101,8 +101,8 @@ export function LoginPage() {
         </svg>
 
         {/* Ambient glow */}
-        <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-56 h-56 bg-primary/6 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-primary/20 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-56 h-56 bg-violet-500/10 rounded-full blur-[80px] pointer-events-none" />
 
         {/* Logo */}
         <div className="absolute top-8 left-8 flex items-center gap-2.5">

@@ -137,7 +137,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* ── Left decorative panel ── */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-muted/20 border-r border-border flex-col justify-center items-center p-12">
+      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 border-r border-border flex-col justify-center items-center p-12">
         {/* Grid */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
@@ -147,7 +147,7 @@ export default function RegisterPage() {
           </defs>
           <rect width="100%" height="100%" fill="url(#reg-grid)" />
         </svg>
-        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/8 rounded-full blur-[90px] pointer-events-none" />
+        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/20 rounded-full blur-[90px] pointer-events-none" />
 
         {/* Logo image */}
         <div className="relative z-10 flex items-center justify-center w-full h-full">

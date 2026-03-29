@@ -165,7 +165,10 @@ export function AlertFeed() {
                                 onClick={() => toggleSelected(alert.id)}
                             >
                                 <div className="flex items-start gap-2 lg:gap-3">
-                                    <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", sev.dot)} />
+                                    <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5",
+                                        alert.severity === 'critical' ? 'bg-destructive shadow-[0_0_6px_#ef4444]' :
+                                            alert.severity === 'high' ? 'bg-orange-500 shadow-[0_0_6px_#f97316]' : sev.dot
+                                    )} />
 
                                     <div className="flex-1 min-w-0">
                                         {/* Title row */}
@@ -183,14 +186,15 @@ export function AlertFeed() {
                                             >
                                                 {sev.label}
                                             </span>
-                                            <span
-                                                className={cn(
-                                                    "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border w-fit shrink-0",
-                                                    confidenceBadgeClass(score)
-                                                )}
-                                            >
-                                                {(score * 100).toFixed(0)}%
-                                            </span>
+                                            <div className="flex items-center gap-1.5 flex-1">
+                                                <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-linear-to-r from-amber-500 to-destructive"
+                                                        style={{ width: `${score * 100}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-[10px] font-mono font-bold text-destructive">{(score * 100).toFixed(0)}%</span>
+                                            </div>
                                         </div>
 
                                         {/* Meta row */}
@@ -268,13 +272,13 @@ export function AlertFeed() {
                                                         Anomaly Score
                                                     </p>
                                                     <div className="flex items-center gap-1.5">
-                                                        <div className="flex-1 h-1 bg-muted rounded-full">
+                                                        <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
                                                             <div
-                                                                className="h-full bg-primary rounded-full"
+                                                                className="h-full rounded-full bg-linear-to-r from-amber-500 to-destructive"
                                                                 style={{ width: `${score * 100}%` }}
                                                             />
                                                         </div>
-                                                        <span className="text-xs font-mono font-bold text-primary">
+                                                        <span className="text-xs font-mono font-bold text-destructive">
                                                             {(score * 100).toFixed(0)}%
                                                         </span>
                                                     </div>

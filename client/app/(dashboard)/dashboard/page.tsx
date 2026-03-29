@@ -200,8 +200,10 @@ export default function DashboardPage() {
                         transition={{ delay: i * 0.07, duration: 0.4 }}
                         whileHover={{ y: -2, transition: { duration: 0.15 } }}
                         onClick={() => stat.href && (window.location.href = stat.href)}
-                        className={`bg-card border border-border rounded-xl lg:rounded-2xl p-4 lg:p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow ${stat.href ? "cursor-pointer" : ""}`}
+                        className={`bg-card border border-border rounded-xl lg:rounded-2xl p-4 lg:p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow relative overflow-hidden ${stat.href ? "cursor-pointer" : ""}`}
                     >
+                        {/* Colored corner glow */}
+                        <div className={`absolute top-0 right-0 w-12 h-12 rounded-bl-full opacity-10 ${stat.accentBg}`} />
                         <div className="flex items-start justify-between mb-3 lg:mb-4">
                             <div
                                 className={`w-8 lg:w-10 h-8 lg:h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}
@@ -210,8 +212,8 @@ export default function DashboardPage() {
                             </div>
                             <span
                                 className={`flex items-center gap-1 text-[10px] lg:text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive
-                                    ? "text-green-600 dark:text-green-400 bg-green-500/10"
-                                    : "text-destructive bg-destructive/10"
+                                    ? "text-green-400 bg-green-500/10"
+                                    : "text-red-400 bg-red-500/10"
                                     }`}
                             >
                                 {stat.deltaPositive ? (

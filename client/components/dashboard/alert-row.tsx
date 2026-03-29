@@ -161,9 +161,12 @@ export function AlertRow({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16 }}
             className={cn(
-                "group px-4 lg:px-5 py-3 lg:py-3.5 hover:bg-muted/30 cursor-pointer transition-colors",
+                "group px-4 lg:px-5 py-3 lg:py-3.5 hover:bg-muted/30 cursor-pointer transition-colors border-t-2",
                 isSelected && "bg-muted/50",
-                compact && "py-2"
+                compact && "py-2",
+                alert.severity === 'critical' ? 'border-t-destructive/60' :
+                    alert.severity === 'high' ? 'border-t-orange-500/60' :
+                        'border-t-transparent'
             )}
             onClick={() => onSelect(isSelected ? null : alert.id)}
             role="button"

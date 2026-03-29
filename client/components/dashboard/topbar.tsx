@@ -78,7 +78,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const conn = useConnConfig(connStatus, queuedCount, isLoading, hasError);
 
     return (
-        <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
+        <header className="h-16 border-b border-border/50 bg-linear-to-r from-card to-card/80 backdrop-blur-md flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
             {/* Mobile menu toggle */}
             <button
                 onClick={onMobileMenuToggle}
@@ -307,7 +307,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
             {/* User avatar */}
             <div className="flex items-center gap-2.5 ml-2">
                 <div
-                    className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"
+                    className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
                     aria-label={`User: ${displayName}`}
                 >
                     <span className="text-xs font-bold text-primary">{initials}</span>
