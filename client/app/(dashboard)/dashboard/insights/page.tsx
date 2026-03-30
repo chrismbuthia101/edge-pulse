@@ -12,6 +12,7 @@ import {
     CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModelPerformance } from "@/components/dashboard/model-performance";
 
 const modelStats = [
     { label: "Model Version", value: "v2.4.1", sub: "Released 3 days ago", color: "text-primary" },
@@ -158,36 +159,14 @@ export default function InsightsPage() {
                     </div>
                 </motion.div>
 
-                {/* Model History */}
+                {/* Model Performance */}
                 <motion.div
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
                     className="bg-card border border-border rounded-2xl overflow-hidden"
                 >
-                    <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-                        <BarChart3 className="h-4 w-4 text-primary" />
-                        <h3 className="text-sm font-semibold text-foreground">Model Versions</h3>
-                    </div>
-                    <div className="divide-y divide-border">
-                        {modelHistory.map((m) => (
-                            <div key={m.version} className="flex items-center justify-between px-5 py-3.5">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-mono font-semibold text-foreground">{m.version}</span>
-                                        {m.status === "active" && (
-                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-500 border border-green-500/20">Active</span>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{m.date}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className={`text-sm font-bold font-mono ${m.status === "active" ? "text-green-500" : "text-muted-foreground"}`}>{m.accuracy}</p>
-                                    <p className="text-xs text-muted-foreground capitalize">{m.status}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <ModelPerformance />
                 </motion.div>
             </div>
 

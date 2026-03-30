@@ -2,7 +2,9 @@
 
 from edgepulse_win.utils.log_handler import get_logger
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+import hashlib
+import json
 
 import numpy as np
 
@@ -13,7 +15,7 @@ logger = get_logger(__name__)
 
 
 class FeatureExtractor:
-    """Extracts features from system telemetry with validation."""
+    """Extracts features from system telemetry with validation and schema versioning."""
 
     def __init__(
         self,
@@ -22,6 +24,7 @@ class FeatureExtractor:
         window_15min: int = 900,
         feature_dimension: int = 50,
         history_retention_hours: int = 24,
+        feature_schema_version: str = "1.0",
     ) -> None:
         """Initialize the feature extractor."""
         if not all(isinstance(w, int) and w > 0 for w in (window_1min, window_5min, window_15min)):
@@ -36,8 +39,10 @@ class FeatureExtractor:
         self.window_15min = window_15min
         self.feature_dimension = feature_dimension
         self.history_retention_hours = history_retention_hours
+        self.feature_schema_version = feature_schema_version
 
         self._history: List[Dict[str, Any]] = []
+        self._feature_names: Optional[List[str]] = None
 
     def _validate_telemetry(self, telemetry: Dict[str, Any]) -> None:
         """Validate telemetry structure."""
@@ -245,3 +250,125 @@ class FeatureExtractor:
             feature_array = feature_array[: self.feature_dimension]
 
         return feature_array
+
+    def get_feature_names(self) -> List[str]:
+        """Get standardized feature names for the extracted features."""
+        if self._feature_names is None:
+            # Generate feature names based on extraction order
+            self._feature_names = []
+            
+            # CPU features
+            self._feature_names.extend([
+                "cpu_percent_total", "cpu_percent_per_core_mean", "cpu_percent_per_core_max",
+                "cpu_percent_per_core_std", "cpu_count", "cpu_frequency_mhz"
+            ])
+            
+            # Memory features
+            self._feature_names.extend([
+                "memory_percent", "memory_used_gb", "memory_available_gb", "swap_percent",
+                "swap_used_gb", "swap_total_gb"
+            ])
+            
+            # Disk features
+            self._feature_names.extend([
+                "disk_percent", "disk_used_gb", "disk_free_gb", "disk_read_mb_s", "disk_write_mb_s"
+            ])
+            
+            # Network features
+            self._feature_names.extend([
+                "network_connections_total", "network_connections_established",
+                "network_connections_listen", "network_bytes_sent_total", "network_bytes_recv_total"
+            ])
+            
+            # Process features
+            self._feature_names.extend([
+                "process_count_total", "process_count_running", "process_count_sleeping",
+                "process_cpu_mean", "process_memory_mean"
+            ])
+            
+            # Connection features
+            self._feature_names.extend([
+                "connection_count_tcp", "connection_count_udp", "connection_count_local",
+                "connection_count_remote", "connection_ports_unique"
+            ])
+            
+            # Temporal features
+            self._feature_names.extend([
+                "timestamp_hour", "timestamp_day_of_week", "timestamp_is_weekend"
+            ])
+            
+            # Window features (1min, 5min, 15min)
+            for window in ["1min", "5min", "15min"]:
+                self._feature_names.extend([
+                    f"cpu_mean_{window}", f"cpu_std_{window}", 
+                    f"memory_mean_{window}", f"memory_std_{window}"
+                ])
+            
+            # Pad to feature_dimension if needed
+            while len(self._feature_names) < self.feature_dimension:
+                self._feature_names.append(f"padding_{len(self._feature_names)}")
+                
+            # Truncate if too many
+            self._feature_names = self._feature_names[:self.feature_dimension]
+        
+        return self._feature_names
+
+    def extract_features_with_metadata(
+        self, 
+        telemetry: Dict, 
+        device_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Extract features with full metadata for database storage."""
+        features = self.extract_all_features(telemetry)
+        
+        # Get window bounds
+        window_start = datetime.utcnow().timestamp() - self.window_15min
+        window_end = datetime.utcnow().timestamp()
+        
+        # Get source event IDs from history window
+        source_event_ids = [
+            entry.get("event_id") 
+            for entry in self._get_windowed_data(self.window_15min)
+            if entry.get("event_id")
+        ]
+        
+        # Create feature vector metadata
+        metadata = {
+            "feature_vector": features.tobytes().hex(),  # Store as hex string for BLOB
+            "feature_schema_version": self.feature_schema_version,
+            "source_event_ids": source_event_ids,
+            "window_start_utc": datetime.fromtimestamp(window_start).isoformat(),
+            "window_end_utc": datetime.fromtimestamp(window_end).isoformat(),
+            "feature_names": self.get_feature_names(),
+            "feature_count": len(features),
+            "device_id": device_id,
+            "extraction_timestamp": datetime.utcnow().isoformat()
+        }
+        
+        return metadata
+
+    def normalize(self, features: np.ndarray) -> np.ndarray:
+        """Normalize features using z-score normalization."""
+        if len(features) == 0:
+            return features
+            
+        # Avoid division by zero
+        mean = np.mean(features)
+        std = np.std(features)
+        
+        if std == 0:
+            return features - mean
+            
+        return (features - mean) / std
+
+    def get_feature_schema_hash(self) -> str:
+        """Get hash of current feature schema for versioning."""
+        schema_info = {
+            "feature_schema_version": self.feature_schema_version,
+            "feature_names": self.get_feature_names(),
+            "feature_dimension": self.feature_dimension,
+            "window_sizes": [self.window_1min, self.window_5min, self.window_15min]
+        }
+        
+        schema_json = json.dumps(schema_info, sort_keys=True)
+        return hashlib.sha256(schema_json.encode()).hexdigest()

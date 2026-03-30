@@ -12,6 +12,20 @@ export const config = {
   ],
 };
 
+// Role-based route protection
+const ADMIN_ONLY_ROUTES = [
+  "/dashboard/users",
+  "/dashboard/reports",
+  "/dashboard/settings/users",
+  "/dashboard/settings/agent-config",
+];
+
+const ANALYST_OR_ADMIN_ROUTES = [
+  "/dashboard/cases",
+  "/dashboard/logs",
+  "/dashboard/health",
+];
+
 export async function proxy(req: NextRequest) {
   const res = NextResponse.next()
 
@@ -32,7 +46,7 @@ export async function proxy(req: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  
+
   const { pathname } = req.nextUrl;
   const isAuthPage = ["/auth/login", "/auth/register", "/auth/forgot-password"].includes(pathname);
   const isResetPage = pathname === "/auth/reset-password";
@@ -57,6 +71,36 @@ export async function proxy(req: NextRequest) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // Role-based access control for authenticated users
+  if (user && pathname.startsWith("/dashboard")) {
+    // Fetch user role
+    const { data: analystData } = await supabase
+      .from("analyst_users")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    const userRole = analystData?.role;
+
+    // Check admin-only routes
+    if (ADMIN_ONLY_ROUTES.some(route => pathname.startsWith(route))) {
+      if (userRole !== "ADMINISTRATOR") {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/dashboard";
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+
+    // Check analyst or admin routes
+    if (ANALYST_OR_ADMIN_ROUTES.some(route => pathname.startsWith(route))) {
+      if (!["ANALYST", "ADMINISTRATOR"].includes(userRole || "")) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/dashboard";
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
   }
 
   return res

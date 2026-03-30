@@ -2,6 +2,9 @@ from typing import Optional, List, Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Import device ID utilities
+from edgepulse_win.utils.device_id import get_default_device_id, validate_device_id
+
 class APIConfig(BaseSettings):
     """API server configuration"""
     model_config = SettingsConfigDict(env_prefix='API_')
@@ -132,9 +135,9 @@ class AgentSettings(BaseSettings):
     
     # Core settings
     device_id: str = Field(
-        default="default-device", 
+        default_factory=get_default_device_id, 
         min_length=3,
-        description="Unique device identifier"
+        description="Unique device identifier (auto-generated from hostname)"
     )
     environment: Literal["development", "staging", "production"] = Field(
         default="production",
@@ -165,12 +168,10 @@ class AgentSettings(BaseSettings):
         if not v or len(v.strip()) < 3:
             raise ValueError("device_id must be at least 3 characters long")
         
-        # Remove whitespace and special characters
-        import re
-        v = re.sub(r'[^a-zA-Z0-9_-]', '', v.strip())
-        
-        if not v:
-            raise ValueError("device_id contains no valid characters")
+        # Use the validation utility
+        is_valid, error_msg = validate_device_id(v)
+        if not is_valid:
+            raise ValueError(f"Invalid device_id: {error_msg}")
         
         return v
     

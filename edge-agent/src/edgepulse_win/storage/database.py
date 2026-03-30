@@ -19,6 +19,19 @@ class DatabaseManager:
     
     # Standard table schemas
     TABLE_SCHEMAS = {
+        'telemetry_events': """
+            CREATE TABLE IF NOT EXISTS telemetry_events (
+                event_id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                event_type TEXT NOT NULL CHECK (event_type IN ('PROCESS', 'NETWORK', 'FILE', 'RESOURCE')),
+                event_payload TEXT NOT NULL,  -- JSON
+                collection_agent_version TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,  -- SHA-256 hash of event_payload
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """,
+        
         'devices': """
             CREATE TABLE IF NOT EXISTS devices (
                 id TEXT PRIMARY KEY,
@@ -191,6 +204,15 @@ class DatabaseManager:
         async with self.connection() as conn:
             # Enable foreign keys
             await conn.execute("PRAGMA foreign_keys = ON")
+            
+            # Configure WAL mode for better concurrency
+            await conn.execute("PRAGMA journal_mode = WAL")
+            
+            # Set synchronous mode for durability with performance balance
+            await conn.execute("PRAGMA synchronous = NORMAL")
+            
+            # Set busy timeout for handling concurrent access
+            await conn.execute("PRAGMA busy_timeout = 30000")  # 30 seconds
             
             # Create standardized tables
             for table_name, schema in self.TABLE_SCHEMAS.items():

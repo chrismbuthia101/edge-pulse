@@ -16,6 +16,10 @@ import {
     LogOut,
     HelpCircle,
     Zap,
+    Users,
+    FileText,
+    Heart,
+    List,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -23,6 +27,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useFocusTrap } from "@/lib/use-focus-trap";
+import { useAuth } from "@/lib/auth/useAuth";
 
 const navItems = [
     {
@@ -38,13 +43,23 @@ const navItems = [
             { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "12" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
             { icon: Brain, label: "ML Insights", href: "/dashboard/insights" },
+            { icon: List, label: "Cases", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
         ],
     },
     {
         group: "System",
         items: [
             { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
+            { icon: Heart, label: "Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: FileText, label: "Logs", href: "/dashboard/logs", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+        ],
+    },
+    {
+        group: "Administration",
+        items: [
+            { icon: Users, label: "Users", href: "/dashboard/users", roles: ["ADMINISTRATOR"] },
+            { icon: FileText, label: "Reports", href: "/dashboard/reports", roles: ["ADMINISTRATOR"] },
         ],
     },
 ];
@@ -60,6 +75,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
     const pathname = usePathname();
     const router = useRouter();
     const supabase = createClient();
+    const { hasRole } = useAuth();
     const focusTrapRef = useFocusTrap(mobileOpen || false);
 
     const handleLogout = async () => {
@@ -155,7 +171,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                 )}
                             </AnimatePresence>
 
-                            {group.items.map((item) => {
+                            {group.items.filter((item) => {
+                                // Check if item has role requirements
+                                if (!item.roles) return true;
+                                return hasRole(item.roles);
+                            }).map((item) => {
                                 const isActive = pathname === item.href;
                                 const badgeCount = item.badge === "12" ? "12" : item.badge;
 

@@ -39,16 +39,24 @@ class ProcessMonitor(BaseCollector):
             process = psutil.Process(pid)
             
             try:
-                cmdline = " ".join(process.cmdline())
+                cmdline_list = process.cmdline()
+                cmdline = " ".join(cmdline_list) if cmdline_list else ""
                 cmdline_hash = self.hash_command_line(cmdline)
+                cmdline_args = cmdline_list  # Store full args list
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 cmdline = ""
                 cmdline_hash = ""
+                cmdline_args = []
             
             try:
                 parent_pid = process.ppid()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 parent_pid = None
+            
+            try:
+                exe_path = process.exe()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                exe_path = None
             
             try:
                 create_time = datetime.fromtimestamp(process.create_time())
@@ -74,11 +82,17 @@ class ProcessMonitor(BaseCollector):
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 status = None
             
+            # Determine privilege level
+            privilege_level = self._determine_privilege_level(process, username)
+            
             process_details: Dict[str, Any] = {
                 "pid": pid,
                 "name": process.name(),
                 "parent_pid": parent_pid,
-                "cmdline_hash": cmdline_hash,
+                "exe_path": exe_path,  # Added executable path
+                "cmdline": cmdline,  # Full command line
+                "cmdline_args": cmdline_args,  # Command line arguments list
+                "cmdline_hash": cmdline_hash,  # Keep for backward compatibility
                 "cpu_percent": cpu_percent,
                 "memory_rss_bytes": memory_info.rss if memory_info else None,
                 "memory_vms_bytes": memory_info.vms if memory_info else None,
@@ -86,6 +100,7 @@ class ProcessMonitor(BaseCollector):
                 "create_time": create_time.isoformat() if create_time else None,
                 "username": username,
                 "status": status,
+                "privilege_level": privilege_level,  # Added privilege level
                 "timestamp": datetime.utcnow().isoformat(),
             }
             return process_details
@@ -97,9 +112,66 @@ class ProcessMonitor(BaseCollector):
         except ResourceError as e:
             logger.error(f"Error getting process details for PID {pid}: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Error getting process details for PID {pid}: {e}")
-            return None
+    
+    def _determine_privilege_level(self, process, username: Optional[str]) -> str:
+        """Determine the privilege level of a process"""
+        try:
+            # Check if running as root/administrator
+            if username:
+                if self._is_admin_username(username):
+                    return "ADMIN"
+                elif self._is_system_username(username):
+                    return "SYSTEM"
+                else:
+                    return "USER"
+            else:
+                return "UNKNOWN"
+        except Exception:
+            return "UNKNOWN"
+    
+    def _is_admin_username(self, username: str) -> bool:
+        """Check if username indicates administrator privileges"""
+        if not username:
+            return False
+        
+        username_lower = username.lower()
+        
+        # Windows admin indicators
+        if "\\" in username_lower:
+            # Domain\username format
+            parts = username_lower.split("\\")
+            if len(parts) == 2:
+                domain, user = parts
+                if domain in ["administrator", "admin"] or user in ["administrator", "admin"]:
+                    return True
+        else:
+            # Just username
+            if username_lower in ["administrator", "admin"]:
+                return True
+        
+        # Check for common admin patterns
+        admin_patterns = ["administrator", "admin", "root", "sudo"]
+        return any(pattern in username_lower for pattern in admin_patterns)
+    
+    def _is_system_username(self, username: str) -> bool:
+        """Check if username indicates system account"""
+        if not username:
+            return False
+        
+        username_lower = username.lower()
+        
+        # Windows system accounts
+        system_patterns = [
+            "system", "local service", "network service", 
+            "nt authority\\system", "nt authority\\local service",
+            "nt authority\\network service"
+        ]
+        
+        # Unix/Linux system accounts
+        unix_patterns = ["root", "daemon", "nobody", "system"]
+        
+        all_patterns = system_patterns + unix_patterns
+        return any(pattern in username_lower for pattern in all_patterns)
 
     def get_running_processes(self) -> List[Dict[str, Any]]:
         processes: List[Dict[str, Any]] = []

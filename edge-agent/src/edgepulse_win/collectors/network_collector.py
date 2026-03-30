@@ -42,7 +42,8 @@ class NetworkMonitor(BaseCollector):
         connections = []
         
         try:
-            for conn in psutil.net_connections(kind='inet'):
+            # Use kind='all' as required by checklist
+            for conn in psutil.net_connections(kind='all'):
                 try:
                     conn_info: Dict[str, Any] = {
                         "timestamp": datetime.utcnow().isoformat(),

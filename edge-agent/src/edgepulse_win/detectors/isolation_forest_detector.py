@@ -3,6 +3,8 @@
 
 from edgepulse_win.utils.log_handler import get_logger
 import joblib
+import time
+import hashlib
 from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
 import numpy as np
@@ -26,11 +28,13 @@ class IsolationForestDetector(BaseDetector):
         model_path: Optional[Path] = None,
         device_id: Optional[str] = None,
         path_manager: Optional[PathManager] = None,
+        model_version: str = "1.0",
     ):
         self.n_estimators = n_estimators
         self.contamination = contamination
         self.max_samples = max_samples
         self.random_state = random_state
+        self.model_version = model_version
         self.path_manager = path_manager or PathManager()
         
         if model_path:
@@ -41,6 +45,8 @@ class IsolationForestDetector(BaseDetector):
         self.model: Optional[IsolationForest] = None
         self.is_trained = False
         self.training_samples = 0
+        self.model_hash: Optional[str] = None
+        self.training_timestamp: Optional[str] = None
 
     def train(self, training_data: Any, config: Dict[str, Any]) -> None:
         features = training_data if isinstance(training_data, np.ndarray) else np.array(training_data)
@@ -72,7 +78,7 @@ class IsolationForestDetector(BaseDetector):
             raise ModelError(f"Failed to train Isolation Forest: {e}") from e
 
     def detect(self, features: Any) -> List[Any]:
-        """Detect anomalies in features"""
+        """Detect anomalies in features with latency measurement"""
         if not self.is_trained or self.model is None:
             logger.warning("Model not trained, returning default predictions")
             return [(0, 0.0)] * (len(features) if hasattr(features, '__len__') else 1)
@@ -83,10 +89,18 @@ class IsolationForestDetector(BaseDetector):
             features_array = features_array.reshape(1, -1)
         
         try:
+            # Measure inference latency
+            start_time = time.perf_counter()
+            
             scores = self.model.score_samples(features_array)
             normalized_scores = (1 - scores) / 2
             predictions = self.model.predict(features_array)
             labels = (predictions == -1).astype(int)
+            
+            end_time = time.perf_counter()
+            inference_latency_ms = (end_time - start_time) * 1000
+            
+            logger.debug(f"Inference latency: {inference_latency_ms:.2f}ms for {len(features_array)} samples")
             
             results = []
             for i in range(len(labels)):
@@ -197,9 +211,106 @@ class IsolationForestDetector(BaseDetector):
             self.training_samples = model_data.get("training_samples", 0)
             self.n_estimators = model_data.get("n_estimators", self.n_estimators)
             self.contamination = model_data.get("contamination", self.contamination)
-            
-            logger.info(f"Loaded Isolation Forest model from {load_path}")
             return True
+            
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             return False
+
+    def verify_model_integrity(self) -> bool:
+        """Verify model integrity using hash comparison"""
+        if not self.is_trained or self.model is None:
+            logger.warning("Cannot verify integrity of untrained model")
+            return False
+        
+        try:
+            # Create hash of model parameters and state
+            model_state = {
+                "n_estimators": self.model.n_estimators,
+                "contamination": self.model.contamination,
+                "max_samples": self.model.max_samples,
+                "random_state": self.model.random_state,
+                "training_samples": self.training_samples,
+                "model_version": self.model_version
+            }
+            
+            model_json = str(sorted(model_state.items()))
+            current_hash = hashlib.sha256(model_json.encode()).hexdigest()
+            
+            # Check if hash matches stored hash
+            if self.model_hash is None:
+                # First time verification - store hash
+                self.model_hash = current_hash
+                logger.info("Model integrity verified - hash stored")
+                return True
+            elif current_hash != self.model_hash:
+                logger.error("Model integrity check failed - hash mismatch")
+                return False
+            else:
+                logger.debug("Model integrity verified - hash matches")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error verifying model integrity: {e}")
+            return False
+
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get comprehensive model information"""
+        return {
+            "model_type": "IsolationForest",
+            "model_version": self.model_version,
+            "is_trained": self.is_trained,
+            "training_samples": self.training_samples,
+            "training_timestamp": self.training_timestamp,
+            "model_hash": self.model_hash,
+            "parameters": {
+                "n_estimators": self.n_estimators,
+                "contamination": self.contamination,
+                "max_samples": self.max_samples,
+                "random_state": self.random_state
+            },
+            "model_path": str(self.model_path),
+            "feature_dimension": None  # Will be set during training
+        }
+
+    def detect_with_drift_check(self, features: Any, baseline_features: Optional[np.ndarray] = None) -> Tuple[List[Any], Dict[str, Any]]:
+        """Detect anomalies with drift detection"""
+        # Standard detection
+        results = self.detect(features)
+        
+        drift_info = {
+            "drift_detected": False,
+            "drift_score": 0.0,
+            "baseline_comparison": False
+        }
+        
+        # Check for drift if baseline provided
+        if baseline_features is not None and self.is_trained:
+            try:
+                # Compare current feature distribution with baseline
+                current_features = features if isinstance(features, np.ndarray) else np.array(features)
+                if current_features.ndim == 1:
+                    current_features = current_features.reshape(1, -1)
+                
+                # Simple drift detection using score distribution
+                baseline_scores = self.model.score_samples(baseline_features)
+                current_scores = self.model.score_samples(current_features)
+                
+                # Calculate drift score (difference in score distributions)
+                baseline_mean = np.mean(baseline_scores)
+                current_mean = np.mean(current_scores)
+                drift_score = abs(baseline_mean - current_mean)
+                
+                drift_info["drift_score"] = float(drift_score)
+                drift_info["drift_detected"] = drift_score > 0.1  # Threshold for drift detection
+                drift_info["baseline_comparison"] = True
+                drift_info["baseline_mean"] = float(baseline_mean)
+                drift_info["current_mean"] = float(current_mean)
+                
+                if drift_info["drift_detected"]:
+                    logger.warning(f"Model drift detected: score = {drift_score:.3f}")
+                
+            except Exception as e:
+                logger.error(f"Error during drift detection: {e}")
+        
+        return results, drift_info

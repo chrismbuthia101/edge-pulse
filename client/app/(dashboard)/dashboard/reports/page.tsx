@@ -1,0 +1,407 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import {
+    FileText,
+    Download,
+    Calendar,
+    TrendingUp,
+    AlertTriangle,
+    Shield,
+    BarChart3,
+    PieChart,
+    Activity,
+    Clock,
+    Filter,
+    Search,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/auth/useAuth";
+import { toast } from "sonner";
+
+interface ReportData {
+    totalAlerts: number;
+    criticalAlerts: number;
+    activeDevices: number;
+    totalDevices: number;
+    avgResponseTime: number;
+    alertsBySeverity: Record<string, number>;
+    alertsByDevice: Record<string, number>;
+    recentAlerts: Array<{
+        alert_id: string;
+        severity: string;
+        device_id: string;
+        created_at: string;
+        explanation_json: any;
+    }>;
+}
+
+export default function ReportsPage() {
+    const { hasRole } = useAuth();
+    const supabase = createClient();
+
+    const [reportData, setReportData] = useState<ReportData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [dateRange, setDateRange] = useState<string>("7d");
+    const [searchTerm, setSearchTerm] = useState("");
+
+    // Only administrators can access this page
+    if (!hasRole(["ADMINISTRATOR"])) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold">Access Denied</h3>
+                    <p className="text-muted-foreground">You don&apos;t have permission to access this page.</p>
+                </div>
+            </div>
+        );
+    }
+
+    useEffect(() => {
+        fetchReportData();
+    }, [dateRange]);
+
+    const fetchReportData = async () => {
+        try {
+            setLoading(true);
+            
+            // Calculate date range
+            const now = new Date();
+            let startDate = new Date();
+            
+            switch (dateRange) {
+                case "1d":
+                    startDate.setDate(now.getDate() - 1);
+                    break;
+                case "7d":
+                    startDate.setDate(now.getDate() - 7);
+                    break;
+                case "30d":
+                    startDate.setDate(now.getDate() - 30);
+                    break;
+                case "90d":
+                    startDate.setDate(now.getDate() - 90);
+                    break;
+                default:
+                    startDate.setDate(now.getDate() - 7);
+            }
+
+            const startDateStr = startDate.toISOString();
+
+            // Fetch alerts data
+            const { data: alerts, error: alertsError } = await supabase
+                .from("alert_records")
+                .select("*")
+                .gte("created_at", startDateStr)
+                .order("created_at", { ascending: false });
+
+            if (alertsError) throw alertsError;
+
+            // Fetch devices data
+            const { data: devices, error: devicesError } = await supabase
+                .from("device_registry")
+                .select("*");
+
+            if (devicesError) throw devicesError;
+
+            // Process data
+            const totalAlerts = alerts?.length || 0;
+            const criticalAlerts = alerts?.filter(a => a.alert_severity === "CRITICAL").length || 0;
+            const activeDevices = devices?.filter(d => d.is_active).length || 0;
+            const totalDevices = devices?.length || 0;
+
+            // Calculate alerts by severity
+            const alertsBySeverity = alerts?.reduce((acc, alert) => {
+                acc[alert.alert_severity] = (acc[alert.alert_severity] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>) || {};
+
+            // Calculate alerts by device
+            const alertsByDevice = alerts?.reduce((acc, alert) => {
+                acc[alert.device_id] = (acc[alert.device_id] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>) || {};
+
+            // Get recent alerts (last 10)
+            const recentAlerts = alerts?.slice(0, 10) || [];
+
+            setReportData({
+                totalAlerts,
+                criticalAlerts,
+                activeDevices,
+                totalDevices,
+                avgResponseTime: 0, // Would need to calculate from actual response times
+                alertsBySeverity,
+                alertsByDevice,
+                recentAlerts,
+            });
+
+        } catch (error) {
+            console.error("Failed to fetch report data:", error);
+            toast.error("Failed to load report data");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const generateReport = async (format: "pdf" | "csv") => {
+        try {
+            toast.loading(`Generating ${format.toUpperCase()} report...`);
+            
+            // Call the generate-report edge function
+            const { data, error } = await supabase.functions.invoke("generate-report", {
+                body: {
+                    format,
+                    dateRange,
+                    includeCharts: true,
+                },
+            });
+
+            if (error) throw error;
+
+            // Download the report
+            if (data?.url) {
+                const link = document.createElement("a");
+                link.href = data.url;
+                link.download = `edgepulse-report-${new Date().toISOString().split('T')[0]}.${format}`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                toast.success(`${format.toUpperCase()} report generated successfully`);
+            } else {
+                throw new Error("No download URL received");
+            }
+
+        } catch (error) {
+            console.error("Failed to generate report:", error);
+            toast.error("Failed to generate report");
+        }
+    };
+
+    const severityColors = {
+        LOW: "bg-green-500/10 text-green-500 border-green-500/20",
+        MEDIUM: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+        HIGH: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+        CRITICAL: "bg-red-500/10 text-red-500 border-red-500/20",
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-between"
+            >
+                <div>
+                    <h1 className="text-2xl font-display font-bold text-foreground">
+                        Security Reports
+                    </h1>
+                    <p className="text-muted-foreground">
+                        Generate and analyze security reports
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <Button onClick={() => generateReport("pdf")} variant="outline">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export PDF
+                    </Button>
+                    <Button onClick={() => generateReport("csv")}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export CSV
+                    </Button>
+                </div>
+            </motion.div>
+
+            {/* Filters */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
+                <Card>
+                    <CardContent className="pt-6">
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex-1">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search reports..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="pl-10"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <Select value={dateRange} onValueChange={setDateRange}>
+                                <SelectTrigger className="w-48">
+                                    <SelectValue placeholder="Select date range" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="1d">Last 24 hours</SelectItem>
+                                    <SelectItem value="7d">Last 7 days</SelectItem>
+                                    <SelectItem value="30d">Last 30 days</SelectItem>
+                                    <SelectItem value="90d">Last 90 days</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+            </motion.div>
+
+            {/* Overview Cards */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Alerts</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{reportData?.totalAlerts || 0}</div>
+                        <p className="text-xs text-muted-foreground">
+                            In selected period
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Critical Alerts</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-red-500">{reportData?.criticalAlerts || 0}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Require immediate attention
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Active Devices</CardTitle>
+                        <Activity className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{reportData?.activeDevices || 0}</div>
+                        <p className="text-xs text-muted-foreground">
+                            of {reportData?.totalDevices || 0} total devices
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{reportData?.avgResponseTime || 0}ms</div>
+                        <p className="text-xs text-muted-foreground">
+                            Alert processing time
+                        </p>
+                    </CardContent>
+                </Card>
+            </motion.div>
+
+            {/* Charts and Recent Alerts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Alerts by Severity */}
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                >
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <PieChart className="h-5 w-5" />
+                                Alerts by Severity
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {Object.entries(reportData?.alertsBySeverity || {}).map(([severity, count]) => (
+                                    <div key={severity} className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Badge className={severityColors[severity as keyof typeof severityColors]}>
+                                                {severity}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-sm font-medium">{count}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Recent Alerts */}
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                >
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FileText className="h-5 w-5" />
+                                Recent Alerts
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {reportData?.recentAlerts.map((alert) => (
+                                    <div key={alert.alert_id} className="flex items-center justify-between p-3 border rounded-lg">
+                                        <div className="flex items-center gap-3">
+                                            <Badge className={severityColors[alert.severity as keyof typeof severityColors]}>
+                                                {alert.severity}
+                                            </Badge>
+                                            <div>
+                                                <div className="text-sm font-medium">{alert.device_id}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {new Date(alert.created_at).toLocaleString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Button variant="ghost" size="sm">
+                                            View
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            </div>
+        </div>
+    );
+}

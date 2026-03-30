@@ -14,6 +14,7 @@ import {
     EyeOff,
     CheckCircle2,
     CheckCircle,
+    Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,10 @@ import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
+import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
+import { NetworkTopology } from "@/components/dashboard/network-topology";
 
-type Tab = "profile" | "notifications" | "security" | "appearance" | "agents";
+type Tab = "profile" | "notifications" | "security" | "appearance" | "agents" | "enrollment" | "topology";
 
 const tabs: { id: Tab; label: string; icon: typeof User }[] = [
     { id: "profile", label: "Profile", icon: User },
@@ -32,6 +35,8 @@ const tabs: { id: Tab; label: string; icon: typeof User }[] = [
     { id: "security", label: "Security", icon: Shield },
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "agents", label: "Agent Config", icon: Monitor },
+    { id: "enrollment", label: "Device Enrollment", icon: Key },
+    { id: "topology", label: "Network Topology", icon: Network },
 ];
 
 const notificationSettings = [
@@ -442,6 +447,28 @@ export default function SettingsPage() {
                                     ))}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── Device Enrollment ── */}
+                    {activeTab === "enrollment" && (
+                        <div className="space-y-6">
+                            <div>
+                                <h2 className="text-base font-semibold text-foreground mb-1">Device Enrollment</h2>
+                                <p className="text-sm text-muted-foreground">Manage enrollment tokens for new devices</p>
+                            </div>
+                            <DeviceEnrollment />
+                        </div>
+                    )}
+
+                    {/* ── Network Topology ── */}
+                    {activeTab === "topology" && (
+                        <div className="space-y-6">
+                            <div>
+                                <h2 className="text-base font-semibold text-foreground mb-1">Network Topology</h2>
+                                <p className="text-sm text-muted-foreground">Visualize device connections and security status</p>
+                            </div>
+                            <NetworkTopology />
                         </div>
                     )}
 

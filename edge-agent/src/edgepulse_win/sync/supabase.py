@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from edgepulse_win.utils.log_handler import get_logger
+from edgepulse_win.utils.device_id import get_default_device_id
 
 logger = get_logger(__name__)
 
@@ -11,23 +12,37 @@ class SyncError(Exception):
     """Base exception for sync operations"""
     pass
 
+class AuthenticationError(SyncError):
+    """Authentication-related sync error"""
+    pass
+
 class NetworkError(SyncError):
     """Network-related sync error"""
     pass
 
 class SupabaseSync:
-    """Async Supabase sync client with proper error handling and retry logic"""
+    """Async Supabase sync client with device authentication and proper error handling"""
     
     def __init__(
         self,
         supabase_url: str,
-        supabase_key: str,
+        supabase_key: Optional[str] = None,  # Fallback key for health checks only
+        device_id: Optional[str] = None,
+        api_key: Optional[str] = None,
         enabled: bool = True,
         timeout: float = 10.0,
         max_retries: int = 3
     ):
         self.supabase_url = supabase_url.rstrip('/')
         self.supabase_key = supabase_key
+        
+        # Use hostname-based device ID if not provided
+        if device_id is None:
+            device_id = get_default_device_id()
+            logger.info(f"Using hostname-based device ID: {device_id}")
+        
+        self.device_id = device_id
+        self.api_key = api_key
         self.enabled = enabled
         self.timeout = timeout
         self.max_retries = max_retries
@@ -37,7 +52,7 @@ class SupabaseSync:
         self._online = False
         self._last_health_check: Optional[datetime] = None
         
-        logger.info("async_supabase_sync_initialized", enabled=enabled)
+        logger.info("async_supabase_sync_initialized", enabled=enabled, has_device_auth=bool(device_id and api_key))
     
     async def initialize(self) -> None:
         """Initialize the async client"""
@@ -45,14 +60,27 @@ class SupabaseSync:
             logger.info("supabase_sync_disabled")
             return
         
+        # Build headers based on authentication method
+        headers = {
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        
+        if self.device_id and self.api_key:
+            # Device authentication
+            headers.update({
+                "X-EdgePulse-Device-Id": self.device_id,
+                "X-EdgePulse-Api-Key": self.api_key
+            })
+        elif self.supabase_key:
+            headers.update({
+                "apikey": self.supabase_key,
+                "Authorization": f"Bearer {self.supabase_key}"
+            })
+        
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout),
-            headers={
-                "apikey": self.supabase_key,
-                "Authorization": f"Bearer {self.supabase_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-            }
+            headers=headers
         )
         
         # Test connectivity
@@ -138,6 +166,15 @@ class SupabaseSync:
             if response.status_code == 201:
                 logger.info("alerts_synced_successfully", count=len(alerts))
                 return True
+            elif response.status_code == 401:
+                # Authentication failure - critical error
+                logger.critical(
+                    "authentication_failure",
+                    device_id=self.device_id,
+                    status=response.status_code,
+                    response=response.text
+                )
+                raise AuthenticationError("Device authentication failed - credentials may be invalid or expired")
             else:
                 logger.error(
                     "alerts_sync_failed",
