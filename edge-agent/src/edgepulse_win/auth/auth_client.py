@@ -18,6 +18,7 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 from edgepulse_win.utils.log_handler import get_logger
+from edgepulse_win.utils.version import get_agent_version
 from edgepulse_win.auth.credentials import CredentialManager, DeviceCredentials
 
 logger = get_logger(__name__)
@@ -89,7 +90,7 @@ class AuthenticatedClient:
             "X-EdgePulse-Device-Id": credentials.device_id,
             "X-EdgePulse-Api-Key": credentials.api_key,
             "Content-Type": "application/json",
-            "User-Agent": f"EdgePulseAgent/{self._get_agent_version()}"
+            "User-Agent": f"EdgePulseAgent/{get_agent_version()}"
         }
         
         return headers
@@ -314,14 +315,6 @@ class AuthenticatedClient:
         except Exception as e:
             logger.error(f"Connectivity test failed: {e}")
             return False
-    
-    def _get_agent_version(self) -> str:
-        """Get the agent version"""
-        try:
-            import pkg_resources
-            return pkg_resources.get_distribution('edge-agent').version
-        except:
-            return "0.1.0"
     
     async def close(self):
         """Clean up resources"""

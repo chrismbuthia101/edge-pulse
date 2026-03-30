@@ -1,10 +1,7 @@
-# Disk feature extraction.
-
 from typing import Dict, List, Any
 import numpy as np
 
-from edgepulse_win.history_utils import get_window_data, trim_history
-
+from edgepulse_win.features.history_utils import get_window_data, trim_history
 
 class DiskFeatureExtractor:
     def __init__(self, window_1min: int, retention_hours: int) -> None:

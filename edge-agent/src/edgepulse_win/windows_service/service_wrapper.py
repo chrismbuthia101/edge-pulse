@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 
 # Windows-specific imports (only imported on Windows)
-if sys.platform == "Windows":
+if sys.platform == "win32":
     import win32serviceutil
     import win32service
     import win32event
@@ -59,7 +59,7 @@ class WindowsServiceWrapper:
             self.logs_path.mkdir(parents=True, exist_ok=True)
             
             # Set appropriate permissions
-            if sys.platform == "Windows":
+            if sys.platform == "win32":
                 import win32security
                 import ntsecuritycon
                 

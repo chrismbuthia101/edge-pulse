@@ -16,7 +16,7 @@ AGENT_PATH = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(AGENT_PATH))
 
 # Windows-specific imports
-if sys.platform == "Windows":
+if sys.platform == "win32":
     import win32service
     import win32serviceutil
     import win32event

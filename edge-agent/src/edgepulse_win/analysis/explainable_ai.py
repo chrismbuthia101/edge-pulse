@@ -533,12 +533,17 @@ class ExplainableAIManager:
         training_data: Optional["np.ndarray"] = None,
         feature_names: Optional[List[str]] = None,
         primary_method: Union[str, ExplanationType] = ExplanationType.SHAP,
+        enable_fallback: bool = True,
         enable_cache: bool = True,
     ) -> bool:
         primary_method = ExplanationType(primary_method)
-        fallback_method = (
-            ExplanationType.LIME if primary_method == ExplanationType.SHAP else ExplanationType.SHAP
-        )
+        
+        # Only determine fallback method if fallback is enabled
+        fallback_method = None
+        if enable_fallback:
+            fallback_method = (
+                ExplanationType.LIME if primary_method == ExplanationType.SHAP else ExplanationType.SHAP
+            )
 
         _method_map = {
             ExplanationType.SHAP: (SHAPExplainer, SHAP_AVAILABLE),
@@ -547,6 +552,7 @@ class ExplainableAIManager:
 
         ok_primary = ok_fallback = False
 
+        # Initialize primary explainer
         cls_p, avail_p = _method_map.get(primary_method, (None, False))
         if cls_p and avail_p:
             explainer = cls_p(self.model_id)
@@ -556,14 +562,16 @@ class ExplainableAIManager:
             else:
                 logger.warning("Primary %s explainer failed to initialise", primary_method)
 
-        cls_f, avail_f = _method_map.get(fallback_method, (None, False))
-        if cls_f and avail_f:
-            explainer = cls_f(self.model_id)
-            ok_fallback = explainer.initialize(model, training_data, feature_names)
-            if ok_fallback:
-                self._fallback = explainer
-            else:
-                logger.warning("Fallback %s explainer failed to initialise", fallback_method)
+        # Initialize fallback explainer only if enabled
+        if enable_fallback and fallback_method:
+            cls_f, avail_f = _method_map.get(fallback_method, (None, False))
+            if cls_f and avail_f:
+                explainer = cls_f(self.model_id)
+                ok_fallback = explainer.initialize(model, training_data, feature_names)
+                if ok_fallback:
+                    self._fallback = explainer
+                else:
+                    logger.warning("Fallback %s explainer failed to initialise", fallback_method)
 
         if not enable_cache:
             self._cache = None  # type: ignore[assignment]

@@ -22,7 +22,7 @@ from edgepulse_win.features.feature_normalizer import DeviceNormalizer
 from edgepulse_win.detectors.isolation_forest_detector import IsolationForestDetector
 from edgepulse_win.detectors.autoencoder_reconstruction_detector import AutoencoderDetector
 from edgepulse_win.detectors.ensemble_detector import EnsembleDetector
-from edgepulse_win.analysis.shap_explainer import SHAPExplainer
+from edgepulse_win.analysis.explainable_ai import SHAPExplainer
 from edgepulse_win.analysis.report_generator import ReportGenerator
 from edgepulse_win.alerts.alert_engine import AlertEngine
 from edgepulse_win.alerts.notifier import LocalNotifier

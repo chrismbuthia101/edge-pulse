@@ -1,7 +1,6 @@
-# Process feature extraction.
-
 from typing import Dict, List, Any
-from edgepulse_win.history_utils import get_window_data, trim_history
+
+from edgepulse_win.features.history_utils import get_window_data, trim_history
 
 
 class ProcessFeatureExtractor:

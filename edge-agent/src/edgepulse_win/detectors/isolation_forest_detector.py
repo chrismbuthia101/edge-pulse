@@ -77,6 +77,27 @@ class IsolationForestDetector(BaseDetector):
             logger.error(f"Error training Isolation Forest: {e}")
             raise ModelError(f"Failed to train Isolation Forest: {e}") from e
 
+    def _detect_internal(self, features: Any) -> float:
+        """Internal detection method returning anomaly score for a single feature vector"""
+        if not self.is_trained or self.model is None:
+            logger.warning("Model not trained, returning default score")
+            return 0.0
+        
+        features_array = features if isinstance(features, np.ndarray) else np.array(features)
+        
+        if features_array.ndim == 1:
+            features_array = features_array.reshape(1, -1)
+        
+        try:
+            # Get anomaly score (normalized)
+            scores = self.model.score_samples(features_array)
+            normalized_score = (1 - scores[0]) / 2
+            return float(normalized_score)
+            
+        except Exception as e:
+            logger.error(f"Error in _detect_internal: {e}")
+            return 0.0
+
     def detect(self, features: Any) -> List[Any]:
         """Detect anomalies in features with latency measurement"""
         if not self.is_trained or self.model is None:

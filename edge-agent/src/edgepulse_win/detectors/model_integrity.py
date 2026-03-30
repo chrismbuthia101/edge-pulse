@@ -7,10 +7,11 @@ digital signatures, and version tracking for ML models.
 
 import hashlib
 import json
+from dataclasses import asdict
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime
 
 try:
     import keyring
@@ -53,84 +54,85 @@ class IntegrityVerification:
 
 class ModelIntegrityVerifier:
     """Verifies model file integrity and authenticity"""
-    
+
     def __init__(self, models_directory: Optional[str] = None):
-        self.models_directory = Path(models_directory) if models_directory else Path(r"C:\ProgramData\EdgePulse\models")
+        from edgepulse_win.utils.path_manager import PathManager
+
+        if models_directory:
+            self.models_directory = Path(models_directory)
+        else:
+            self.models_directory = PathManager().models_dir
+
         self.models_directory.mkdir(parents=True, exist_ok=True)
-        
-        # Integrity database
+
         self.integrity_db_path = self.models_directory / "integrity.json"
         self.integrity_data: Dict[str, ModelMetadata] = {}
-        
-        # Keyring for signature keys
+
         self.keyring_service = "edgepulse-models"
         self.keyring_signing_key = "model_signing_key"
-        
-        # Load existing integrity data
+
         self._load_integrity_data()
-        
+
         logger.info(f"Model integrity verifier initialized for: {self.models_directory}")
-    
+
     def _load_integrity_data(self):
         """Load existing integrity data from file"""
         try:
             if self.integrity_db_path.exists():
-                with open(self.integrity_db_path, 'r') as f:
+                with open(self.integrity_db_path, "r") as f:
                     data = json.load(f)
-                
+
                 for model_id, metadata in data.items():
-                    # Convert datetime strings back to datetime objects
-                    metadata['created_at'] = datetime.fromisoformat(metadata['created_at'])
-                    if metadata.get('verified_at'):
-                        metadata['verified_at'] = datetime.fromisoformat(metadata['verified_at'])
-                    
+                    metadata["created_at"] = datetime.fromisoformat(metadata["created_at"])
+                    if metadata.get("verified_at"):
+                        metadata["verified_at"] = datetime.fromisoformat(metadata["verified_at"])
+
                     self.integrity_data[model_id] = ModelMetadata(**metadata)
-                
+
                 logger.info(f"Loaded integrity data for {len(self.integrity_data)} models")
             else:
                 logger.info("No existing integrity data found")
-                
+
         except Exception as e:
             logger.error(f"Failed to load integrity data: {e}")
             self.integrity_data = {}
-    
+
     def _save_integrity_data(self):
         """Save integrity data to file"""
         try:
-            # Convert datetime objects to strings for JSON serialization
             serializable_data = {}
             for model_id, metadata in self.integrity_data.items():
                 data_dict = asdict(metadata)
-                data_dict['created_at'] = metadata.created_at.isoformat()
+                data_dict["created_at"] = metadata.created_at.isoformat()
                 if metadata.verified_at:
-                    data_dict['verified_at'] = metadata.verified_at.isoformat()
+                    data_dict["verified_at"] = metadata.verified_at.isoformat()
                 serializable_data[model_id] = data_dict
-            
-            with open(self.integrity_db_path, 'w') as f:
+
+            with open(self.integrity_db_path, "w") as f:
                 json.dump(serializable_data, f, indent=2)
-            
+
             logger.info("Integrity data saved successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to save integrity data: {e}")
-    
+
     def _get_signing_key(self) -> Optional[str]:
         """Get or generate model signing key"""
         if not keyring:
             logger.warning("keyring not available, model signatures disabled")
             return None
-        
+
         try:
             key = keyring.get_password(self.keyring_service, self.keyring_signing_key)
             if key:
                 return key
         except Exception:
             pass
-        
-        # Generate new signing key
+
         import secrets
+
         new_key = secrets.token_urlsafe(32)
-        
+
         try:
             keyring.set_password(self.keyring_service, self.keyring_signing_key, new_key)
             logger.info("Generated new model signing key")
@@ -138,89 +140,84 @@ class ModelIntegrityVerifier:
         except Exception as e:
             logger.error(f"Failed to store signing key: {e}")
             return None
-    
+
     def _calculate_file_hash(self, file_path: Path) -> str:
         """Calculate SHA-256 hash of model file"""
         try:
             hash_sha256 = hashlib.sha256()
             with open(file_path, "rb") as f:
-                # Read file in chunks to handle large files
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash_sha256.update(chunk)
             return hash_sha256.hexdigest()
         except Exception as e:
             logger.error(f"Failed to calculate file hash for {file_path}: {e}")
             raise EdgePulseError(f"Hash calculation failed: {e}")
-    
+
     def _sign_model(self, model_data: Dict[str, Any]) -> Optional[str]:
         """Create digital signature for model metadata"""
         signing_key = self._get_signing_key()
         if not signing_key:
             return None
-        
+
         try:
             import hmac
             import base64
-            
-            # Create canonical representation
-            canonical_data = json.dumps(model_data, sort_keys=True, separators=(',', ':'))
-            
-            # Create HMAC signature
+
+            canonical_data = json.dumps(model_data, sort_keys=True, separators=(",", ":"))
+
             signature = hmac.new(
                 signing_key.encode(),
                 canonical_data.encode(),
-                hashlib.sha256
+                hashlib.sha256,
             ).digest()
-            
+
             return base64.b64encode(signature).decode()
-            
+
         except Exception as e:
             logger.error(f"Failed to sign model: {e}")
             return None
-    
+
     def _verify_signature(self, model_data: Dict[str, Any], signature: str) -> bool:
         """Verify digital signature of model metadata"""
         try:
             signing_key = self._get_signing_key()
             if not signing_key:
-                return True  # No signature to verify
-            
+                return True
+
             import hmac
             import base64
-            
-            # Recreate expected signature
-            canonical_data = json.dumps(model_data, sort_keys=True, separators=(',', ':'))
+
+            canonical_data = json.dumps(model_data, sort_keys=True, separators=(",", ":"))
             expected_signature = hmac.new(
                 signing_key.encode(),
                 canonical_data.encode(),
-                hashlib.sha256
+                hashlib.sha256,
             ).digest()
-            
-            # Compare with stored signature
+
             stored_signature = base64.b64decode(signature)
             return hmac.compare_digest(expected_signature, stored_signature)
-            
+
         except Exception as e:
             logger.error(f"Failed to verify signature: {e}")
             return False
-    
-    async def register_model(self, 
-                          model_id: str,
-                          model_version: str,
-                          model_type: str,
-                          file_path: str) -> ModelMetadata:
+
+    async def register_model(
+        self,
+        model_id: str,
+        model_version: str,
+        model_type: str,
+        file_path: str,
+    ) -> ModelMetadata:
         """Register a new model with integrity verification"""
         try:
             file_path_obj = Path(file_path)
-            
+
             if not file_path_obj.exists():
                 raise EdgePulseError(f"Model file not found: {file_path}")
-            
-            # Calculate file hash
+
             file_hash = self._calculate_file_hash(file_path_obj)
             file_size = file_path_obj.stat().st_size
-            
-            # Create model metadata
+
             metadata = ModelMetadata(
                 model_id=model_id,
                 model_version=model_version,
@@ -232,32 +229,30 @@ class ModelIntegrityVerifier:
                 created_at=datetime.utcnow(),
                 verified_at=None,
                 is_verified=False,
-                verification_details={}
+                verification_details={},
             )
-            
-            # Sign the model
+
             model_data = {
-                'model_id': model_id,
-                'model_version': model_version,
-                'model_type': model_type,
-                'file_hash': file_hash,
-                'file_size': file_size,
-                'created_at': metadata.created_at.isoformat()
+                "model_id": model_id,
+                "model_version": model_version,
+                "model_type": model_type,
+                "file_hash": file_hash,
+                "file_size": file_size,
+                "created_at": metadata.created_at.isoformat(),
             }
-            
+
             metadata.signature = self._sign_model(model_data)
-            
-            # Store integrity data
+
             self.integrity_data[model_id] = metadata
             self._save_integrity_data()
-            
+
             logger.info(f"Model registered: {model_id} (version {model_version})")
             return metadata
-            
+
         except Exception as e:
             logger.error(f"Failed to register model {model_id}: {e}")
             raise EdgePulseError(f"Model registration failed: {e}")
-    
+
     async def verify_model(self, model_id: str) -> IntegrityVerification:
         """Verify model integrity"""
         try:
@@ -270,15 +265,14 @@ class ModelIntegrityVerifier:
                     signature_valid=False,
                     version_match=False,
                     details={},
-                    error_message="Model not found in integrity database"
+                    error_message="Model not found in integrity database",
                 )
-            
+
             metadata = self.integrity_data[model_id]
             file_path = Path(metadata.file_path)
-            
+
             verification_details = {}
-            
-            # Check if file exists
+
             if not file_path.exists():
                 return IntegrityVerification(
                     is_valid=False,
@@ -287,44 +281,39 @@ class ModelIntegrityVerifier:
                     file_hash_match=False,
                     signature_valid=False,
                     version_match=False,
-                    details={'file_missing': True},
-                    error_message="Model file not found"
+                    details={"file_missing": True},
+                    error_message="Model file not found",
                 )
-            
-            # Verify file hash
+
             current_hash = self._calculate_file_hash(file_path)
             file_hash_match = current_hash == metadata.sha256_hash
-            verification_details['expected_hash'] = metadata.sha256_hash
-            verification_details['actual_hash'] = current_hash
-            
-            # Verify signature if present
+            verification_details["expected_hash"] = metadata.sha256_hash
+            verification_details["actual_hash"] = current_hash
+
             signature_valid = True
             if metadata.signature:
                 model_data = {
-                    'model_id': metadata.model_id,
-                    'model_version': metadata.model_version,
-                    'model_type': metadata.model_type,
-                    'file_hash': current_hash,
-                    'file_size': metadata.file_size,
-                    'created_at': metadata.created_at.isoformat()
+                    "model_id": metadata.model_id,
+                    "model_version": metadata.model_version,
+                    "model_type": metadata.model_type,
+                    "file_hash": current_hash,
+                    "file_size": metadata.file_size,
+                    "created_at": metadata.created_at.isoformat(),
                 }
                 signature_valid = self._verify_signature(model_data, metadata.signature)
-            verification_details['signature_present'] = metadata.signature is not None
-            verification_details['signature_valid'] = signature_valid
-            
-            # Verify version consistency
-            version_match = True  # Would need additional verification logic
-            verification_details['version'] = metadata.model_version
-            
-            # Overall validity
+            verification_details["signature_present"] = metadata.signature is not None
+            verification_details["signature_valid"] = signature_valid
+
+            version_match = True
+            verification_details["version"] = metadata.model_version
+
             is_valid = file_hash_match and signature_valid and version_match
-            
-            # Update metadata
+
             metadata.verified_at = datetime.utcnow()
             metadata.is_verified = is_valid
             metadata.verification_details = verification_details
             self._save_integrity_data()
-            
+
             result = IntegrityVerification(
                 is_valid=is_valid,
                 model_id=model_id,
@@ -333,12 +322,14 @@ class ModelIntegrityVerifier:
                 signature_valid=signature_valid,
                 version_match=version_match,
                 details=verification_details,
-                error_message=None if is_valid else "Model integrity verification failed"
+                error_message=None if is_valid else "Model integrity verification failed",
             )
-            
-            logger.info(f"Model verification completed: {model_id} -> {'VALID' if is_valid else 'INVALID'}")
+
+            logger.info(
+                f"Model verification completed: {model_id} -> {'VALID' if is_valid else 'INVALID'}"
+            )
             return result
-            
+
         except Exception as e:
             logger.error(f"Failed to verify model {model_id}: {e}")
             return IntegrityVerification(
@@ -349,27 +340,25 @@ class ModelIntegrityVerifier:
                 signature_valid=False,
                 version_match=False,
                 details={},
-                error_message=f"Verification error: {str(e)}"
+                error_message=f"Verification error: {str(e)}",
             )
-    
+
     async def verify_all_models(self) -> Dict[str, IntegrityVerification]:
         """Verify all registered models"""
         results = {}
-        
         for model_id in self.integrity_data:
             results[model_id] = await self.verify_model(model_id)
-        
         logger.info(f"Verified {len(results)} models")
         return results
-    
+
     def get_model_metadata(self, model_id: str) -> Optional[ModelMetadata]:
         """Get model metadata"""
         return self.integrity_data.get(model_id)
-    
+
     def list_models(self) -> List[str]:
         """List all registered model IDs"""
         return list(self.integrity_data.keys())
-    
+
     def remove_model(self, model_id: str) -> bool:
         """Remove model from integrity database"""
         try:
@@ -382,58 +371,58 @@ class ModelIntegrityVerifier:
         except Exception as e:
             logger.error(f"Failed to remove model {model_id}: {e}")
             return False
-    
+
     async def cleanup_old_models(self, days_to_keep: int = 30):
         """Clean up old model integrity records"""
         try:
             cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
-            
+
             models_to_remove = []
             for model_id, metadata in self.integrity_data.items():
                 if metadata.created_at < cutoff_date:
-                    # Check if model file still exists
                     if not Path(metadata.file_path).exists():
                         models_to_remove.append(model_id)
-            
+
             for model_id in models_to_remove:
                 self.remove_model(model_id)
-            
+
             logger.info(f"Cleaned up {len(models_to_remove)} old model records")
             return len(models_to_remove)
-            
+
         except Exception as e:
             logger.error(f"Failed to cleanup old models: {e}")
             return 0
-    
+
     def get_integrity_report(self) -> Dict[str, Any]:
         """Generate integrity verification report"""
         try:
             total_models = len(self.integrity_data)
             verified_models = sum(1 for m in self.integrity_data.values() if m.is_verified)
-            
-            models_by_type = {}
+
+            models_by_type: Dict[str, int] = {}
             for metadata in self.integrity_data.values():
                 model_type = metadata.model_type
                 models_by_type[model_type] = models_by_type.get(model_type, 0) + 1
-            
+
             return {
-                'total_models': total_models,
-                'verified_models': verified_models,
-                'unverified_models': total_models - verified_models,
-                'models_by_type': models_by_type,
-                'models_directory': str(self.models_directory),
-                'last_verification': max(
+                "total_models": total_models,
+                "verified_models": verified_models,
+                "unverified_models": total_models - verified_models,
+                "models_by_type": models_by_type,
+                "models_directory": str(self.models_directory),
+                "last_verification": max(
                     (m.verified_at for m in self.integrity_data.values() if m.verified_at),
-                    default=None
-                )
+                    default=None,
+                ),
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to generate integrity report: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
 
-# Factory function
-def create_model_integrity_verifier(models_directory: Optional[str] = None) -> ModelIntegrityVerifier:
+def create_model_integrity_verifier(
+    models_directory: Optional[str] = None,
+) -> ModelIntegrityVerifier:
     """Create model integrity verifier"""
     return ModelIntegrityVerifier(models_directory)

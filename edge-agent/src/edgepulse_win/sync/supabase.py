@@ -5,20 +5,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from edgepulse_win.utils.log_handler import get_logger
 from edgepulse_win.utils.device_id import get_default_device_id
+from edgepulse_win.utils.error_handler import SyncError, NetworkError, AuthenticationError
 
 logger = get_logger(__name__)
 
-class SyncError(Exception):
-    """Base exception for sync operations"""
-    pass
-
-class AuthenticationError(SyncError):
-    """Authentication-related sync error"""
-    pass
-
-class NetworkError(SyncError):
-    """Network-related sync error"""
-    pass
 
 class SupabaseSync:
     """Async Supabase sync client with device authentication and proper error handling"""

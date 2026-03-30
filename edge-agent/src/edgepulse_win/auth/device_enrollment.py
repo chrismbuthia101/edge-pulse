@@ -5,12 +5,9 @@ Handles first-run device enrollment using enrollment tokens.
 Implements secure token validation, API key generation, and credential storage.
 """
 
-import os
-import sys
 import json
 import time
 import asyncio
-import secrets
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -412,6 +409,10 @@ class DeviceEnrollmentClient:
                 logger.info("Enrollment configuration file deleted")
         except Exception as e:
             logger.warning(f"Failed to delete enrollment config: {e}")
+    
+    def is_enrolled(self) -> bool:
+        """Check if device is enrolled - compatibility method"""
+        return asyncio.run(self.check_enrollment_status())
     
     def get_credentials(self) -> Tuple[Optional[str], Optional[str]]:
         """Get stored device credentials"""

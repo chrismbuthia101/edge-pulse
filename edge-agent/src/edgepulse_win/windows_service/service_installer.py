@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Windows-specific imports
-if sys.platform == "Windows":
+if sys.platform == "win32":
     import win32serviceutil
     import win32service
     import win32event
