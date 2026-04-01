@@ -1,7 +1,7 @@
 """
 EdgePulse Agent Core - Portable Monitoring Logic
 
-This module contains all core monitoring, detection, and sync logic
+This module contains all core monitoring, detection, and sync logic.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ from edgepulse_win.utils.version import get_agent_version
 from edgepulse_win.detectors.model_manager import ModelManager
 from edgepulse_win.core.enrollment_manager import EnrollmentManager
 from edgepulse_win.sync.supabase import SupabaseSync
-from edgepulse_win.analysis.report_generator import ReportGenerator  # canonical _calculate_severity
+from edgepulse_win.analysis.report_generator import ReportGenerator
 
 logger = get_logger(__name__)
 
@@ -68,17 +68,18 @@ class AgentCore:
         logger.info("AgentCore initialized")
 
     async def initialize(self) -> None:
-        """Initialize all core components"""
+        """Initialize all core components in dependency order.
+        """
         try:
             logger.info("Initializing AgentCore components")
 
             await self._init_credential_manager()
             await self._init_enrollment_manager()
-            await self._init_config_manager()
+            await self._init_sync_manager()      
+            await self._init_config_manager()   
             await self._init_telemetry_collector()
-            await self._init_model_manager()
-            await self._init_explainable_ai()
-            await self._init_sync_manager()
+            await self._init_model_manager()    
+            await self._init_explainable_ai() 
 
             logger.info("AgentCore initialization complete")
 
@@ -107,92 +108,35 @@ class AgentCore:
         """Initialize enrollment manager and check enrollment status"""
         try:
             self.enrollment_manager = EnrollmentManager(self.credential_manager)
-            
+
             await self.enrollment_manager.initialize(service_mode=self.config.service_mode)
             self._is_enrolled = self.enrollment_manager.is_enrolled()
-            
-            # Get device credentials and update config
+
             credentials = self.enrollment_manager.get_device_credentials()
             if credentials:
                 self.config.device_id = credentials.device_id
                 self.config.api_key = credentials.api_key
                 logger.info(f"Device enrolled: {credentials.device_id}")
-            
-            # Create Supabase client if we have the required configuration
-            if (self.config.supabase_url and self.config.device_id and 
-                self.config.api_key and self._is_enrolled):
+
+            if (
+                self.config.supabase_url
+                and self.config.device_id
+                and self.config.api_key
+                and self._is_enrolled
+            ):
                 self.supabase_client = self.enrollment_manager.create_supabase_client(
-                    self.config.supabase_url, self.config.device_id, self.config.api_key
+                    self.config.supabase_url,
+                    self.config.device_id,
+                    self.config.api_key,
                 )
-                
+
         except Exception as e:
             logger.error(f"Failed to initialize enrollment manager: {e}")
             raise
 
-    async def _init_telemetry_collector(self) -> None:
-        """Initialize telemetry collector"""
-        try:
-            from .collectors.telemetry_collector import TelemetryCollector
-
-            self.telemetry_collector = TelemetryCollector(
-                agent_version=get_agent_version()
-            )
-
-            self.telemetry_collector.start()
-            logger.info("Telemetry collector initialized")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize telemetry collector: {e}")
-            raise
-
-    async def _init_model_manager(self) -> None:
-        """Initialize model manager"""
-        try:
-            self.model_manager = ModelManager(self.config_manager)
-
-            success = await self.model_manager.initialize()
-            if not success:
-                raise ConfigurationError("ModelManager initialization failed")
-
-            logger.info("Model manager initialized")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize model manager: {e}")
-            raise
-
-    async def _init_explainable_ai(self) -> None:
-        """Initialize explainable AI"""
-        try:
-            from .analysis.explainable_ai import ExplainableAIManager
-
-            model_id = (
-                self.model_manager.model_id if self.model_manager else "unknown"
-            )
-
-            self.explainable_ai = ExplainableAIManager(model_id=model_id)
-
-            import numpy as np
-
-            dummy_training_data = np.random.random((100, 10))
-            feature_names = [f"feature_{i}" for i in range(10)]
-
-            success = self.explainable_ai.initialize(
-                model=self.model_manager.current_detector,
-                training_data=dummy_training_data,
-                feature_names=feature_names,
-            )
-
-            if success:
-                logger.info("Explainable AI initialized")
-            else:
-                logger.warning("Explainable AI initialization failed, explanations disabled")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize explainable AI: {e}")
-            self.explainable_ai = None
-
     async def _init_sync_manager(self) -> None:
-        """Initialize sync manager"""
+        """Initialize sync manager.
+        """
         try:
             if not self.config.sync_enabled:
                 logger.info("Sync disabled by configuration")
@@ -240,7 +184,8 @@ class AgentCore:
                 raise ConfigurationError(f"Sync manager initialization failed: {e}")
 
     async def _init_config_manager(self) -> None:
-        """Initialize configuration manager"""
+        """Initialize configuration manager.
+        """
         try:
             from .config.manager import ConfigManager
 
@@ -250,10 +195,81 @@ class AgentCore:
                 await self.config_manager.start()
                 logger.info("Configuration manager initialized")
             else:
-                logger.info("Configuration manager disabled (no sync)")
+                logger.info("Configuration manager disabled (sync not available)")
 
         except Exception as e:
             logger.error(f"Failed to initialize config manager: {e}")
+            # Non-fatal: agent can run without remote config
+            self.config_manager = None
+
+    async def _init_telemetry_collector(self) -> None:
+        """Initialize telemetry collector"""
+        try:
+            from .collectors.telemetry_collector import TelemetryCollector
+
+            self.telemetry_collector = TelemetryCollector(
+                agent_version=get_agent_version()
+            )
+
+            self.telemetry_collector.start()
+            logger.info("Telemetry collector initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize telemetry collector: {e}")
+            raise
+
+    async def _init_model_manager(self) -> None:
+        """Initialize model manager.
+        """
+        try:
+            self.model_manager = ModelManager(self.config_manager)
+
+            success = await self.model_manager.initialize()
+            if not success:
+                raise ConfigurationError("ModelManager initialization failed")
+
+            logger.info("Model manager initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize model manager: {e}")
+            raise
+
+    async def _init_explainable_ai(self) -> None:
+        """Initialize explainable AI"""
+        try:
+            from .analysis.explainable_ai import ExplainableAIManager
+
+            model_id = (
+                self.model_manager.model_id if self.model_manager else "unknown"
+            )
+
+            self.explainable_ai = ExplainableAIManager(model_id=model_id)
+
+            import numpy as np
+
+            dummy_training_data = np.random.random((100, 10))
+            feature_names = [f"feature_{i}" for i in range(10)]
+
+            success = self.explainable_ai.initialize(
+                model=self.model_manager.current_detector,
+                training_data=dummy_training_data,
+                feature_names=feature_names,
+            )
+
+            if success:
+                logger.info("Explainable AI initialized")
+            else:
+                logger.warning(
+                    "Explainable AI initialization failed, explanations disabled"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to initialize explainable AI: {e}")
+            self.explainable_ai = None
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     async def start(self) -> None:
         """Start the agent core"""
@@ -288,7 +304,8 @@ class AgentCore:
 
             if self.sync_manager:
                 await self.sync_manager["fsm"].stop()
-                await self.sync_manager["queue"].close()
+                # AsyncSyncQueue exposes stop(), not close()
+                await self.sync_manager["queue"].stop()
 
             if self.config_manager:
                 await self.config_manager.stop()
@@ -307,7 +324,10 @@ class AgentCore:
                 try:
                     current_time = time.time()
 
-                    if current_time - self._last_collection_time >= self.config.collection_interval:
+                    if (
+                        current_time - self._last_collection_time
+                        >= self.config.collection_interval
+                    ):
                         await self._collect_and_process_telemetry()
                         self._last_collection_time = current_time
 
@@ -331,6 +351,10 @@ class AgentCore:
             raise
         finally:
             await self.stop()
+
+    # ------------------------------------------------------------------
+    # Telemetry pipeline
+    # ------------------------------------------------------------------
 
     async def _collect_and_process_telemetry(self) -> None:
         """Collect telemetry and process through detection pipeline"""
@@ -390,11 +414,11 @@ class AgentCore:
                 ]
             )
         else:
-            import numpy as np
-
             return np.random.random(4)
 
-    async def _handle_alert(self, event: Dict[str, Any], detection_result: Any) -> None:
+    async def _handle_alert(
+        self, event: Dict[str, Any], detection_result: Any
+    ) -> None:
         """Handle anomaly alert"""
         try:
             explanation = None
@@ -411,7 +435,9 @@ class AgentCore:
                     detection_result.get("anomaly_score", 0.0)
                 ).value
                 if self._report_generator
-                else self._calculate_severity(detection_result.get("anomaly_score", 0.0))
+                else self._calculate_severity(
+                    detection_result.get("anomaly_score", 0.0)
+                )
             )
 
             credentials = self.credential_manager.get_device_credentials()
@@ -439,6 +465,10 @@ class AgentCore:
         except Exception as e:
             logger.error(f"Error handling alert: {e}")
 
+    # ------------------------------------------------------------------
+    # Storage helpers
+    # ------------------------------------------------------------------
+
     async def _store_telemetry_event(self, event: Dict[str, Any]) -> None:
         try:
             if self.sync_manager:
@@ -448,7 +478,9 @@ class AgentCore:
         except Exception as e:
             logger.error(f"Error storing telemetry event: {e}")
 
-    async def _store_anomaly_score(self, event: Dict[str, Any], detection_result: Any) -> None:
+    async def _store_anomaly_score(
+        self, event: Dict[str, Any], detection_result: Any
+    ) -> None:
         try:
             if not detection_result:
                 return
@@ -479,6 +511,10 @@ class AgentCore:
         except Exception as e:
             logger.error(f"Error storing alert: {e}")
 
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+
     def _calculate_severity(self, anomaly_score: float) -> str:
         """
         Fallback severity calculation used only when ReportGenerator is unavailable.
@@ -493,17 +529,14 @@ class AgentCore:
         else:
             return "LOW"
 
-    def _get_platform(self) -> str:
-        """Get current platform"""
-        import platform
-
-        return platform.system()
-
     def _get_supabase_url(self) -> str:
         """Get Supabase URL from environment or config"""
         import os
 
-        return os.environ.get("SUPABASE_URL", "https://placeholder.supabase.co")
+        return (
+            self.config.supabase_url
+            or os.environ.get("SUPABASE_URL", "https://placeholder.supabase.co")
+        )
 
     def get_status(self) -> Dict[str, Any]:
         """Get current agent status"""
