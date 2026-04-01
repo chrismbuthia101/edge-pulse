@@ -2,7 +2,7 @@
 Configuration Manager for EdgePulse
 
 Manages agent configuration with remote polling, hot-apply,
-and encrypted local caching as required by the checklist.
+and encrypted local caching
 """
 
 import os

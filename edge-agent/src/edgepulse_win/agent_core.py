@@ -2,8 +2,6 @@
 EdgePulse Agent Core - Portable Monitoring Logic
 
 This module contains all core monitoring, detection, and sync logic
-with NO Windows-specific imports. It's designed to be portable across
-platforms and can be wrapped by platform-specific services.
 """
 
 import asyncio
