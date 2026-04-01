@@ -154,10 +154,16 @@ class FastAPIServer(BaseAPIServer):
         if self.uvicorn_server:
             self.uvicorn_server.should_exit = True
             # Handle different uvicorn versions
-            if hasattr(self.uvicorn_server, 'shutdown'):
-                await self.uvicorn_server.shutdown()
-            elif hasattr(self.uvicorn_server, 'handle_exit'):
-                await self.uvicorn_server.handle_exit(sig=15, frame=None)
+            try:
+                if hasattr(self.uvicorn_server, 'shutdown'):
+                    await self.uvicorn_server.shutdown()
+                elif hasattr(self.uvicorn_server, 'handle_exit'):
+                    await self.uvicorn_server.handle_exit(sig=15, frame=None)
+                await asyncio.sleep(0.1)
+            except AttributeError as e:
+                logger.warning("uvicorn_shutdown_attribute_error", error=str(e))
+            except Exception as e:
+                logger.error("uvicorn_shutdown_error", error=str(e))
         self._running = False
         logger.info("fastapi_server_stopped")
     

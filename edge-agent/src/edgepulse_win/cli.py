@@ -152,29 +152,34 @@ def main():
         return
     
     # Default: run the agent
-    try:
-        config_path = Path(args.config) if args.config else None
-        settings = AgentSettings(config_path=config_path)
-        agent = EdgePulseAgent(settings=settings)
-        
-        if args.verbose:
-            # Set verbose logging through settings
-            import logging
-            logging.getLogger().setLevel(logging.DEBUG)
-        
-        asyncio.run(agent.run_forever())
+    if args.command is None or args.command == 'run':
+        try:
+            config_path = Path(args.config) if hasattr(args, 'config') and args.config else None
+            settings = AgentSettings(config_path=config_path)
+            agent = EdgePulseAgent(settings=settings)
             
-    except KeyboardInterrupt:
-        print("\nShutting down EdgePulse...")
-        sys.exit(0)
-    except ConfigurationError as e:
-        print(f"Configuration Error: {e}")
-        sys.exit(1)
-    except EdgePulseError as e:
-        print(f"EdgePulse Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Unexpected Error: {e}")
+            if hasattr(args, 'verbose') and args.verbose:
+                # Set verbose logging through settings
+                import logging
+                logging.getLogger().setLevel(logging.DEBUG)
+            
+            asyncio.run(agent.run_forever())
+            
+        except KeyboardInterrupt:
+            print("\nShutting down EdgePulse...")
+            sys.exit(0)
+        except ConfigurationError as e:
+            print(f"Configuration Error: {e}")
+            sys.exit(1)
+        except EdgePulseError as e:
+            print(f"EdgePulse Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Unexpected Error: {e}")
+            sys.exit(1)
+    else:
+        print(f"Unknown command: {args.command}")
+        parser.print_help()
         sys.exit(1)
 
 

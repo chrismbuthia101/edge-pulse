@@ -349,12 +349,11 @@ class EdgePulseAgent:
         
         # Ensemble (if multiple detectors)
         if self.settings.detection.use_ensemble and len(detectors) > 1:
-            ensemble = EnsembleDetector(
-                detectors=detectors,
-                voting_strategy="weighted",
-                threshold=self.settings.detection.threshold,
-            )
-            detectors = [ensemble]
+            # For now, use the first detector as the primary one
+            # TODO: Implement proper ensemble detection that combines multiple detectors
+            logger.info(f"Multiple detectors available, using primary detector: {type(detectors[0]).__name__}")
+            # Keep all detectors for now, but use the first one as primary
+            # detectors = [detectors[0]]
         
         return detectors
     
@@ -401,7 +400,7 @@ class EdgePulseAgent:
         if self._detectors:
             primary_detector = self._detectors[0]
             if hasattr(primary_detector, 'model') and primary_detector.model:
-                self.shap_explainer = SHAPExplainer(model=primary_detector.model)
+                self.shap_explainer = SHAPExplainer(model_id=f"{self.device_id}_primary")
         
         # Initialize report generator
         self.report_generator = ReportGenerator(device_id=self.device_id)
