@@ -1,16 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     Network,
-    Shield,
     AlertTriangle,
     Monitor,
     Server,
     Wifi,
     Activity,
-    Zap,
 } from "lucide-react";
 
 interface NetworkNode {
@@ -219,7 +217,7 @@ export default function NetworkTopology() {
                         {mockConnections.map((conn, index) => {
                             const sourceNode = mockNodes.find(n => n.id === conn.source);
                             const targetNode = mockNodes.find(n => n.id === conn.target);
-                            
+
                             if (!sourceNode || !targetNode) return null;
 
                             return (
@@ -256,10 +254,9 @@ export default function NetworkTopology() {
                             const Icon = getNodeIcon(node.type);
                             const isHovered = hoveredNode === node.id;
                             const isSelected = selectedNode?.id === node.id;
-                            
+
                             return (
                                 <g key={node.id}>
-                                    {/* Node circle */}
                                     <motion.circle
                                         cx={node.x}
                                         cy={node.y}
@@ -271,10 +268,9 @@ export default function NetworkTopology() {
                                         whileHover={{ scale: 1.1 }}
                                         onHoverStart={() => setHoveredNode(node.id)}
                                         onHoverEnd={() => setHoveredNode(null)}
-                                        onClick={() => setSelectedNode(node)}
+                                        onClick={() => setSelectedNode(isSelected ? null : node)}
                                     />
-                                    
-                                    {/* Threat level indicator */}
+
                                     {node.threatLevel !== "low" && (
                                         <circle
                                             cx={node.x + 15}
@@ -283,8 +279,7 @@ export default function NetworkTopology() {
                                             fill={getThreatColor(node.threatLevel)}
                                         />
                                     )}
-                                    
-                                    {/* Icon */}
+
                                     <foreignObject
                                         x={node.x - 12}
                                         y={node.y - 12}
@@ -296,8 +291,7 @@ export default function NetworkTopology() {
                                             <Icon className="h-4 w-4 text-white" />
                                         </div>
                                     </foreignObject>
-                                    
-                                    {/* Node name */}
+
                                     <text
                                         x={node.x}
                                         y={node.y + 35}

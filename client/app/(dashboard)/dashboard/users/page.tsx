@@ -48,6 +48,16 @@ interface AnalystUser {
     email?: string;
 }
 
+const roleColors = {
+    ADMINISTRATOR: "bg-red-500/10 text-red-500 border-red-500/20",
+    ANALYST: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+};
+
+const statusColors = {
+    active: "bg-green-500/10 text-green-500 border-green-500/20",
+    inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+};
+
 export default function UsersPage() {
     const { user: currentUser, hasRole } = useAuth();
     const supabase = createClient();
@@ -58,10 +68,7 @@ export default function UsersPage() {
     const [filterRole, setFilterRole] = useState<string>("all");
     const [filterStatus, setFilterStatus] = useState<string>("all");
 
-    useEffect(() => {
-        fetchUsers();
-    }, [fetchUsers]);
-
+    // Define fetchUsers with useCallback BEFORE the useEffect that calls it
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
@@ -78,7 +85,6 @@ export default function UsersPage() {
 
             if (error) throw error;
 
-            // Transform data to include email
             const transformedUsers: AnalystUser[] = (data || []).map((user: {
                 user_id: string;
                 full_name: string;
@@ -90,7 +96,7 @@ export default function UsersPage() {
                 auth_user?: { email: string };
             }) => ({
                 ...user,
-                email: user.auth_user?.email
+                email: user.auth_user?.email,
             }));
 
             setUsers(transformedUsers);
@@ -102,7 +108,12 @@ export default function UsersPage() {
         }
     }, [supabase]);
 
-    // Only administrators can access this page
+    // Now useEffect can safely reference fetchUsers
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
+
+    // Role-gated render — hooks must all be called before this early return
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -119,15 +130,15 @@ export default function UsersPage() {
         try {
             const { error } = await supabase
                 .from("analyst_users")
-                .update({
+                .update<Partial<AnalystUser>>({
                     is_active: !isActive,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date().toISOString(),
                 })
                 .eq("user_id", userId);
 
             if (error) throw error;
 
-            toast.success(`User ${!isActive ? 'activated' : 'deactivated'} successfully`);
+            toast.success(`User ${!isActive ? "activated" : "deactivated"} successfully`);
             fetchUsers();
         } catch (error) {
             console.error("Failed to toggle user status:", error);
@@ -139,9 +150,9 @@ export default function UsersPage() {
         try {
             const { error } = await supabase
                 .from("analyst_users")
-                .update({
+                .update<Partial<AnalystUser>>({
                     role: newRole,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date().toISOString(),
                 })
                 .eq("user_id", userId);
 
@@ -155,30 +166,21 @@ export default function UsersPage() {
         }
     };
 
-    // Filter users
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = !searchTerm ||
+    const filteredUsers = users.filter((user) => {
+        const matchesSearch =
+            !searchTerm ||
             user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesRole = filterRole === "all" || user.role === filterRole;
-        const matchesStatus = filterStatus === "all" ||
+        const matchesStatus =
+            filterStatus === "all" ||
             (filterStatus === "active" && user.is_active) ||
             (filterStatus === "inactive" && !user.is_active);
 
         return matchesSearch && matchesRole && matchesStatus;
     });
-
-    const roleColors = {
-        ADMINISTRATOR: "bg-red-500/10 text-red-500 border-red-500/20",
-        ANALYST: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    };
-
-    const statusColors = {
-        active: "bg-green-500/10 text-green-500 border-green-500/20",
-        inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-    };
 
     return (
         <div className="space-y-6">
@@ -227,7 +229,7 @@ export default function UsersPage() {
                                 <select
                                     value={filterRole}
                                     onChange={(e) => setFilterRole(e.target.value)}
-                                    className="px-3 py-2 border rounded-md bg-background"
+                                    className="px-3 py-2 border rounded-md bg-background text-sm"
                                 >
                                     <option value="all">All Roles</option>
                                     <option value="ADMINISTRATOR">Administrators</option>
@@ -237,7 +239,7 @@ export default function UsersPage() {
                                 <select
                                     value={filterStatus}
                                     onChange={(e) => setFilterStatus(e.target.value)}
-                                    className="px-3 py-2 border rounded-md bg-background"
+                                    className="px-3 py-2 border rounded-md bg-background text-sm"
                                 >
                                     <option value="all">All Status</option>
                                     <option value="active">Active</option>
@@ -265,7 +267,7 @@ export default function UsersPage() {
                     <CardContent>
                         {loading ? (
                             <div className="flex items-center justify-center h-32">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                             </div>
                         ) : filteredUsers.length === 0 ? (
                             <div className="text-center py-8">
@@ -292,12 +294,18 @@ export default function UsersPage() {
                                                     <Avatar>
                                                         <AvatarImage src={undefined} />
                                                         <AvatarFallback>
-                                                            {user.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                                            {user.full_name
+                                                                .split(" ")
+                                                                .map((n) => n[0])
+                                                                .join("")
+                                                                .toUpperCase()}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div>
                                                         <div className="font-medium">{user.full_name}</div>
-                                                        <div className="text-sm text-muted-foreground">{user.email}</div>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {user.email}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </TableCell>
@@ -306,10 +314,14 @@ export default function UsersPage() {
                                                     {user.role}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell>{user.department || "-"}</TableCell>
+                                            <TableCell>{user.department || "—"}</TableCell>
                                             <TableCell>
-                                                <Badge className={statusColors[user.is_active ? 'active' : 'inactive']}>
-                                                    {user.is_active ? 'Active' : 'Inactive'}
+                                                <Badge
+                                                    className={
+                                                        statusColors[user.is_active ? "active" : "inactive"]
+                                                    }
+                                                >
+                                                    {user.is_active ? "Active" : "Inactive"}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
@@ -329,7 +341,9 @@ export default function UsersPage() {
                                                         </DropdownMenuItem>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem
-                                                            onClick={() => toggleUserStatus(user.user_id, user.is_active)}
+                                                            onClick={() =>
+                                                                toggleUserStatus(user.user_id, user.is_active)
+                                                            }
                                                         >
                                                             {user.is_active ? (
                                                                 <>
@@ -344,10 +358,20 @@ export default function UsersPage() {
                                                             )}
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                            onClick={() => changeUserRole(user.user_id, user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR")}
+                                                            onClick={() =>
+                                                                changeUserRole(
+                                                                    user.user_id,
+                                                                    user.role === "ADMINISTRATOR"
+                                                                        ? "ANALYST"
+                                                                        : "ADMINISTRATOR"
+                                                                )
+                                                            }
                                                         >
                                                             <Shield className="h-4 w-4 mr-2" />
-                                                            Change to {user.role === "ADMINISTRATOR" ? "Analyst" : "Administrator"}
+                                                            Change to{" "}
+                                                            {user.role === "ADMINISTRATOR"
+                                                                ? "Analyst"
+                                                                : "Administrator"}
                                                         </DropdownMenuItem>
                                                         {user.user_id !== currentUser?.id && (
                                                             <>

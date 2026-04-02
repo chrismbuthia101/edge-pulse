@@ -52,7 +52,6 @@ export default function RegisterPage() {
     setEmailError(null);
     setNameError(null);
 
-    // Validate name
     const form = new FormData(e.currentTarget);
     const fullName = form.get("name") as string;
     const email = form.get("email") as string;
@@ -62,20 +61,19 @@ export default function RegisterPage() {
       return;
     }
 
-    // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
       setEmailError("Please enter a valid email address");
       return;
     }
 
-    // Validate password
     if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
       return;
     }
-    if (passwordStrength < 8) {
-      setPasswordError("Password is too weak.");
+
+    if (passwordStrength < 3) {
+      setPasswordError("Password is too weak. Please meet at least 3 requirements.");
       return;
     }
 
@@ -90,9 +88,9 @@ export default function RegisterPage() {
     setIsLoading(false);
 
     if (error) {
-      if (error.message.includes("email")) {
+      if (error.message.toLowerCase().includes("email")) {
         setEmailError(error.message);
-      } else if (error.message.includes("password")) {
+      } else if (error.message.toLowerCase().includes("password")) {
         setPasswordError(error.message);
       } else {
         toast.error(error.message);
@@ -101,14 +99,12 @@ export default function RegisterPage() {
     }
 
     toast.success("Account created successfully! Redirecting to login page...");
-
     setTimeout(() => {
       router.push("/auth/login");
       router.refresh();
     }, 2000);
   };
 
-  // Real-time validation functions
   const validateName = (name: string) => {
     if (!name || name.trim().length < 2) {
       setNameError("Name must be at least 2 characters long");
@@ -127,7 +123,8 @@ export default function RegisterPage() {
   };
 
   const validatePassword = (pwd: string) => {
-    if (pwd.length > 0 && passwordStrength < 3) {
+    const strength = passwordRequirements.filter((r) => r.test(pwd)).length;
+    if (pwd.length > 0 && strength < 3) {
       setPasswordError("Password is too weak. Please meet at least 3 requirements.");
     } else {
       setPasswordError(null);
@@ -136,9 +133,8 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* ── Left decorative panel ── */}
+      {/* Left decorative panel */}
       <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 border-r border-border flex-col justify-center items-center p-12">
-        {/* Grid */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
             <pattern id="reg-grid" width="48" height="48" patternUnits="userSpaceOnUse">
@@ -149,7 +145,6 @@ export default function RegisterPage() {
         </svg>
         <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/20 rounded-full blur-[90px] pointer-events-none" />
 
-        {/* Logo image */}
         <div className="relative z-10 flex items-center justify-center w-full h-full">
           <Image
             src="/images/reg-img.png"
@@ -162,9 +157,8 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* ── Right form panel ── */}
+      {/* Right form panel */}
       <div className="flex-1 flex flex-col">
-        {/* Top bar */}
         <div className="flex items-center justify-between px-8 py-5">
           <Link href="/" className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -183,7 +177,6 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Form */}
         <div className="flex-1 flex flex-col p-8 pt-4 lg:items-center lg:justify-center">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -337,7 +330,6 @@ export default function RegisterPage() {
                         <span className="text-xs text-muted-foreground">{passwordStrength}/5 requirements</span>
                       </div>
 
-                      {/* Requirements list */}
                       <div className="grid grid-cols-1 gap-1 pt-1">
                         {passwordRequirements.map((req) => {
                           const met = req.test(password);
@@ -419,8 +411,7 @@ export default function RegisterPage() {
                 </AnimatePresence>
               </div>
 
-
-              {/* Submit */}
+              {/* Submit - disabled when strength < 3 or mismatch */}
               <Button
                 type="submit"
                 className="w-full h-10 gap-2"
@@ -442,9 +433,13 @@ export default function RegisterPage() {
 
               <p className="text-center text-xs text-muted-foreground">
                 By creating an account you agree to our{" "}
-                <Link href="/terms" className="text-primary hover:underline underline-offset-4">Terms of Service</Link>
+                <Link href="/terms" className="text-primary hover:underline underline-offset-4">
+                  Terms of Service
+                </Link>
                 {" "}and{" "}
-                <Link href="/privacy" className="text-primary hover:underline underline-offset-4">Privacy Policy</Link>.
+                <Link href="/privacy" className="text-primary hover:underline underline-offset-4">
+                  Privacy Policy
+                </Link>.
               </p>
             </form>
           </motion.div>
@@ -464,7 +459,6 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

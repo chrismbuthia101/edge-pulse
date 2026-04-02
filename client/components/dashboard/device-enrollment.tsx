@@ -20,10 +20,10 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { Database } from "@/lib/supabase/types";
 
-// Use the Database type to infer the row type
 type EnrollmentToken = Database["public"]["Tables"]["device_enrollment_tokens"]["Row"];
 
-export default function DeviceEnrollment() {
+// Named export used by settings/page.tsx
+export function DeviceEnrollment() {
     const [tokens, setTokens] = useState<EnrollmentToken[]>([]);
     const [showToken, setShowToken] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
@@ -63,7 +63,6 @@ export default function DeviceEnrollment() {
         setCreating(true);
         try {
             const token = generateSecureToken();
-
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + 30);
 
@@ -86,19 +85,16 @@ export default function DeviceEnrollment() {
 
             if (error) throw error;
 
-            toast.success(`Token "${newTokenName}" created. Copied to clipboard.`);
-
             await navigator.clipboard.writeText(token);
+            toast.success(`Token "${newTokenName}" created. Copied to clipboard.`);
 
             setNewTokenName("");
             setMaxUses(1);
-
             await loadTokens();
 
             if (data) {
                 setShowToken(prev => ({ ...prev, [data.token_id]: true }));
             }
-
         } catch (err) {
             console.error(err);
             toast.error("Failed to create enrollment token");
@@ -115,7 +111,6 @@ export default function DeviceEnrollment() {
                 .eq("token_id", tokenId);
 
             if (error) throw error;
-
             toast.success("Enrollment token deleted");
             await loadTokens();
         } catch {
@@ -123,9 +118,9 @@ export default function DeviceEnrollment() {
         }
     };
 
-    const copyToken = async (token: string) => {
+    const copyToken = async (text: string) => {
         try {
-            await navigator.clipboard.writeText(token);
+            await navigator.clipboard.writeText(text);
             toast.success("Token copied to clipboard");
         } catch {
             toast.error("Failed to copy token");
@@ -143,18 +138,15 @@ export default function DeviceEnrollment() {
     const hashToken = async (token: string): Promise<string> => {
         const encoder = new TextEncoder();
         const data = encoder.encode(token);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
     };
 
-    const isExpired = (expiresAt: string) => {
-        return new Date(expiresAt) < new Date();
-    };
+    const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
 
-    const getUsagePercentage = (token: EnrollmentToken) => {
-        return (token.current_uses / token.max_uses) * 100;
-    };
+    const getUsagePercentage = (token: EnrollmentToken) =>
+        (token.current_uses / token.max_uses) * 100;
 
     return (
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -250,7 +242,9 @@ export default function DeviceEnrollment() {
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <h5 className="font-medium text-foreground">Token {token.token_id.substring(0, 8)}...</h5>
+                                                <h5 className="font-medium text-foreground">
+                                                    Token {token.token_id.substring(0, 8)}...
+                                                </h5>
                                                 {isExpired(token.expires_at) && (
                                                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20">
                                                         Expired
@@ -277,7 +271,7 @@ export default function DeviceEnrollment() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => copyToken("Token copied to clipboard")}
+                                                onClick={() => copyToken(token.token_id)}
                                                 className="gap-1"
                                             >
                                                 <Copy className="h-3 w-3" />
@@ -286,10 +280,19 @@ export default function DeviceEnrollment() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => setShowToken(prev => ({ ...prev, [token.token_id]: !prev[token.token_id] }))}
+                                                onClick={() =>
+                                                    setShowToken(prev => ({
+                                                        ...prev,
+                                                        [token.token_id]: !prev[token.token_id],
+                                                    }))
+                                                }
                                                 className="gap-1"
                                             >
-                                                {showToken[token.token_id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                                {showToken[token.token_id] ? (
+                                                    <EyeOff className="h-3 w-3" />
+                                                ) : (
+                                                    <Eye className="h-3 w-3" />
+                                                )}
                                                 {showToken[token.token_id] ? "Hide" : "Show"}
                                             </Button>
                                             <Button
@@ -304,7 +307,6 @@ export default function DeviceEnrollment() {
                                         </div>
                                     </div>
 
-                                    {/* Token Display */}
                                     <AnimatePresence>
                                         {showToken[token.token_id] && (
                                             <motion.div
@@ -314,11 +316,13 @@ export default function DeviceEnrollment() {
                                                 className="mt-3 p-3 bg-muted/50 rounded-md border border-border"
                                             >
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-medium text-foreground">Enrollment Token</span>
+                                                    <span className="text-xs font-medium text-foreground">
+                                                        Token ID
+                                                    </span>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={() => copyToken("Token copied to clipboard")}
+                                                        onClick={() => copyToken(token.token_id)}
                                                         className="gap-1 h-6"
                                                     >
                                                         <Copy className="h-3 w-3" />
@@ -326,10 +330,10 @@ export default function DeviceEnrollment() {
                                                     </Button>
                                                 </div>
                                                 <div className="font-mono text-sm bg-card border border-border rounded p-2 break-all">
-                                                    [Token not displayed - stored securely]
+                                                    {token.token_id}
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-2">
-                                                    ⚠️ Store this token securely. It will not be shown again.
+                                                    ⚠️ Use the token hash for agent enrollment. Store it securely.
                                                 </p>
                                             </motion.div>
                                         )}
@@ -346,13 +350,15 @@ export default function DeviceEnrollment() {
                                         <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                                             <motion.div
                                                 className={`h-full rounded-full ${getUsagePercentage(token) >= 100
-                                                    ? "bg-red-500"
-                                                    : getUsagePercentage(token) >= 75
-                                                        ? "bg-amber-500"
-                                                        : "bg-green-500"
+                                                        ? "bg-red-500"
+                                                        : getUsagePercentage(token) >= 75
+                                                            ? "bg-amber-500"
+                                                            : "bg-green-500"
                                                     }`}
                                                 initial={{ width: 0 }}
-                                                animate={{ width: `${Math.min(getUsagePercentage(token), 100)}%` }}
+                                                animate={{
+                                                    width: `${Math.min(getUsagePercentage(token), 100)}%`,
+                                                }}
                                                 transition={{ duration: 0.5 }}
                                             />
                                         </div>
@@ -366,3 +372,5 @@ export default function DeviceEnrollment() {
         </div>
     );
 }
+
+export default DeviceEnrollment;

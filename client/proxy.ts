@@ -16,8 +16,6 @@ export const config = {
 const ADMIN_ONLY_ROUTES = [
   "/dashboard/users",
   "/dashboard/reports",
-  "/dashboard/settings/users",
-  "/dashboard/settings/agent-config",
 ];
 
 const ANALYST_OR_ADMIN_ROUTES = [
@@ -36,19 +34,23 @@ export async function proxy(req: NextRequest) {
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (cookies) =>
-          cookies.forEach(({ name, value }) =>
-            res.cookies.set(name, value)
+          cookies.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options ?? {})
           ),
       },
     }
-  )
+  );
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser();
 
   const { pathname } = req.nextUrl;
-  const isAuthPage = ["/auth/login", "/auth/register", "/auth/forgot-password"].includes(pathname);
+  const isAuthPage = [
+    "/auth/login",
+    "/auth/register",
+    "/auth/forgot-password",
+  ].includes(pathname);
   const isResetPage = pathname === "/auth/reset-password";
 
   // Redirect unauthenticated users away from protected routes
@@ -75,7 +77,6 @@ export async function proxy(req: NextRequest) {
 
   // Role-based access control for authenticated users
   if (user && pathname.startsWith("/dashboard")) {
-    // Fetch user role
     const { data: analystData } = await supabase
       .from("analyst_users")
       .select("role")
@@ -103,5 +104,5 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  return res
+  return res;
 }

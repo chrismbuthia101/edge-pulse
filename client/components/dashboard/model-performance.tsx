@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
     Brain,
@@ -33,13 +33,13 @@ const mockMetrics: ModelMetrics = {
     driftScore: 0.02,
 };
 
-export default function ModelPerformance() {
+// Named export for direct imports
+export function ModelPerformance() {
     const [metrics, setMetrics] = useState<ModelMetrics>(mockMetrics);
     const [refreshing, setRefreshing] = useState(false);
 
     const refreshMetrics = async () => {
         setRefreshing(true);
-        // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 1000));
         setMetrics({
             ...mockMetrics,
@@ -159,7 +159,7 @@ export default function ModelPerformance() {
                                     <motion.div
                                         className="h-full bg-amber-500 rounded-full"
                                         initial={{ width: 0 }}
-                                        animate={{ width: `${(metrics.driftScore * 100)}%` }}
+                                        animate={{ width: `${metrics.driftScore * 100}%` }}
                                         transition={{ delay: 0.4, duration: 0.8 }}
                                     />
                                 </div>
@@ -201,3 +201,5 @@ export default function ModelPerformance() {
         </div>
     );
 }
+
+export default ModelPerformance;
