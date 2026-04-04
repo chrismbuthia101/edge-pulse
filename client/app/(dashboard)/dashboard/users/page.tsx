@@ -3,34 +3,19 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-    Users,
-    UserPlus,
-    Search,
-    MoreHorizontal,
-    Shield,
-    CheckCircle,
-    XCircle,
-    Edit,
-    Trash2,
+    Users, UserPlus, Search, MoreHorizontal, Shield,
+    CheckCircle, XCircle, Edit, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+    DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/client";
@@ -48,12 +33,12 @@ interface AnalystUser {
     email?: string;
 }
 
-const roleColors = {
+const roleColors: Record<string, string> = {
     ADMINISTRATOR: "bg-red-500/10 text-red-500 border-red-500/20",
     ANALYST: "bg-blue-500/10 text-blue-500 border-blue-500/20",
 };
 
-const statusColors = {
+const statusColors: Record<string, string> = {
     active: "bg-green-500/10 text-green-500 border-green-500/20",
     inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 };
@@ -68,38 +53,19 @@ export default function UsersPage() {
     const [filterRole, setFilterRole] = useState<string>("all");
     const [filterStatus, setFilterStatus] = useState<string>("all");
 
-    // Define fetchUsers with useCallback BEFORE the useEffect that calls it
+    // fetchUsers defined with useCallback BEFORE useEffect
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
 
             const { data, error } = await supabase
                 .from("analyst_users")
-                .select(`
-                    *,
-                    auth_user:auth.users(
-                        email
-                    )
-                `)
+                .select("*")
                 .order("created_at", { ascending: false });
 
             if (error) throw error;
 
-            const transformedUsers: AnalystUser[] = (data || []).map((user: {
-                user_id: string;
-                full_name: string;
-                role: "ANALYST" | "ADMINISTRATOR";
-                department: string | null;
-                is_active: boolean;
-                created_at: string;
-                updated_at: string;
-                auth_user?: { email: string };
-            }) => ({
-                ...user,
-                email: user.auth_user?.email,
-            }));
-
-            setUsers(transformedUsers);
+            setUsers(data || []);
         } catch (error) {
             console.error("Failed to fetch users:", error);
             toast.error("Failed to load users");
@@ -108,12 +74,12 @@ export default function UsersPage() {
         }
     }, [supabase]);
 
-    // Now useEffect can safely reference fetchUsers
+    // useEffect BEFORE conditional return
     useEffect(() => {
         fetchUsers();
     }, [fetchUsers]);
 
-    // Role-gated render — hooks must all be called before this early return
+    // Role-gated render — AFTER all hooks
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -130,10 +96,7 @@ export default function UsersPage() {
         try {
             const { error } = await supabase
                 .from("analyst_users")
-                .update<Partial<AnalystUser>>({
-                    is_active: !isActive,
-                    updated_at: new Date().toISOString(),
-                })
+                .update({ is_active: !isActive, updated_at: new Date().toISOString() })
                 .eq("user_id", userId);
 
             if (error) throw error;
@@ -150,10 +113,7 @@ export default function UsersPage() {
         try {
             const { error } = await supabase
                 .from("analyst_users")
-                .update<Partial<AnalystUser>>({
-                    role: newRole,
-                    updated_at: new Date().toISOString(),
-                })
+                .update({ role: newRole, updated_at: new Date().toISOString() })
                 .eq("user_id", userId);
 
             if (error) throw error;
@@ -184,63 +144,33 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-between"
-            >
+            <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-display font-bold text-foreground">
-                        User Management
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Manage analyst users and permissions
-                    </p>
+                    <h1 className="text-2xl font-display font-bold text-foreground">User Management</h1>
+                    <p className="text-muted-foreground">Manage analyst users and permissions</p>
                 </div>
                 <Button>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Add User
+                    <UserPlus className="h-4 w-4 mr-2" />Add User
                 </Button>
             </motion.div>
 
-            {/* Filters */}
-            <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-1">
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Search users..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10"
-                                    />
+                                    <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
                                 </div>
                             </div>
-
                             <div className="flex gap-2">
-                                <select
-                                    value={filterRole}
-                                    onChange={(e) => setFilterRole(e.target.value)}
-                                    className="px-3 py-2 border rounded-md bg-background text-sm"
-                                >
+                                <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
                                     <option value="all">All Roles</option>
                                     <option value="ADMINISTRATOR">Administrators</option>
                                     <option value="ANALYST">Analysts</option>
                                 </select>
-
-                                <select
-                                    value={filterStatus}
-                                    onChange={(e) => setFilterStatus(e.target.value)}
-                                    className="px-3 py-2 border rounded-md bg-background text-sm"
-                                >
+                                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
                                     <option value="all">All Status</option>
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
@@ -251,17 +181,11 @@ export default function UsersPage() {
                 </Card>
             </motion.div>
 
-            {/* Users Table */}
-            <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Users className="h-5 w-5" />
-                            Users ({filteredUsers.length})
+                            <Users className="h-5 w-5" />Users ({filteredUsers.length})
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -294,91 +218,43 @@ export default function UsersPage() {
                                                     <Avatar>
                                                         <AvatarImage src={undefined} />
                                                         <AvatarFallback>
-                                                            {user.full_name
-                                                                .split(" ")
-                                                                .map((n) => n[0])
-                                                                .join("")
-                                                                .toUpperCase()}
+                                                            {user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase()}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div>
                                                         <div className="font-medium">{user.full_name}</div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {user.email}
-                                                        </div>
+                                                        <div className="text-sm text-muted-foreground">{user.email}</div>
                                                     </div>
                                                 </div>
                                             </TableCell>
-                                            <TableCell>
-                                                <Badge className={roleColors[user.role]}>
-                                                    {user.role}
-                                                </Badge>
-                                            </TableCell>
+                                            <TableCell><Badge className={roleColors[user.role]}>{user.role}</Badge></TableCell>
                                             <TableCell>{user.department || "—"}</TableCell>
                                             <TableCell>
-                                                <Badge
-                                                    className={
-                                                        statusColors[user.is_active ? "active" : "inactive"]
-                                                    }
-                                                >
+                                                <Badge className={statusColors[user.is_active ? "active" : "inactive"]}>
                                                     {user.is_active ? "Active" : "Inactive"}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell>
-                                                {new Date(user.created_at).toLocaleDateString()}
-                                            </TableCell>
+                                            <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="sm">
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
+                                                        <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem>
-                                                            <Edit className="h-4 w-4 mr-2" />
-                                                            Edit User
-                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem><Edit className="h-4 w-4 mr-2" />Edit User</DropdownMenuItem>
                                                         <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            onClick={() =>
-                                                                toggleUserStatus(user.user_id, user.is_active)
-                                                            }
-                                                        >
-                                                            {user.is_active ? (
-                                                                <>
-                                                                    <XCircle className="h-4 w-4 mr-2" />
-                                                                    Deactivate
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                                                    Activate
-                                                                </>
-                                                            )}
+                                                        <DropdownMenuItem onClick={() => toggleUserStatus(user.user_id, user.is_active)}>
+                                                            {user.is_active ? <><XCircle className="h-4 w-4 mr-2" />Deactivate</> : <><CheckCircle className="h-4 w-4 mr-2" />Activate</>}
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() =>
-                                                                changeUserRole(
-                                                                    user.user_id,
-                                                                    user.role === "ADMINISTRATOR"
-                                                                        ? "ANALYST"
-                                                                        : "ADMINISTRATOR"
-                                                                )
-                                                            }
-                                                        >
+                                                        <DropdownMenuItem onClick={() => changeUserRole(user.user_id, user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR")}>
                                                             <Shield className="h-4 w-4 mr-2" />
-                                                            Change to{" "}
-                                                            {user.role === "ADMINISTRATOR"
-                                                                ? "Analyst"
-                                                                : "Administrator"}
+                                                            Change to {user.role === "ADMINISTRATOR" ? "Analyst" : "Administrator"}
                                                         </DropdownMenuItem>
                                                         {user.user_id !== currentUser?.id && (
                                                             <>
                                                                 <DropdownMenuSeparator />
                                                                 <DropdownMenuItem className="text-destructive">
-                                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                                    Delete User
+                                                                    <Trash2 className="h-4 w-4 mr-2" />Delete User
                                                                 </DropdownMenuItem>
                                                             </>
                                                         )}
