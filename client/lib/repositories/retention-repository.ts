@@ -21,19 +21,8 @@ export class RetentionRepository extends BaseRepository {
   }
 
   async getRetentionSettings(deviceId: string): Promise<RetentionSetting | null> {
-    try {
-      const { data, error } = await this.supabase
-        .from('retention_settings')
-        .select('retention_days, device_id, updated_at')
-        .eq('device_id', deviceId || 'global')
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      this.handleError(error);
-      return null;
-    }
+    const result = await this.findOne({ device_id: deviceId || 'global' });
+    return result as RetentionSetting | null;
   }
 
   async upsertRetentionSetting(deviceId: string, retentionDays: number): Promise<void> {

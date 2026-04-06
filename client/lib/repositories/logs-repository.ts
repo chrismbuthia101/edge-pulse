@@ -163,7 +163,7 @@ export class LogsRepository extends BaseRepository {
       // Get the latest log entry for each device to determine status
       const { data, error } = await this.supabase
         .from('tamper_evident_log')
-        .select('device_id, sequence_number, verified, created_at')
+        .select('device_id, log_sequence_number, verified, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -173,11 +173,11 @@ export class LogsRepository extends BaseRepository {
 
       data?.forEach(log => {
         const existing = deviceStatuses.get(log.device_id);
-        if (!existing || log.sequence_number > existing.total_entries) {
+        if (!existing || log.log_sequence_number > existing.total_entries) {
           deviceStatuses.set(log.device_id, {
             device_id: log.device_id,
             device_name: `Device-${log.device_id.slice(-4)}`,
-            total_entries: log.sequence_number,
+            total_entries: log.log_sequence_number,
             verified: log.verified ?? false,
             broken_at_sequence: null, // Would need verification logic
             last_verified_at: log.created_at,
