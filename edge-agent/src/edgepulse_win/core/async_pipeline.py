@@ -239,10 +239,16 @@ class AsyncPipeline:
                     }
 
             elif collector_name == "ProcessMonitor":
-                if isinstance(result, list):
-                    structured_telemetry["processes"] = result
-                elif isinstance(result, dict):
-                    structured_telemetry["processes"] = [result]
+                try:
+                    process_list = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.collectors[i].get_running_processes
+                        ),
+                        timeout=_COLLECTOR_TIMEOUT_SECONDS,
+                    )
+                    structured_telemetry["processes"] = process_list or []
+                except Exception as e:
+                    logger.error("process_list_collection_error", error=str(e))
 
             elif collector_name == "NetworkMonitor":
                 if isinstance(result, list):

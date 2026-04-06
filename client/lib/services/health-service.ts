@@ -28,7 +28,8 @@ export class HealthService {
     return this.getDeviceHealth({ limit: 100 });
   }
 
-  subscribeToHealthUpdates(callbacks: {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  subscribeToHealthUpdates(_callbacks: {
     onDeviceHealthUpdate?: (device: DeviceHealth) => void;
     onSystemHealthUpdate?: (systemHealth: SystemHealth) => void;
     onError?: (error: Error) => void;

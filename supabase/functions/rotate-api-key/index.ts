@@ -16,13 +16,11 @@ interface RotateKeyResponse {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Only POST requests allowed
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ success: false, error: 'Method not allowed' }),
@@ -30,7 +28,6 @@ serve(async (req) => {
       )
     }
 
-    // Extract device authentication headers
     const deviceId = req.headers.get('x-edgepulse-device-id')
     const apiKey = req.headers.get('x-edgepulse-api-key')
 
@@ -41,14 +38,11 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Validate API key
-    const apiKeyHash = await hashApiKey(apiKey)
+    const apiKeyHash = await hashApiKey(apiKey, deviceId)
     const { data: keyData, error: keyError } = await supabase
       .from('agent_api_keys')
       .select('*')
@@ -64,7 +58,6 @@ serve(async (req) => {
       )
     }
 
-    // Check if key is expired
     if (keyData.expires_at && new Date(keyData.expires_at) < new Date()) {
       return new Response(
         JSON.stringify({ success: false, error: 'API key expired' }),
@@ -75,14 +68,13 @@ serve(async (req) => {
     // Deactivate old key
     await supabase
       .from('agent_api_keys')
-      .update({ is_active: false })
+      .update({ is_active: false, last_used_at: new Date().toISOString() })
       .eq('key_id', keyData.key_id)
 
-    // Generate new API key
+    // Generate new key
     const newApiKey = await generateApiKey()
-    const newApiKeyHash = await hashApiKey(newApiKey)
+    const newApiKeyHash = await hashApiKey(newApiKey, deviceId)
 
-    // Create new API key entry
     const { data: newKeyData, error: newKeyError } = await supabase
       .from('agent_api_keys')
       .insert({
@@ -108,13 +100,6 @@ serve(async (req) => {
       )
     }
 
-    // Update last used timestamp for old key
-    await supabase
-      .from('agent_api_keys')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('key_id', keyData.key_id)
-
-    // Create audit trail entry
     await supabase
       .from('audit_trail')
       .insert({
@@ -122,71 +107,34 @@ serve(async (req) => {
         action: 'API_KEY_ROTATED',
         resource_type: 'agent_api_keys',
         resource_id: newKeyData.key_id,
-        old_values: {
-          key_id: keyData.key_id,
-          key_name: keyData.key_name
-        },
-        new_values: {
-          key_id: newKeyData.key_id,
-          key_name: newKeyData.key_name
-        },
+        old_values: { key_id: keyData.key_id, key_name: keyData.key_name },
+        new_values: { key_id: newKeyData.key_id, key_name: newKeyData.key_name },
         timestamp_utc: new Date().toISOString()
       })
 
-    const response: RotateKeyResponse = {
-      success: true,
-      api_key: newApiKey
-    }
-
     return new Response(
-      JSON.stringify(response),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ success: true, api_key: newApiKey } as RotateKeyResponse),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('API key rotation error:', error)
-
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Internal server error'
-      }),
-      {
-        status: 500,
-        headers: corsHeaders
-      }
+      JSON.stringify({ success: false, error: 'Internal server error' }),
+      { status: 500, headers: corsHeaders }
     )
   }
 })
 
-async function hashApiKey(apiKey: string): Promise<string> {
-  // Use SHA-256 hashing for API keys (aligned with schema)
+async function hashApiKey(apiKey: string, deviceId: string): Promise<string> {
   const encoder = new TextEncoder()
-  const data = encoder.encode(apiKey)
+  const data = encoder.encode(apiKey + 'ep-v1-' + deviceId)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-
-  return hashHex
-}
-
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(token)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  return hashHex
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 async function generateApiKey(): Promise<string> {
-  // Generate 32-byte random API key
   const array = new Uint8Array(32)
   crypto.getRandomValues(array)
   return encodeBase64(array).replace(/[+/=]/g, '').substring(0, 40)

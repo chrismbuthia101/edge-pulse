@@ -17,7 +17,7 @@ interface Rect {
  * Hook to measure element dimensions and position
  * Uses ResizeObserver for efficient size tracking
  */
-export function useMeasure<T extends HTMLElement = HTMLElement>(): [React.RefObject<T>, Rect, () => void] {
+export function useMeasure<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, Rect, () => void] {
   const ref = useRef<T>(null);
   const [rect, setRect] = useState<Rect>({
     width: 0,

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { DeviceEnrollmentRepository } from '@/lib/repositories';
 import { DeviceEnrollmentService } from '@/lib/services/device-enrollment-service';
+import { AuthService } from '@/lib/services/auth-service';
+import { AuthRepository } from '@/lib/repositories/auth-repository';
 import type { EnrollmentToken } from '@/lib/supabase/types';
 import { toast } from 'sonner';
 
@@ -19,7 +21,9 @@ interface DeviceEnrollmentStore {
 }
 
 const deviceEnrollmentRepository = new DeviceEnrollmentRepository();
-const deviceEnrollmentService = new DeviceEnrollmentService(deviceEnrollmentRepository);
+const authRepository = new AuthRepository();
+const authService = new AuthService(authRepository);
+const deviceEnrollmentService = new DeviceEnrollmentService(deviceEnrollmentRepository, authService);
 
 // ─── Store ─────────────────────────────────────────────────────────────────────
 
@@ -63,13 +67,13 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get)
     }
 
     set({ creating: true, error: null });
-    
+
     try {
       const result = await deviceEnrollmentService.createToken({ name, maxUses });
-      
+
       // Refresh tokens after creation
       await get().refreshTokens();
-      
+
       toast.success(`Token "${name}" created. Copied to clipboard.`);
       return result.token;
     } catch (err) {
@@ -86,12 +90,12 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get)
     try {
       set({ error: null });
       await deviceEnrollmentService.deleteToken(tokenId);
-      
+
       // Update local state optimistically
       set((state) => ({
         tokens: state.tokens.filter((t) => t.token_id !== tokenId)
       }));
-      
+
       toast.success('Enrollment token deleted');
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Failed to delete token';

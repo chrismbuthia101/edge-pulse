@@ -34,14 +34,44 @@ class LogWriter:
         self.chain = HashChain(device_id, self.path_manager)
         self.db_manager = DatabaseManager(self.db_path)
         self._initialized = False
+
+        self._ensure_tables_sync()
         logger.info(f"Created LogWriter for database at {self.db_path}")
 
-    async def initialize(self) -> None:
-        """Initialize the database"""
-        if not self._initialized:
-            await self.db_manager.initialize()
-            self._initialized = True
-            logger.info(f"Initialized database at {self.db_path}")
+    def _ensure_tables_sync(self) -> None:
+        """Create the minimum tables needed by the sync write paths."""
+        ddl_statements = [
+            """CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                type TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                previous_hash TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS anomalies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                score REAL NOT NULL,
+                severity TEXT NOT NULL,
+                explanation_json TEXT,
+                hash_ref TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                alert_json TEXT NOT NULL,
+                acknowledged INTEGER NOT NULL DEFAULT 0,
+                hash_ref TEXT NOT NULL
+            )""",
+        ]
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                for ddl in ddl_statements:
+                    conn.execute(ddl)
+                conn.commit()
+        except Exception as exc:
+            logger.error(f"Error ensuring log writer tables: {exc}")
 
     def write_event(self, event_type: str, data: Dict) -> None:
         """Log a general event."""

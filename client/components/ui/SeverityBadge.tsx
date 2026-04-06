@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, AlertCircle, Info, CheckCircle } from 'lucide-react'
+import { AlertTriangle, AlertCircle, Info } from 'lucide-react'
 
 interface SeverityBadgeProps {
   severity: 'low' | 'medium' | 'high' | 'critical'
@@ -54,8 +54,8 @@ export function SeverityBadge({ severity, className = '', showIcon = false }: Se
   const Icon = config.icon
 
   return (
-    <Badge 
-      variant={config.variant} 
+    <Badge
+      variant={config.variant}
       className={className}
       title={config.description}
     >

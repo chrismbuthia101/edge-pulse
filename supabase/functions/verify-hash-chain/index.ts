@@ -9,13 +9,11 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Only administrators can verify hash chains
     const authHeader = req.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
@@ -24,10 +22,14 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    
-    // Verify JWT token
-    const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: { user }, error } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
     if (error || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
@@ -35,7 +37,6 @@ serve(async (req) => {
       );
     }
 
-    // Check if user is administrator
     const { data: userData } = await supabase
       .from("analyst_users")
       .select("role")
@@ -62,19 +63,14 @@ serve(async (req) => {
         );
       }
 
-      // Query tamper evident log entries
       let query = supabase
         .from("tamper_evident_log")
         .select("*")
         .eq("device_id", deviceId)
         .order("log_sequence_number", { ascending: true });
 
-      if (fromSequence) {
-        query = query.gte("log_sequence_number", parseInt(fromSequence));
-      }
-      if (toSequence) {
-        query = query.lte("log_sequence_number", parseInt(toSequence));
-      }
+      if (fromSequence) query = query.gte("log_sequence_number", parseInt(fromSequence));
+      if (toSequence) query = query.lte("log_sequence_number", parseInt(toSequence));
 
       const { data: logEntries, error: logError } = await query;
 
@@ -85,14 +81,13 @@ serve(async (req) => {
         );
       }
 
-      // Verify chain integrity
       const verification = await verifyChainIntegrity(logEntries || []);
 
       return new Response(
         JSON.stringify({
           device_id: deviceId,
           entries: logEntries,
-          verification: verification,
+          verification,
           total_entries: logEntries?.length || 0
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -122,10 +117,9 @@ async function verifyChainIntegrity(entries: any[]): Promise<{
     return { is_valid: true };
   }
 
-  let previousHash = "0".repeat(64); // Genesis hash
+  let previousHash = "0".repeat(64);
 
   for (const entry of entries) {
-    // Verify sequence continuity
     if (entry.previous_entry_hash !== previousHash) {
       return {
         is_valid: false,
@@ -134,7 +128,6 @@ async function verifyChainIntegrity(entries: any[]): Promise<{
       };
     }
 
-    // Verify content hash
     const expectedContentHash = await computeContentHash(entry);
     if (entry.entry_content_hash !== expectedContentHash) {
       return {
@@ -144,7 +137,6 @@ async function verifyChainIntegrity(entries: any[]): Promise<{
       };
     }
 
-    // Verify digital signature if present
     if (entry.digital_signature) {
       const signatureValid = await verifySignature(entry, expectedContentHash);
       if (!signatureValid) {
@@ -169,8 +161,7 @@ async function computeContentHash(entry: any): Promise<string> {
     log_entry_type: entry.log_entry_type,
     log_entry_reference_id: entry.log_entry_reference_id,
     entry_timestamp_utc: entry.entry_timestamp_utc,
-    entry_content_hash: entry.entry_content_hash,
-    previous_entry_hash: entry.previous_entry_hash
+    previous_entry_hash: entry.previous_entry_hash,
   };
 
   const data = new TextEncoder().encode(JSON.stringify(content));
@@ -180,7 +171,5 @@ async function computeContentHash(entry: any): Promise<string> {
 }
 
 async function verifySignature(entry: any, contentHash: string): Promise<boolean> {
-  // In a real implementation, this would verify the digital signature
-  // For now, we'll assume signatures are valid if present
   return entry.digital_signature !== null && entry.digital_signature !== undefined;
 }

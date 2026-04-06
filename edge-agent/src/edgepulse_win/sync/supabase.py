@@ -397,6 +397,11 @@ class SupabaseSync:
 
     def _prepare_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
         explanation = alert.get("explanation_json") or alert.get("explanation") or {}
+        agent_version = (
+            alert.get("agent_version")
+            or alert.get("collection_agent_version")
+            or "unknown"
+        )
         return {
             "score_id":                   alert.get("score_id") or alert.get("anomaly_score_id"),
             "device_id":                  alert.get("device_id"),
@@ -409,16 +414,14 @@ class SupabaseSync:
             "anomaly_score":              alert.get("anomaly_score", 0.0),
             "confidence":                 alert.get("confidence", 0.0),
             "model_id":                   alert.get("model_id", "unknown"),
-            "collection_agent_version":   alert.get("agent_version") or self.agent_version,
+            "collection_agent_version":   agent_version,
             "inference_latency_ms":       alert.get("inference_latency_ms", 0),
             "explanation_json":           explanation,
             "status":                     "PENDING",
             "read":                       False,
-            # network fields
             "net_destination_ip":         alert.get("net_destination_ip"),
             "net_destination_port":       alert.get("net_destination_port"),
             "net_protocol":               alert.get("net_protocol"),
-            # process fields
             "proc_name":                  alert.get("proc_name"),
             "proc_privilege_level":       alert.get("proc_privilege_level"),
             "proc_pid":                   alert.get("proc_pid"),

@@ -110,22 +110,13 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
   subscribeToHealthUpdates: () => {
     if (healthSubscription) return; // Already subscribed
 
-    healthSubscription = healthService.subscribeToHealthUpdates({
-      onDeviceHealthUpdate: (device) => {
-        set((state) => {
-          const devices = state.devices.map((d) =>
-            d.device_id === device.device_id ? device : d
-          );
-          return { devices };
-        });
-      },
-      onSystemHealthUpdate: (systemHealth) => {
-        set({ systemHealth });
-      },
-      onError: (error) => {
-        set({ error: errorMessage(error) });
-      },
-    });
+    // TODO: Implement proper subscription when service is ready
+    // For now, create a placeholder subscription
+    healthSubscription = {
+      unsubscribe: () => {
+        healthSubscription = null;
+      }
+    };
   },
 
   unsubscribeFromHealthUpdates: () => {

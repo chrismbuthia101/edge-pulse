@@ -5,10 +5,9 @@ import { ServerErrorPage } from "@/components/ui/error-boundary";
 
 export default function Error({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  reset?: () => void;
 }) {
   useEffect(() => {
     console.error("Server error:", error);
