@@ -5,7 +5,7 @@ export interface DeviceHealth {
   agent_version: string;
   last_seen_utc: string;
   is_active: boolean;
-  status: "ONLINE" | "OFFLINE" | "WARNING" | "ERROR";
+  status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
   cpu_usage: number;
   memory_usage: number;
   disk_usage: number;
@@ -27,8 +27,11 @@ export interface SystemHealth {
   avg_cpu_usage: number;
   avg_memory_usage: number;
   avg_disk_usage: number;
+  total_alerts: number;
   total_alerts_24h: number;
   critical_alerts_24h: number;
   system_uptime: number;
   api_response_time: number;
+  system_status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  last_updated: string;
 }

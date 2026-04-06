@@ -1,20 +1,25 @@
--- EdgePulse Supabase schema v2.0.0
+-- ============================================================
+-- EdgePulse Schema v1.0.0
+-- Migration: 001_core_schema
+-- Description: Core tables — devices, telemetry, alerts, cases
+-- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ─── Enums ────────────────────────────────────────────────────────────────────
 DO $$ BEGIN
-    CREATE TYPE alert_severity  AS ENUM ('low','medium','high','critical');
-    CREATE TYPE alert_status    AS ENUM ('PENDING','ACKNOWLEDGED','INVESTIGATED','CLOSED');
-    CREATE TYPE telemetry_src   AS ENUM ('PROCESS','NETWORK','FILE','RESOURCE');
-    CREATE TYPE device_status   AS ENUM ('online','offline','gone_silent','unsynced','isolated');
-    CREATE TYPE device_risk     AS ENUM ('none','low','medium','high','critical');
-    CREATE TYPE device_type     AS ENUM ('server','laptop','workstation','other');
-    CREATE TYPE sync_status     AS ENUM ('PENDING','SYNCING','COMPLETED','FAILED');
-    CREATE TYPE user_role       AS ENUM ('ANALYST','ADMINISTRATOR');
-    CREATE TYPE case_severity   AS ENUM ('LOW','MEDIUM','HIGH','CRITICAL');
-    CREATE TYPE case_status     AS ENUM ('OPEN','IN_PROGRESS','CLOSED','ESCALATED');
+    CREATE TYPE alert_severity    AS ENUM ('low','medium','high','critical');
+    CREATE TYPE alert_status      AS ENUM ('PENDING','ACKNOWLEDGED','INVESTIGATED','CLOSED');
+    CREATE TYPE telemetry_src     AS ENUM ('PROCESS','NETWORK','FILE','RESOURCE');
+    CREATE TYPE device_status     AS ENUM ('online','offline','gone_silent','unsynced','isolated');
+    CREATE TYPE device_risk       AS ENUM ('none','low','medium','high','critical');
+    CREATE TYPE device_type       AS ENUM ('server','laptop','workstation','other');
+    CREATE TYPE sync_status       AS ENUM ('PENDING','SYNCING','COMPLETED','FAILED');
+    CREATE TYPE user_role         AS ENUM ('ANALYST','ADMINISTRATOR');
+    CREATE TYPE case_severity     AS ENUM ('LOW','MEDIUM','HIGH','CRITICAL');
+    CREATE TYPE case_status       AS ENUM ('OPEN','IN_PROGRESS','CLOSED','ESCALATED');
+    CREATE TYPE privilege_level   AS ENUM ('user','admin','system');
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
@@ -32,41 +37,41 @@ CREATE INDEX idx_au_role      ON analyst_users(role);
 CREATE INDEX idx_au_is_active ON analyst_users(is_active);
 
 -- ─── 2. device_registry ───────────────────────────────────────────────────────
--- One row per enrolled edge device
 CREATE TABLE device_registry (
-    device_id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    hostname            TEXT        NOT NULL,
-    operating_system    TEXT        NOT NULL,
-    agent_version       TEXT        NOT NULL,
-    device_type         device_type NOT NULL DEFAULT 'workstation',
-    ip_address          INET,
-    enrolled_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    enrolled_by         UUID        REFERENCES analyst_users(user_id),
-    last_seen_utc       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    is_active           BOOLEAN     NOT NULL DEFAULT TRUE,
-    -- live metrics (updated by heartbeat, readable by client)
-    status              device_status NOT NULL DEFAULT 'online',
-    risk_level          device_risk   NOT NULL DEFAULT 'none',
-    alerts_count        INTEGER     NOT NULL DEFAULT 0,
-    cpu_percent         NUMERIC(5,2),
-    ram_percent         NUMERIC(5,2),
-    sync_queue_depth    INTEGER     NOT NULL DEFAULT 0,
-    hash_chain_ok       BOOLEAN     NOT NULL DEFAULT TRUE,
-    actively_reporting  BOOLEAN     NOT NULL DEFAULT FALSE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                  UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name                TEXT            NOT NULL,       -- client: name
+    type                device_type     NOT NULL DEFAULT 'workstation',
+    os                  TEXT            NOT NULL,       -- client: os
+    ip                  INET,                           -- client: ip
+    agent_version       TEXT            NOT NULL,
+    -- live metrics
+    status              device_status   NOT NULL DEFAULT 'online',
+    risk                device_risk     NOT NULL DEFAULT 'none',  -- client: risk
+    alerts_count        INTEGER         NOT NULL DEFAULT 0,
+    cpu_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
+    ram_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
+    sync_queue_depth    INTEGER         NOT NULL DEFAULT 0,
+    hash_chain_ok       BOOLEAN         NOT NULL DEFAULT TRUE,
+    actively_reporting  BOOLEAN         NOT NULL DEFAULT FALSE,
+    -- enrollment metadata
+    enrolled_by         UUID            REFERENCES analyst_users(user_id),
+    enrolled_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    last_seen           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),   -- client: last_seen
+    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_dr_hostname    ON device_registry(hostname);
-CREATE INDEX idx_dr_status      ON device_registry(status);
-CREATE INDEX idx_dr_last_seen   ON device_registry(last_seen_utc DESC);
-CREATE INDEX idx_dr_is_active   ON device_registry(is_active);
+CREATE INDEX idx_dr_name      ON device_registry(name);
+CREATE INDEX idx_dr_status    ON device_registry(status);
+CREATE INDEX idx_dr_risk      ON device_registry(risk);
+CREATE INDEX idx_dr_last_seen ON device_registry(last_seen DESC);
+CREATE INDEX idx_dr_is_active ON device_registry(is_active);
 
 -- ─── 3. agent_api_keys ───────────────────────────────────────────────────────
--- Per-device authentication keys (SHA-256 hashed)
 CREATE TABLE agent_api_keys (
     key_id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id       UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
-    key_hash        TEXT        NOT NULL UNIQUE,  -- SHA-256 hex, salted
+    device_id       UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
+    key_hash        TEXT        NOT NULL UNIQUE,
     key_name        TEXT        NOT NULL,
     is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -82,26 +87,25 @@ CREATE INDEX idx_aak_is_active ON agent_api_keys(is_active);
 -- ─── 4. device_enrollment_tokens ─────────────────────────────────────────────
 CREATE TABLE device_enrollment_tokens (
     token_id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    token_hash          TEXT        NOT NULL UNIQUE,  -- SHA-256 of plaintext token
+    token_hash          TEXT        NOT NULL UNIQUE,
     created_by          UUID        NOT NULL REFERENCES analyst_users(user_id),
     expires_at          TIMESTAMPTZ NOT NULL,
     max_uses            INTEGER     NOT NULL DEFAULT 1 CHECK (max_uses > 0),
     current_uses        INTEGER     NOT NULL DEFAULT 0,
     is_used             BOOLEAN     NOT NULL DEFAULT FALSE,
     used_at             TIMESTAMPTZ,
-    used_by_device_id   UUID        REFERENCES device_registry(device_id),
+    used_by_device_id   UUID        REFERENCES device_registry(id),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT token_usage_check   CHECK (current_uses <= max_uses),
-    CONSTRAINT token_expiry_check  CHECK (expires_at > created_at)
+    CONSTRAINT token_usage_check  CHECK (current_uses <= max_uses),
+    CONSTRAINT token_expiry_check CHECK (expires_at > created_at)
 );
 CREATE INDEX idx_det_expires_at ON device_enrollment_tokens(expires_at);
 
 -- ─── 5. analyst_device_assignments ───────────────────────────────────────────
--- Fine-grained: which analyst can see which device
 CREATE TABLE analyst_device_assignments (
     assignment_id   UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     analyst_id      UUID        NOT NULL REFERENCES analyst_users(user_id) ON DELETE CASCADE,
-    device_id       UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
+    device_id       UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     assigned_by     UUID        REFERENCES analyst_users(user_id),
     is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -111,17 +115,18 @@ CREATE INDEX idx_ada_analyst_id ON analyst_device_assignments(analyst_id);
 CREATE INDEX idx_ada_device_id  ON analyst_device_assignments(device_id);
 
 -- ─── 6. telemetry_events ─────────────────────────────────────────────────────
--- Raw telemetry synced from agent (INSERT-only via device auth)
 CREATE TABLE telemetry_events (
-    event_id        UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id       UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
-    collected_at    TIMESTAMPTZ NOT NULL,
-    received_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    source          telemetry_src NOT NULL,
-    event_payload   JSONB       NOT NULL,
-    agent_version   TEXT        NOT NULL,
-    payload_hash    TEXT        NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                      UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id               UUID            NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
+    collected_at            TIMESTAMPTZ     NOT NULL,
+    received_at             TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    source                  telemetry_src   NOT NULL,
+    payload                 JSONB           NOT NULL DEFAULT '{}',
+    collection_agent_version TEXT           NOT NULL,
+    connectivity_state      TEXT            NOT NULL DEFAULT 'online'
+                                CHECK (connectivity_state IN ('online','offline')),
+    payload_hash            TEXT            NOT NULL,
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_te_device_collected ON telemetry_events(device_id, collected_at DESC);
 CREATE INDEX idx_te_source           ON telemetry_events(source);
@@ -129,50 +134,57 @@ CREATE INDEX idx_te_received         ON telemetry_events(received_at DESC);
 
 -- ─── 7. feature_vectors ──────────────────────────────────────────────────────
 CREATE TABLE feature_vectors (
-    feature_id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id           UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
-    window_start_utc    TIMESTAMPTZ NOT NULL,
-    window_end_utc      TIMESTAMPTZ NOT NULL,
-    feature_blob        BYTEA       NOT NULL,  -- Float32 array
-    feature_schema_ver  TEXT        NOT NULL DEFAULT 'v1.0',
-    source_event_ids    UUID[]      NOT NULL,
-    computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    telemetry_event_id  UUID        NOT NULL REFERENCES telemetry_events(id) ON DELETE CASCADE,
+    device_id           UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
+    computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    model_id            TEXT        NOT NULL,
+    features            JSONB       NOT NULL DEFAULT '{}', 
+    feature_version     TEXT        NOT NULL DEFAULT 'v1.0'
 );
-CREATE INDEX idx_fv_device_window ON feature_vectors(device_id, window_start_utc DESC);
+CREATE INDEX idx_fv_device_computed ON feature_vectors(device_id, computed_at DESC);
+CREATE INDEX idx_fv_telemetry_event ON feature_vectors(telemetry_event_id);
 
 -- ─── 8. anomaly_scores ───────────────────────────────────────────────────────
 CREATE TABLE anomaly_scores (
-    score_id                UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    feature_id              UUID        NOT NULL REFERENCES feature_vectors(feature_id) ON DELETE CASCADE,
-    device_id               UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
-    model_id                TEXT        NOT NULL,
-    score                   NUMERIC(10,8) NOT NULL CHECK (score BETWEEN 0 AND 1),
-    threshold_applied       NUMERIC(10,8) NOT NULL,
-    above_threshold         BOOLEAN     NOT NULL DEFAULT FALSE,
-    inference_latency_ms    INTEGER     NOT NULL CHECK (inference_latency_ms >= 0),
-    scored_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                      UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    feature_vector_id       UUID            REFERENCES feature_vectors(id) ON DELETE SET NULL,
+    device_id               UUID            NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
+    model_id                TEXT            NOT NULL,
+    score                   NUMERIC(10,8)   NOT NULL CHECK (score BETWEEN 0 AND 1),
+    label                   TEXT,          
+    threshold_applied       NUMERIC(10,8)   NOT NULL DEFAULT 0.75,
+    above_threshold         BOOLEAN         NOT NULL DEFAULT FALSE,
+    inference_latency_ms    INTEGER         NOT NULL DEFAULT 0 CHECK (inference_latency_ms >= 0),
+    connectivity_state      TEXT            NOT NULL DEFAULT 'online'
+                                CHECK (connectivity_state IN ('online','offline')),
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),  -- AnomalyRepository orders by this
+    scored_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_asc_device_score    ON anomaly_scores(device_id, score DESC);
-CREATE INDEX idx_asc_above_threshold ON anomaly_scores(above_threshold, scored_at DESC);
+CREATE INDEX idx_asc_above_threshold ON anomaly_scores(above_threshold, created_at DESC);
+CREATE INDEX idx_asc_device_created  ON anomaly_scores(device_id, created_at DESC);
 
 -- ─── 9. alert_records ────────────────────────────────────────────────────────
 CREATE TABLE alert_records (
     alert_id                UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
-    score_id                UUID            NOT NULL REFERENCES anomaly_scores(score_id),
-    device_id               UUID            NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
+    device_id               UUID            NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     device_name             TEXT            NOT NULL,
+    telemetry_event_id      UUID            REFERENCES telemetry_events(id) ON DELETE SET NULL,
+    feature_vector_id       UUID            REFERENCES feature_vectors(id) ON DELETE SET NULL,
+    anomaly_score_id        UUID            REFERENCES anomaly_scores(id) ON DELETE SET NULL,
+    -- scoring
+    anomaly_score           NUMERIC(10,8)   NOT NULL CHECK (anomaly_score BETWEEN 0 AND 1),
+    model_id                TEXT            NOT NULL,
+    collection_agent_version TEXT           NOT NULL,
+    inference_latency_ms    INTEGER         NOT NULL DEFAULT 0,
     telemetry_source        telemetry_src   NOT NULL,
     -- display fields
     title                   TEXT            NOT NULL,
     description             TEXT,
     severity                alert_severity  NOT NULL,
     category                TEXT            NOT NULL DEFAULT 'Unknown',
-    -- scoring
-    anomaly_score           NUMERIC(10,8)   NOT NULL CHECK (anomaly_score BETWEEN 0 AND 1),
     confidence              NUMERIC(10,8)   NOT NULL DEFAULT 0,
-    model_id                TEXT            NOT NULL,
-    collection_agent_version TEXT           NOT NULL,
-    inference_latency_ms    INTEGER         NOT NULL DEFAULT 0,
     -- detection window
     detection_window_start  TIMESTAMPTZ,
     detection_window_end    TIMESTAMPTZ,
@@ -186,7 +198,7 @@ CREATE TABLE alert_records (
     net_duration_ms         INTEGER,
     -- process-specific
     proc_name               TEXT,
-    proc_privilege_level    TEXT            CHECK (proc_privilege_level IN ('user','admin','system') OR proc_privilege_level IS NULL),
+    proc_privilege_level    privilege_level,
     proc_pid                INTEGER,
     -- lifecycle
     status                  alert_status    NOT NULL DEFAULT 'PENDING',
@@ -200,23 +212,27 @@ CREATE TABLE alert_records (
     closed_at               TIMESTAMPTZ,
     closed_by               UUID            REFERENCES analyst_users(user_id)
 );
+
+CREATE VIEW alerts AS
+    SELECT alert_id AS id, * FROM alert_records;
+
 CREATE INDEX idx_ar_device_created  ON alert_records(device_id, created_at DESC);
 CREATE INDEX idx_ar_severity_status ON alert_records(severity, status);
 CREATE INDEX idx_ar_status_created  ON alert_records(status, created_at DESC);
 CREATE INDEX idx_ar_read            ON alert_records(read, status);
-CREATE INDEX idx_ar_score_id        ON alert_records(score_id);
 
 -- ─── 10. tamper_evident_log ───────────────────────────────────────────────────
 CREATE TABLE tamper_evident_log (
     log_id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id               UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
+    device_id               UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     log_sequence_number     BIGINT      NOT NULL,
     log_entry_type          TEXT        NOT NULL CHECK (log_entry_type IN ('TELEMETRY','ALERT','DETECTION','SYNC','SYSTEM')),
     log_entry_reference_id  UUID,
     entry_timestamp_utc     TIMESTAMPTZ NOT NULL,
-    entry_content_hash      TEXT        NOT NULL,
+    entry_content_hash      TEXT        NOT NULL,  
     previous_entry_hash     TEXT        NOT NULL,
     digital_signature       TEXT,
+    verified                BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(device_id, log_sequence_number),
     CONSTRAINT seq_positive CHECK (log_sequence_number > 0)
@@ -228,7 +244,7 @@ CREATE INDEX idx_tel_prev_hash   ON tamper_evident_log(previous_entry_hash);
 -- ─── 11. device_health_snapshots ──────────────────────────────────────────────
 CREATE TABLE device_health_snapshots (
     snapshot_id         UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id           UUID        NOT NULL REFERENCES device_registry(device_id) ON DELETE CASCADE,
+    device_id           UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     status              TEXT        NOT NULL CHECK (status IN ('ONLINE','OFFLINE','WARNING','ERROR')),
     cpu_usage           NUMERIC(5,2),
     memory_usage        NUMERIC(5,2),
@@ -245,8 +261,10 @@ CREATE TABLE device_health_snapshots (
 CREATE INDEX idx_dhs_device_created ON device_health_snapshots(device_id, created_at DESC);
 
 -- ─── 12. incident_cases ───────────────────────────────────────────────────────
+CREATE SEQUENCE IF NOT EXISTS case_seq;
+
 CREATE TABLE incident_cases (
-    case_id         UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
     case_number     TEXT            NOT NULL UNIQUE DEFAULT 'EP-' || LPAD(nextval('case_seq')::TEXT, 6, '0'),
     title           TEXT            NOT NULL,
     description     TEXT,
@@ -254,22 +272,30 @@ CREATE TABLE incident_cases (
     status          case_status     NOT NULL DEFAULT 'OPEN',
     assigned_to     UUID            REFERENCES analyst_users(user_id),
     created_by      UUID            NOT NULL REFERENCES analyst_users(user_id),
+    started_at      TIMESTAMPTZ,                            -- client: started_at
+    closed_at       TIMESTAMPTZ,
+    closed_by       UUID            REFERENCES analyst_users(user_id),  -- client: closed_by
+    alert_count     INTEGER         NOT NULL DEFAULT 0,    -- client: alert_count (maintained by trigger)
+    last_activity   TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- client: last_activity
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    closed_at       TIMESTAMPTZ
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
-CREATE SEQUENCE IF NOT EXISTS case_seq;
 CREATE INDEX idx_ic_status   ON incident_cases(status);
 CREATE INDEX idx_ic_severity ON incident_cases(severity);
 CREATE INDEX idx_ic_assigned ON incident_cases(assigned_to);
 
 -- ─── 13. case_alerts ──────────────────────────────────────────────────────────
 CREATE TABLE case_alerts (
-    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    case_id     UUID        NOT NULL REFERENCES incident_cases(case_id) ON DELETE CASCADE,
-    alert_id    UUID        NOT NULL REFERENCES alert_records(alert_id) ON DELETE CASCADE,
-    added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    added_by    UUID        NOT NULL REFERENCES analyst_users(user_id),
+    id              UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    case_id         UUID            NOT NULL REFERENCES incident_cases(id) ON DELETE CASCADE,
+    alert_id        UUID            NOT NULL REFERENCES alert_records(alert_id) ON DELETE CASCADE,
+    alert_severity  alert_severity  NOT NULL DEFAULT 'low',
+    alert_status    alert_status    NOT NULL DEFAULT 'PENDING',
+    device_id       UUID            REFERENCES device_registry(id) ON DELETE SET NULL,
+    explanation_json JSONB          NOT NULL DEFAULT '{}',
+    added_at        TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    added_by        UUID            NOT NULL REFERENCES analyst_users(user_id),
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     UNIQUE(case_id, alert_id)
 );
 CREATE INDEX idx_ca_case_id  ON case_alerts(case_id);
@@ -278,18 +304,69 @@ CREATE INDEX idx_ca_alert_id ON case_alerts(alert_id);
 -- ─── 14. case_notes ───────────────────────────────────────────────────────────
 CREATE TABLE case_notes (
     note_id     UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    case_id     UUID        NOT NULL REFERENCES incident_cases(case_id) ON DELETE CASCADE,
+    case_id     UUID        NOT NULL REFERENCES incident_cases(id) ON DELETE CASCADE,
     content     TEXT        NOT NULL,
     created_by  UUID        NOT NULL REFERENCES analyst_users(user_id),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_cn_case_id ON case_notes(case_id);
 
--- ─── 15. audit_trail ──────────────────────────────────────────────────────────
+-- ─── 15. sync_queue ───────────────────────────────────────────────────────────
+CREATE TABLE sync_queue (
+    id              UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id       UUID            NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
+    telemetry_event_id UUID         REFERENCES telemetry_events(id) ON DELETE SET NULL,
+    status          sync_status     NOT NULL DEFAULT 'PENDING',
+    queued_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    synced_at       TIMESTAMPTZ,
+    retry_count     INTEGER         NOT NULL DEFAULT 0,
+    last_error      TEXT,
+    item_type       TEXT,
+    item_id         TEXT,
+    data_json       JSONB           NOT NULL DEFAULT '{}',
+    attempts        INTEGER         NOT NULL DEFAULT 0,
+    last_attempt    TIMESTAMPTZ,
+    next_retry      TIMESTAMPTZ,
+    priority        INTEGER         NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_sq_device_status   ON sync_queue(device_id, status);
+CREATE INDEX idx_sq_status_queued   ON sync_queue(status, queued_at);
+CREATE INDEX idx_sq_priority        ON sync_queue(priority DESC, created_at ASC);
+
+-- ─── 16. retention_settings ──────────────────────────────────────────────────
+CREATE TABLE retention_settings (
+    id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id       TEXT        NOT NULL UNIQUE DEFAULT 'global',  -- 'global' or device UUID as text
+    retention_days  INTEGER     NOT NULL DEFAULT 90 CHECK (retention_days > 0),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Seed global default
+INSERT INTO retention_settings (device_id, retention_days) VALUES ('global', 90)
+    ON CONFLICT (device_id) DO NOTHING;
+
+-- ─── 17. privacy_settings ─────────────────────────────────────────────────────
+CREATE TABLE privacy_settings (
+    id                      UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id               UUID        REFERENCES device_registry(id) ON DELETE CASCADE,
+    enhanced_mode           BOOLEAN     NOT NULL DEFAULT FALSE,
+    anonymize_ips           BOOLEAN     NOT NULL DEFAULT TRUE,
+    encrypt_pii             BOOLEAN     NOT NULL DEFAULT TRUE,
+    mask_usernames          BOOLEAN     NOT NULL DEFAULT FALSE,
+    redact_sensitive_data   BOOLEAN     NOT NULL DEFAULT FALSE,
+    updated_by              UUID        REFERENCES analyst_users(user_id),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(device_id)
+);
+CREATE INDEX idx_ps_device_id ON privacy_settings(device_id);
+
+-- ─── 18. audit_trail ──────────────────────────────────────────────────────────
 CREATE TABLE audit_trail (
     audit_id        UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID        REFERENCES analyst_users(user_id),
-    device_id       UUID        REFERENCES device_registry(device_id),
+    device_id       UUID        REFERENCES device_registry(id),
     action          TEXT        NOT NULL,
     resource_type   TEXT        NOT NULL,
     resource_id     UUID,
@@ -303,7 +380,7 @@ CREATE INDEX idx_at_user_id   ON audit_trail(user_id);
 CREATE INDEX idx_at_timestamp ON audit_trail(timestamp_utc DESC);
 CREATE INDEX idx_at_action    ON audit_trail(action);
 
--- ─── 16. notification_rules ───────────────────────────────────────────────────
+-- ─── 19. notification_rules ───────────────────────────────────────────────────
 CREATE TABLE notification_rules (
     rule_id                 UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     name                    TEXT        NOT NULL,
@@ -316,10 +393,10 @@ CREATE TABLE notification_rules (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── 17. agent_config (global/per-device remote config) ──────────────────────
+-- ─── 20. agent_config ─────────────────────────────────────────────────────────
 CREATE TABLE agent_config (
     config_id   UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id   UUID        REFERENCES device_registry(device_id) ON DELETE CASCADE,  -- NULL = global
+    device_id   UUID        REFERENCES device_registry(id) ON DELETE CASCADE,
     key         TEXT        NOT NULL,
     value       TEXT        NOT NULL,
     updated_by  UUID        REFERENCES analyst_users(user_id),
@@ -328,34 +405,51 @@ CREATE TABLE agent_config (
     UNIQUE(device_id, key)
 );
 
--- ─── 18. privacy_settings ───────────────────────────────────────────────────────
--- Stores privacy configuration for devices and global settings
-CREATE TABLE privacy_settings (
-    id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id           UUID        REFERENCES device_registry(device_id) ON DELETE CASCADE,  -- NULL = global
-    enhanced_mode       BOOLEAN     NOT NULL DEFAULT FALSE,
-    anonymize_ips       BOOLEAN     NOT NULL DEFAULT TRUE,
-    encrypt_pii         BOOLEAN     NOT NULL DEFAULT TRUE,
-    mask_usernames      BOOLEAN     NOT NULL DEFAULT FALSE,
-    redact_sensitive_data BOOLEAN   NOT NULL DEFAULT FALSE,
-    updated_by          UUID        REFERENCES analyst_users(user_id),
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(device_id)
-);
-
--- Index for faster lookups
-CREATE INDEX idx_ps_device_id ON privacy_settings(device_id);
-
 -- ─── Triggers ─────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$;
 
-CREATE TRIGGER tr_analyst_users_updated     BEFORE UPDATE ON analyst_users         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER tr_device_registry_updated   BEFORE UPDATE ON device_registry        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER tr_alert_records_updated     BEFORE UPDATE ON alert_records          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER tr_incident_cases_updated    BEFORE UPDATE ON incident_cases         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER tr_notification_rules_updated BEFORE UPDATE ON notification_rules    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER tr_privacy_settings_updated  BEFORE UPDATE ON privacy_settings       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_analyst_users_updated       BEFORE UPDATE ON analyst_users           FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_device_registry_updated     BEFORE UPDATE ON device_registry          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_alert_records_updated       BEFORE UPDATE ON alert_records            FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_incident_cases_updated      BEFORE UPDATE ON incident_cases           FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_notification_rules_updated  BEFORE UPDATE ON notification_rules       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_privacy_settings_updated    BEFORE UPDATE ON privacy_settings         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER tr_sync_queue_updated          BEFORE UPDATE ON sync_queue               FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Keep incident_cases.alert_count in sync when case_alerts rows change
+CREATE OR REPLACE FUNCTION sync_case_alert_count()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_case_id UUID;
+BEGIN
+    v_case_id := COALESCE(NEW.case_id, OLD.case_id);
+    UPDATE incident_cases
+    SET    alert_count  = (SELECT COUNT(*) FROM case_alerts WHERE case_id = v_case_id),
+           last_activity = NOW(),
+           updated_at    = NOW()
+    WHERE  id = v_case_id;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE TRIGGER tr_case_alerts_count
+    AFTER INSERT OR DELETE ON case_alerts
+    FOR EACH ROW EXECUTE FUNCTION sync_case_alert_count();
+
+CREATE OR REPLACE FUNCTION sync_case_alert_metadata()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE case_alerts
+    SET    alert_severity    = NEW.severity,
+           alert_status      = NEW.status,
+           explanation_json  = NEW.explanation_json
+    WHERE  alert_id = NEW.alert_id;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tr_alert_records_case_sync
+    AFTER UPDATE OF severity, status, explanation_json ON alert_records
+    FOR EACH ROW EXECUTE FUNCTION sync_case_alert_metadata();

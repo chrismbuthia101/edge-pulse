@@ -89,7 +89,7 @@ export interface AlertSubscriptionCallbacks {
 
 export class AlertRepository extends BaseRepository<Alert> {
   constructor() {
-    super('alerts');
+    super('alert_records');
   }
 
   private buildAlertQuery(options: AlertQueryOptions) {
@@ -116,13 +116,20 @@ export class AlertRepository extends BaseRepository<Alert> {
     if (options.maxAnomalyScore !== undefined) query = query.lte('anomaly_score', options.maxAnomalyScore);
 
     if (options.search) {
-      const s = options.search.replace(/[%_]/g, '\\$&'); // escape wildcards
+      const s = options.search.replace(/[%_]/g, '\\$&');
       query = query.or(
         `title.ilike.%${s}%,description.ilike.%${s}%,device_name.ilike.%${s}%,category.ilike.%${s}%`
       );
     }
 
     return query;
+  }
+
+  private normaliseAlerts(rows: unknown[]): Alert[] {
+    return (rows as Record<string, unknown>[]).map((row) => ({
+      ...row,
+      id: row['alert_id'] as string,
+    })) as unknown as Alert[];
   }
 
   async findAlerts(options: AlertQueryOptions = {}): Promise<Alert[]> {
@@ -133,7 +140,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       async () => {
         const { data, error } = await this.buildAlertQuery(options);
         if (error) throw this.handleError(error);
-        return (data ?? []) as unknown as Alert[];
+        return this.normaliseAlerts(data ?? []);
       },
       options.cacheTTL
     );
@@ -145,7 +152,6 @@ export class AlertRepository extends BaseRepository<Alert> {
     const { page, limit, ...queryOptions } = options;
 
     const filters: Record<string, unknown> = {};
-
     if (queryOptions.deviceId) filters.device_id = queryOptions.deviceId;
     if (queryOptions.status) filters.status = queryOptions.status;
     if (queryOptions.severity) filters.severity = queryOptions.severity;
@@ -153,14 +159,12 @@ export class AlertRepository extends BaseRepository<Alert> {
     if (queryOptions.unreadOnly) filters.read = false;
 
     const additionalFilters: Record<string, unknown> = {};
-
     if (queryOptions.startDate || queryOptions.endDate) {
       const dateFilter: Record<string, unknown> = {};
       if (queryOptions.startDate) dateFilter.gte = queryOptions.startDate;
       if (queryOptions.endDate) dateFilter.lte = queryOptions.endDate;
       additionalFilters.created_at = dateFilter;
     }
-
     if (queryOptions.minAnomalyScore !== undefined || queryOptions.maxAnomalyScore !== undefined) {
       const scoreFilter: Record<string, unknown> = {};
       if (queryOptions.minAnomalyScore !== undefined) scoreFilter.gte = queryOptions.minAnomalyScore;
@@ -168,20 +172,20 @@ export class AlertRepository extends BaseRepository<Alert> {
       additionalFilters.anomaly_score = scoreFilter;
     }
 
-    const combinedFilters = { ...filters, ...additionalFilters };
-
     if (queryOptions.search) {
       return this.findAlertsWithSearchPaginated(options);
     }
 
-    return this.findPaginated({
+    const result = await this.findPaginated({
       page,
       limit,
       select: queryOptions.select ?? DEFAULT_ALERT_SELECT,
-      filters: combinedFilters,
+      filters: { ...filters, ...additionalFilters },
       orderBy: queryOptions.orderBy,
-      cacheTTL: queryOptions.cacheTTL
+      cacheTTL: queryOptions.cacheTTL,
     });
+
+    return { ...result, data: this.normaliseAlerts(result.data as unknown[]) };
   }
 
   private async findAlertsWithSearchPaginated(
@@ -191,7 +195,6 @@ export class AlertRepository extends BaseRepository<Alert> {
     const offset = (page - 1) * limit;
 
     let query = this.buildAlertQuery({ ...queryOptions, search });
-
     query = query.range(offset, offset + limit - 1);
 
     const { count, error: countError } = await this.supabase
@@ -206,7 +209,7 @@ export class AlertRepository extends BaseRepository<Alert> {
     const totalPages = Math.ceil((count ?? 0) / limit);
 
     return {
-      data: (data ?? []) as unknown as Alert[],
+      data: this.normaliseAlerts(data ?? []),
       count: count ?? 0,
       page,
       limit,
@@ -219,7 +222,6 @@ export class AlertRepository extends BaseRepository<Alert> {
   async getRecentAlerts(limit = 50): Promise<Alert[]> {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-
     return this.findAlerts({
       startDate: yesterday.toISOString(),
       orderBy: { column: 'created_at', ascending: false },
@@ -277,28 +279,66 @@ export class AlertRepository extends BaseRepository<Alert> {
     return this.findAlerts({ ...options, search: query });
   }
 
-  async updateAlertStatus(
-    id: string,
-    status: AlertStatus,
-    userId?: string
-  ): Promise<Alert> {
-    return this.update(id, buildStatusTransition(status, userId));
+  async updateAlertStatus(id: string, status: AlertStatus, userId?: string): Promise<Alert> {
+    try {
+      const updates = buildStatusTransition(status, userId);
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .update(updates)
+        .eq('alert_id', id)
+        .select(DEFAULT_ALERT_SELECT)
+        .single();
+      if (error) throw error;
+      this.invalidateCache();
+      return this.normaliseAlerts([data])[0];
+    } catch (error) {
+      throw this.handleError(error);
+    }
   }
 
   async markAsRead(id: string): Promise<Alert> {
-    return this.update(id, { read: true });
+    try {
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .update({ read: true })
+        .eq('alert_id', id)
+        .select(DEFAULT_ALERT_SELECT)
+        .single();
+      if (error) throw error;
+      this.invalidateCache();
+      return this.normaliseAlerts([data])[0];
+    } catch (error) {
+      throw this.handleError(error);
+    }
   }
 
   async markMultipleAsRead(ids: string[]): Promise<void> {
-    await this.updateMany({ id: ids }, { read: true });
+    try {
+      const { error } = await this.supabase
+        .from(this.tableName)
+        .update({ read: true })
+        .in('alert_id', ids);
+      if (error) throw error;
+      this.invalidateCache();
+    } catch (error) {
+      throw this.handleError(error);
+    }
   }
 
-  async bulkUpdateStatus(
-    ids: string[],
-    status: AlertStatus,
-    userId?: string
-  ): Promise<Alert[]> {
-    return this.updateMany({ id: ids }, buildStatusTransition(status, userId));
+  async bulkUpdateStatus(ids: string[], status: AlertStatus, userId?: string): Promise<Alert[]> {
+    try {
+      const updates = buildStatusTransition(status, userId);
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .update(updates)
+        .in('alert_id', ids)
+        .select(DEFAULT_ALERT_SELECT);
+      if (error) throw error;
+      this.invalidateCache();
+      return this.normaliseAlerts(data ?? []);
+    } catch (error) {
+      throw this.handleError(error);
+    }
   }
 
   async getAlertMetrics(): Promise<AlertMetrics> {
@@ -306,30 +346,17 @@ export class AlertRepository extends BaseRepository<Alert> {
       'alert_metrics',
       async () => {
         const alerts = await this.findAlerts({ select: METRICS_SELECT });
-
         const today = new Date().toDateString();
 
-        // Single-pass accumulation
         const metrics: AlertMetrics = {
           total: alerts.length,
-          pending: 0,
-          acknowledged: 0,
-          investigated: 0,
-          closed: 0,
-          critical: 0,
-          high: 0,
-          medium: 0,
-          low: 0,
-          avgAnomalyScore: 0,
-          avgInferenceLatency: 0,
-          threatsBlocked: 0,
-          resolvedToday: 0,
+          pending: 0, acknowledged: 0, investigated: 0, closed: 0,
+          critical: 0, high: 0, medium: 0, low: 0,
+          avgAnomalyScore: 0, avgInferenceLatency: 0,
+          threatsBlocked: 0, resolvedToday: 0,
         };
 
-        let scoreSum = 0;
-        let scoreCount = 0;
-        let latencySum = 0;
-        let latencyCount = 0;
+        let scoreSum = 0, scoreCount = 0, latencySum = 0, latencyCount = 0;
 
         for (const a of alerts) {
           switch (a.status) {
@@ -338,45 +365,21 @@ export class AlertRepository extends BaseRepository<Alert> {
             case 'INVESTIGATED': metrics.investigated++; break;
             case 'CLOSED': metrics.closed++; break;
           }
-
           switch (a.severity) {
             case 'critical': metrics.critical++; break;
             case 'high': metrics.high++; break;
             case 'medium': metrics.medium++; break;
             case 'low': metrics.low++; break;
           }
-
           const score = anomalyScore(a);
-          if (score !== null) {
-            scoreSum += score;
-            scoreCount++;
-          }
-
-          if ((a.inference_latency_ms ?? 0) > 0) {
-            latencySum += a.inference_latency_ms;
-            latencyCount++;
-          }
-
-          if (
-            a.status === 'CLOSED' &&
-            (a.severity === 'critical' || a.severity === 'high')
-          ) {
-            metrics.threatsBlocked++;
-          }
-
-          // Resolved today
-          if (
-            a.status === 'CLOSED' &&
-            a.closed_at &&
-            new Date(a.closed_at).toDateString() === today
-          ) {
-            metrics.resolvedToday++;
-          }
+          if (score !== null) { scoreSum += score; scoreCount++; }
+          if ((a.inference_latency_ms ?? 0) > 0) { latencySum += a.inference_latency_ms; latencyCount++; }
+          if (a.status === 'CLOSED' && (a.severity === 'critical' || a.severity === 'high')) metrics.threatsBlocked++;
+          if (a.status === 'CLOSED' && a.closed_at && new Date(a.closed_at).toDateString() === today) metrics.resolvedToday++;
         }
 
         if (scoreCount > 0) metrics.avgAnomalyScore = scoreSum / scoreCount;
         if (latencyCount > 0) metrics.avgInferenceLatency = latencySum / latencyCount;
-
         return metrics;
       },
       60 * 1000
@@ -389,23 +392,15 @@ export class AlertRepository extends BaseRepository<Alert> {
     groupBy: 'hour' | 'day' | 'week' = 'day'
   ): Promise<{ timestamp: string; count: number }[]> {
     const cacheKey = `alerts_time_range_${startDate}_${endDate}_${groupBy}`;
-
     return this.cachedQuery(
       cacheKey,
       async () => {
-        const alerts = await this.findAlerts({
-          startDate,
-          endDate,
-          select: 'created_at',
-        });
-
+        const alerts = await this.findAlerts({ startDate, endDate, select: 'created_at' });
         const grouped = new Map<string, number>();
-
         for (const alert of alerts) {
           const key = toGroupKey(new Date(alert.created_at), groupBy);
           grouped.set(key, (grouped.get(key) ?? 0) + 1);
         }
-
         return Array.from(grouped.entries())
           .map(([timestamp, count]) => ({ timestamp, count }))
           .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -415,20 +410,14 @@ export class AlertRepository extends BaseRepository<Alert> {
   }
 
   async getTopCategories(limit = 10): Promise<{ category: string; count: number }[]> {
-    const cacheKey = `top_categories_${limit}`;
-
     return this.cachedQuery(
-      cacheKey,
+      `top_categories_${limit}`,
       async () => {
         const alerts = await this.findAlerts({ select: 'category' });
-
         const counts = new Map<string, number>();
         for (const alert of alerts) {
-          if (alert.category) {
-            counts.set(alert.category, (counts.get(alert.category) ?? 0) + 1);
-          }
+          if (alert.category) counts.set(alert.category, (counts.get(alert.category) ?? 0) + 1);
         }
-
         return Array.from(counts.entries())
           .map(([category, count]) => ({ category, count }))
           .sort((a, b) => b.count - a.count)
@@ -438,26 +427,25 @@ export class AlertRepository extends BaseRepository<Alert> {
     );
   }
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
   subscribeToAlerts(
     filters: Partial<AlertQueryOptions> = {},
     callbacks: AlertSubscriptionCallbacks = {}
   ): string {
     const channelName = `realtime-alerts-${Date.now()}`;
-
     this.subscribe(channelName, filters, (payload) => {
       try {
         const p = payload as RealtimeAlertPayload;
+        const normNew = p.new ? this.normaliseAlerts([p.new])[0] : p.new;
+        const normOld = p.old ? this.normaliseAlerts([p.old])[0] : (p.old as Alert);
         switch (p.eventType) {
-          case 'INSERT': callbacks.onInsert?.(p.new); break;
-          case 'UPDATE': callbacks.onUpdate?.(p.new); break;
-          case 'DELETE': callbacks.onDelete?.(p.old as Alert); break;
+          case 'INSERT': callbacks.onInsert?.(normNew); break;
+          case 'UPDATE': callbacks.onUpdate?.(normNew); break;
+          case 'DELETE': callbacks.onDelete?.(normOld); break;
         }
       } catch (error) {
         callbacks.onError?.(error);
       }
     });
-
     return channelName;
   }
 
@@ -467,6 +455,7 @@ export class AlertRepository extends BaseRepository<Alert> {
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
+
 function anomalyScore(alert: Alert): number | null {
   if (alert.anomaly_score != null) return alert.anomaly_score;
   if (alert.confidence != null) return alert.confidence;
@@ -476,7 +465,6 @@ function anomalyScore(alert: Alert): number | null {
 function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Alert> {
   const now = new Date().toISOString();
   const updates: Partial<Alert> = { status };
-
   switch (status) {
     case 'ACKNOWLEDGED':
       updates.acknowledged_at = now;
@@ -491,20 +479,17 @@ function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Al
       if (userId) updates.closed_by = userId;
       break;
   }
-
   return updates;
 }
 
 function toGroupKey(date: Date, groupBy: 'hour' | 'day' | 'week'): string {
   switch (groupBy) {
-    case 'hour':
-      return date.toISOString().slice(0, 13) + ':00';
+    case 'hour': return date.toISOString().slice(0, 13) + ':00';
     case 'week': {
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       return weekStart.toISOString().slice(0, 10);
     }
-    default:
-      return date.toISOString().slice(0, 10);
+    default: return date.toISOString().slice(0, 10);
   }
 }

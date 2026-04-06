@@ -22,6 +22,7 @@ export interface ShapExplanation {
 
 export interface Alert {
   id: string;
+  alert_id: string;
   device_id: string;
   device_name: string;
   telemetry_event_id?: string;

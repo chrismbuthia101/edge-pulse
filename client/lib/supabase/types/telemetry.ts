@@ -9,6 +9,8 @@ export interface TelemetryEvent {
   payload: Record<string, unknown>;
   collection_agent_version: string;
   connectivity_state: ConnectivityState;
+  payload_hash: string;
+  created_at: string;
 }
 
 export interface FeatureVector {
@@ -17,19 +19,21 @@ export interface FeatureVector {
   device_id: string;
   computed_at: string;
   model_id: string;
-  features: Record<string, number>; // named feature → float value
-  feature_version: string;          // feature schema version
+  features: Record<string, number>;
+  feature_version: string;
 }
 
 export interface AnomalyScore {
   id: string;
-  feature_vector_id: string;
+  feature_vector_id: string | null;
   device_id: string;
-  scored_at: string;
   model_id: string;
   score: number;
+  label?: string;
   threshold_applied: number;
-  inference_latency_ms: number;
   above_threshold: boolean;
+  inference_latency_ms: number;
   connectivity_state: ConnectivityState;
+  created_at: string;
+  scored_at: string;
 }

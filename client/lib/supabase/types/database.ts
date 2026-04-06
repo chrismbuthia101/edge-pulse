@@ -13,28 +13,29 @@ export interface TamperEvidentLog {
   entry_content_hash: string;
   previous_entry_hash: string;
   digital_signature: string | null;
+  verified: boolean;
   created_at: string;
 }
 
 export interface DeviceRegistry {
-  device_id: string;
-  hostname: string;
-  operating_system: string;
+  id: string;
+  name: string;
+  type: DeviceType;
+  os: string;
+  ip: string | null;
   agent_version: string;
-  device_type: DeviceType;
-  ip_address: string | null;
-  enrolled_at: string;
-  enrolled_by: string | null;
-  last_seen_utc: string;
-  is_active: boolean;
   status: DeviceStatus;
-  risk_level: DeviceRisk;
+  risk: DeviceRisk;
   alerts_count: number;
-  cpu_percent: number | null;
-  ram_percent: number | null;
+  cpu_percent: number;
+  ram_percent: number;
   sync_queue_depth: number;
   hash_chain_ok: boolean;
   actively_reporting: boolean;
+  enrolled_by: string | null;
+  enrolled_at: string;
+  last_seen: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -42,7 +43,7 @@ export interface DeviceRegistry {
 export interface DeviceHealthSnapshot {
   snapshot_id: string;
   device_id: string;
-  status: "ONLINE" | "OFFLINE" | "WARNING" | "ERROR";
+  status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
   cpu_usage: number | null;
   memory_usage: number | null;
   disk_usage: number | null;
@@ -68,7 +69,7 @@ export interface AnalystUser {
 }
 
 export interface IncidentCase {
-  case_id: string;
+  id: string;
   case_number: string;
   title: string;
   description: string | null;
@@ -76,9 +77,13 @@ export interface IncidentCase {
   status: CaseStatus;
   assigned_to: string | null;
   created_by: string;
+  started_at: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+  alert_count: number;
+  last_activity: string;
   created_at: string;
   updated_at: string;
-  closed_at: string | null;
 }
 
 export interface CaseNote {
@@ -112,6 +117,13 @@ export interface AgentConfig {
   version: number;
 }
 
+export interface RetentionSetting {
+  id: string;
+  device_id: string;
+  retention_days: number;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -122,18 +134,18 @@ export interface Database {
       };
       device_registry: {
         Row: DeviceRegistry;
-        Insert: Omit<DeviceRegistry, 'device_id' | 'enrolled_at' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<DeviceRegistry, 'device_id' | 'enrolled_at' | 'created_at' | 'updated_at'>>;
+        Insert: Omit<DeviceRegistry, 'id' | 'enrolled_at' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<DeviceRegistry, 'id' | 'enrolled_at' | 'created_at'>>;
       };
       alert_records: {
         Row: Alert;
-        Insert: Omit<Alert, 'id' | 'created_at' | 'updated_at' | 'read'>;
+        Insert: Omit<Alert, 'id' | 'alert_id' | 'created_at' | 'updated_at' | 'read'>;
         Update: Partial<Alert>;
       };
       telemetry_events: {
         Row: TelemetryEvent;
         Insert: Omit<TelemetryEvent, 'id' | 'received_at'>;
-        Update: never;  // telemetry is immutable
+        Update: never;
       };
       feature_vectors: {
         Row: FeatureVector;
@@ -142,13 +154,13 @@ export interface Database {
       };
       anomaly_scores: {
         Row: AnomalyScore;
-        Insert: Omit<AnomalyScore, 'id' | 'scored_at'>;
+        Insert: Omit<AnomalyScore, 'id' | 'scored_at' | 'created_at'>;
         Update: never;
       };
       tamper_evident_log: {
         Row: TamperEvidentLog;
         Insert: Omit<TamperEvidentLog, 'log_id' | 'created_at'>;
-        Update: Partial<TamperEvidentLog>;
+        Update: Pick<TamperEvidentLog, 'verified'>;
       };
       device_enrollment_tokens: {
         Row: EnrollmentToken;
@@ -157,8 +169,8 @@ export interface Database {
       };
       incident_cases: {
         Row: IncidentCase;
-        Insert: Omit<IncidentCase, 'case_id' | 'case_number' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<IncidentCase, 'case_id' | 'case_number' | 'created_at'>>;
+        Insert: Omit<IncidentCase, 'id' | 'case_number' | 'alert_count' | 'last_activity' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<IncidentCase, 'id' | 'case_number' | 'created_at'>>;
       };
       case_notes: {
         Row: CaseNote;
@@ -167,7 +179,7 @@ export interface Database {
       };
       sync_queue: {
         Row: SyncQueueEntry;
-        Insert: Omit<SyncQueueEntry, 'id' | 'queued_at'>;
+        Insert: Omit<SyncQueueEntry, 'id' | 'queued_at' | 'created_at' | 'updated_at'>;
         Update: Partial<SyncQueueEntry>;
       };
       device_health_snapshots: {
@@ -179,6 +191,11 @@ export interface Database {
         Row: AgentConfig;
         Insert: Omit<AgentConfig, 'config_id' | 'updated_at'>;
         Update: Partial<Omit<AgentConfig, 'config_id' | 'updated_at'>>;
+      };
+      retention_settings: {
+        Row: RetentionSetting;
+        Insert: Omit<RetentionSetting, 'id'>;
+        Update: Partial<Omit<RetentionSetting, 'id'>>;
       };
     };
   };

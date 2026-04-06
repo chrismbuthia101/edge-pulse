@@ -1,3 +1,9 @@
+-- ============================================================
+-- EdgePulse Schema v1.0.0
+-- Migration: 003_auto_provision_analyst
+-- Description: Auto-create analyst_users row on Supabase Auth signup
+-- ============================================================
+
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public AS $$

@@ -37,7 +37,7 @@ class SupabaseSync:
         max_retries: int = 3,
     ):
         self.supabase_url = supabase_url.rstrip("/")
-        self.supabase_key = supabase_key  # may legitimately be None
+        self.supabase_key = supabase_key
 
         if device_id is None:
             device_id = get_default_device_id()
@@ -102,16 +102,11 @@ class SupabaseSync:
         retry=retry_if_exception_type(NetworkError),
     )
     async def check_connectivity(self) -> bool:
-        """Check connectivity to Supabase.
-
-        Uses device-auth headers when available; falls back to apikey
-        when supabase_key is set; tolerates missing key gracefully.
-        """
+        """Check connectivity to Supabase."""
         if not self.enabled or not self.client:
             return False
 
         try:
-            # Build per-request headers – only add apikey if we have one
             extra_headers: Dict[str, str] = {}
             if self.supabase_key:
                 extra_headers["apikey"] = self.supabase_key
@@ -121,17 +116,13 @@ class SupabaseSync:
                 headers=extra_headers,
             )
 
-            # 200 = open access, 401 = service reachable but auth required
             self._online = response.status_code in (200, 401)
             self._last_health_check = datetime.utcnow()
 
             if self._online:
                 logger.debug("supabase_connectivity_check_success")
             else:
-                logger.warning(
-                    "supabase_connectivity_check_failed",
-                    status=response.status_code,
-                )
+                logger.warning("supabase_connectivity_check_failed", status=response.status_code)
 
             return self._online
 
@@ -141,33 +132,24 @@ class SupabaseSync:
             raise NetworkError(f"Supabase connectivity failed: {e}") from e
 
     async def is_online(self) -> bool:
-        """Check if currently online (cached for 30 s)."""
         if not self.enabled:
             return False
-
         if (
             self._online
             and self._last_health_check
             and (datetime.utcnow() - self._last_health_check).total_seconds() < 30
         ):
             return True
-
         return await self.check_connectivity()
 
     # ------------------------------------------------------------------
-    # Sync helpers – called by SyncFSM._sync_item
+    # Public sync façade methods (called by SyncFSM._sync_item)
     # ------------------------------------------------------------------
 
-    async def sync_telemetry_events(
-        self, records: List[Dict[str, Any]]
-    ) -> bool:
-        """Upload telemetry event records to Supabase."""
+    async def sync_telemetry_events(self, records: List[Dict[str, Any]]) -> bool:
         return await self.batch_sync_telemetry(records)
 
-    async def sync_alert_records(
-        self, records: List[Dict[str, Any]]
-    ) -> bool:
-        """Upload alert records to Supabase."""
+    async def sync_alert_records(self, records: List[Dict[str, Any]]) -> bool:
         return await self.batch_sync_alerts(records)
 
     # ------------------------------------------------------------------
@@ -180,10 +162,8 @@ class SupabaseSync:
         retry=retry_if_exception_type(NetworkError),
     )
     async def batch_sync_alerts(self, alerts: List[Dict[str, Any]]) -> bool:
-        """Batch upload alerts with retry logic"""
         if not alerts:
             return True
-
         if not await self.is_online():
             raise NetworkError("Supabase is offline")
 
@@ -191,7 +171,7 @@ class SupabaseSync:
             payload = [self._prepare_alert(alert) for alert in alerts]
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/alerts",
+                f"{self.supabase_url}/rest/v1/alert_records",
                 json=payload,
                 headers={"Prefer": "return=minimal"},
             )
@@ -226,20 +206,15 @@ class SupabaseSync:
             raise SyncError(f"Alert sync failed: {e}") from e
 
     async def sync_single_alert(self, alert: Dict[str, Any]) -> bool:
-        """Sync a single alert."""
         return await self.batch_sync_alerts([alert])
 
     # ------------------------------------------------------------------
-    # Telemetry sync
+    # Telemetry sync — POSTs to /telemetry_events
     # ------------------------------------------------------------------
 
-    async def batch_sync_telemetry(
-        self, telemetry_data: List[Dict[str, Any]]
-    ) -> bool:
-        """Batch upload telemetry data."""
+    async def batch_sync_telemetry(self, telemetry_data: List[Dict[str, Any]]) -> bool:
         if not telemetry_data:
             return True
-
         if not await self.is_online():
             raise NetworkError("Supabase is offline")
 
@@ -247,7 +222,7 @@ class SupabaseSync:
             payload = [self._prepare_telemetry(d) for d in telemetry_data]
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/telemetry",
+                f"{self.supabase_url}/rest/v1/telemetry_events",
                 json=payload,
                 headers={"Prefer": "return=minimal"},
             )
@@ -268,32 +243,26 @@ class SupabaseSync:
             return False
 
     # ------------------------------------------------------------------
-    # Device heartbeat – accepts a flat dict with device_id inside
+    # Device heartbeat — UPSERTs to /device_registry
     # ------------------------------------------------------------------
 
-    async def update_device_heartbeat(
-        self,
-        heartbeat_data: Dict[str, Any],
-    ) -> bool:
-        """Update device heartbeat / status.
-
-        Accepts a dict that may contain device_id or falls back to
-        self.device_id so both old and new call-sites work.
-        """
+    async def update_device_heartbeat(self, heartbeat_data: Dict[str, Any]) -> bool:
         if not await self.is_online():
             return False
 
         try:
             target_device_id = heartbeat_data.get("device_id") or self.device_id
 
+            # Match device_registry column names from migration 001
             payload = {
-                "id": target_device_id,
-                "last_seen": datetime.utcnow().isoformat(),
-                "status": heartbeat_data.get("status", "online"),
-                "cpu_usage": heartbeat_data.get("cpu_usage"),
-                "memory_usage": heartbeat_data.get("memory_usage"),
-                "alerts_count": heartbeat_data.get("alerts_count", 0),
-                "version": heartbeat_data.get("version"),
+                "id":                target_device_id,
+                "last_seen":         datetime.utcnow().isoformat(),
+                "status":            heartbeat_data.get("status", "online"),
+                "cpu_percent":       heartbeat_data.get("cpu_usage") or heartbeat_data.get("cpu_percent"),
+                "ram_percent":       heartbeat_data.get("memory_usage") or heartbeat_data.get("ram_percent"),
+                "alerts_count":      heartbeat_data.get("alerts_count", 0),
+                "agent_version":     heartbeat_data.get("version") or heartbeat_data.get("agent_version", "unknown"),
+                "actively_reporting": True,
             }
 
             response = await self.client.post(
@@ -305,11 +274,7 @@ class SupabaseSync:
             return response.status_code in (201, 204)
 
         except Exception as e:
-            logger.error(
-                "update_device_heartbeat_error",
-                device_id=self.device_id,
-                error=str(e),
-            )
+            logger.error("update_device_heartbeat_error", device_id=self.device_id, error=str(e))
             return False
 
     # ------------------------------------------------------------------
@@ -321,22 +286,19 @@ class SupabaseSync:
     ) -> List[Dict[str, Any]]:
         if not await self.is_online():
             return []
-
         try:
+            # Query alert_records with status filter
             url = (
-                f"{self.supabase_url}/rest/v1/alerts"
-                f"?acknowledged=eq.false&order=timestamp.desc&limit={limit}"
+                f"{self.supabase_url}/rest/v1/alert_records"
+                f"?status=eq.PENDING&order=created_at.desc&limit={limit}"
             )
             if device_id:
                 url += f"&device_id=eq.{device_id}"
-
             response = await self.client.get(url)
             if response.status_code == 200:
                 return response.json()
-            else:
-                logger.error("get_alerts_failed", status=response.status_code)
-                return []
-
+            logger.error("get_alerts_failed", status=response.status_code)
+            return []
         except Exception as e:
             logger.error("get_alerts_error", error=str(e))
             return []
@@ -344,36 +306,30 @@ class SupabaseSync:
     async def acknowledge_alert(self, alert_id: str) -> bool:
         if not await self.is_online():
             return False
-
         try:
             response = await self.client.patch(
-                f"{self.supabase_url}/rest/v1/alerts?id=eq.{alert_id}",
+                f"{self.supabase_url}/rest/v1/alert_records?alert_id=eq.{alert_id}",
                 json={
-                    "acknowledged": True,
+                    "status": "ACKNOWLEDGED",
                     "acknowledged_at": datetime.utcnow().isoformat(),
                 },
             )
             return response.status_code == 204
-
         except Exception as e:
             logger.error("acknowledge_alert_error", alert_id=alert_id, error=str(e))
             return False
 
-    async def get_device_status(
-        self, device_id: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_device_status(self, device_id: str) -> Optional[Dict[str, Any]]:
         if not await self.is_online():
             return None
-
         try:
             response = await self.client.get(
-                f"{self.supabase_url}/rest/v1/devices?id=eq.{device_id}"
+                f"{self.supabase_url}/rest/v1/device_registry?id=eq.{device_id}"
             )
             if response.status_code == 200:
                 data = response.json()
                 return data[0] if data else None
             return None
-
         except Exception as e:
             logger.error("get_device_status_error", device_id=device_id, error=str(e))
             return None
@@ -383,9 +339,7 @@ class SupabaseSync:
             "enabled": self.enabled,
             "online": self._online,
             "last_health_check": (
-                self._last_health_check.isoformat()
-                if self._last_health_check
-                else None
+                self._last_health_check.isoformat() if self._last_health_check else None
             ),
             "timeout": self.timeout,
             "max_retries": self.max_retries,
@@ -396,6 +350,7 @@ class SupabaseSync:
     # ------------------------------------------------------------------
 
     def _prepare_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
+        """Map agent alert dict to alert_records column names."""
         explanation = alert.get("explanation_json") or alert.get("explanation") or {}
         agent_version = (
             alert.get("agent_version")
@@ -403,7 +358,7 @@ class SupabaseSync:
             or "unknown"
         )
         return {
-            "score_id":                   alert.get("score_id") or alert.get("anomaly_score_id"),
+            "anomaly_score_id":           alert.get("score_id") or alert.get("anomaly_score_id"),
             "device_id":                  alert.get("device_id"),
             "device_name":                alert.get("device_name", ""),
             "telemetry_source":           alert.get("telemetry_source", "PROCESS"),
@@ -428,21 +383,16 @@ class SupabaseSync:
         }
 
     def _prepare_telemetry(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare compressed telemetry payload for Supabase."""
+        """Map agent telemetry dict to telemetry_events column names."""
         cpu = telemetry.get("cpu") or {}
         memory = telemetry.get("memory") or {}
-        disk = telemetry.get("disk") or {}
 
         return {
-            "device_id": telemetry.get("device_id") or self.device_id,
-            "timestamp": telemetry.get("timestamp"),
-            "cpu_percent": cpu.get("cpu_percent_total") or cpu.get("percent", 0),
-            "memory_percent": memory.get("memory_percent") or memory.get("percent", 0),
-            "disk_usage": disk.get("disk_percent") or disk.get("usage_percent", 0),
-            "process_count": len(telemetry.get("processes", [])),
-            "network_connections": len(
-                telemetry.get("network_connections", [])
-            ),
-            "event_type": telemetry.get("event_type"),
-            "payload_hash": telemetry.get("payload_hash"),
+            "device_id":                  telemetry.get("device_id") or self.device_id,
+            "collected_at":               telemetry.get("timestamp") or telemetry.get("collected_at"),
+            "source":                     telemetry.get("event_type") or telemetry.get("source", "PROCESS"),
+            "payload":                    telemetry.get("payload") or telemetry,
+            "collection_agent_version":   telemetry.get("agent_version") or telemetry.get("collection_agent_version", "unknown"),
+            "connectivity_state":         telemetry.get("connectivity_state", "online"),
+            "payload_hash":               telemetry.get("payload_hash", ""),
         }
