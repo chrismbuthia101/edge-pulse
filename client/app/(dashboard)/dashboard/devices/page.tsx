@@ -23,7 +23,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDeviceStore } from "@/stores/device-store";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -174,7 +173,6 @@ export default function DevicesPage() {
     }, []);
 
     const storeDevices = useDeviceStore((s) => s.devices);
-    const supabase = createClient();
     const router = useRouter();
 
     const rawDevices = storeDevices.length > 0
@@ -259,8 +257,10 @@ export default function DevicesPage() {
     const handleSync = async () => {
         setSyncing(true);
         try {
-            const { data } = await supabase.from("devices").select("*").order("name");
-            if (data) toast.success(`Synced ${data.length} devices`);
+            const { refreshDevices } = useDeviceStore.getState();
+            await refreshDevices();
+            const { devices } = useDeviceStore.getState();
+            toast.success(`Synced ${devices.length} devices`);
         } catch { toast.error("Sync failed"); }
         finally { setSyncing(false); }
     };
@@ -268,7 +268,8 @@ export default function DevicesPage() {
     const handleIsolateConfirm = async () => {
         if (!isolateDevice) return;
         try {
-            await supabase.from("devices").update({ status: "isolated" }).eq("id", isolateDevice.id);
+            const { isolateDevice: storeIsolateDevice } = useDeviceStore.getState();
+            await storeIsolateDevice(isolateDevice.id);
             toast.success(`${isolateDevice.name} has been isolated`);
         } catch { toast.error("Failed to isolate device"); }
         finally { setIsolateDevice(null); }

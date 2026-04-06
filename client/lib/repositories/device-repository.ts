@@ -1,23 +1,19 @@
 import { BaseRepository, type QueryOptions, type PaginatedResult, type PaginationOptions } from '@/lib/repositories/base-repository';
 import type { Device, DeviceStatus, RealtimeDevicePayload } from '@/lib/supabase/types';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const LATEST_AGENT_VERSION = 'v2.4.1';
 
-/** Performance / health thresholds */
 const THRESHOLDS = {
   cpuWarning: 80,
   cpuCritical: 90,
   ramWarning: 80,
   ramCritical: 90,
-  syncQueueWarning: 10,
-  syncQueueCritical: 20,
+  diskWarning: 85,
+  diskCritical: 95,
+  syncQueueWarning: 50,
+  syncQueueCritical: 100,
 } as const;
 
-/**
- * Default fields selected for list queries — intentionally excludes heavy
- * columns (e.g. raw log blobs) that are only needed on a detail view.
- */
 const DEFAULT_DEVICE_SELECT = `
   id,
   name,
@@ -36,21 +32,16 @@ const DEFAULT_DEVICE_SELECT = `
   actively_reporting
 `.trim();
 
-/** Minimal projection for aggregation / metrics queries. */
 const METRICS_SELECT =
   'status,type,risk,cpu_percent,ram_percent,alerts_count,sync_queue_depth,hash_chain_ok,agent_version';
 
-/** Minimal projection for attention / performance queries. */
 const TRIAGE_SELECT =
   'id,name,status,risk,cpu_percent,ram_percent,sync_queue_depth,hash_chain_ok';
-
-// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface DeviceQueryOptions extends QueryOptions {
   status?: DeviceStatus | DeviceStatus[];
   type?: string | string[];
   risk?: string | string[];
-  /** Full-text search across name, IP, OS, and type — pushed to server via ilike. */
   search?: string;
   onlineOnly?: boolean;
   minCpuUsage?: number;
@@ -99,14 +90,10 @@ export interface DeviceHealthStatus {
   recommendations: string[];
 }
 
-// ─── Repository ───────────────────────────────────────────────────────────────
-
 export class DeviceRepository extends BaseRepository<Device> {
   constructor() {
-    super('devices');
+    super('device_registry');
   }
-
-  // ── Query builder ──────────────────────────────────────────────────────────
 
   private buildDeviceQuery(options: DeviceQueryOptions) {
     const standardFilters: Record<string, unknown> = {};
@@ -154,8 +141,6 @@ export class DeviceRepository extends BaseRepository<Device> {
     return query;
   }
 
-  // ── Read operations ────────────────────────────────────────────────────────
-
   async findDevices(options: DeviceQueryOptions = {}): Promise<Device[]> {
     const cacheKey = options.cacheKey ?? `devices_${JSON.stringify(options)}`;
 
@@ -163,8 +148,8 @@ export class DeviceRepository extends BaseRepository<Device> {
       cacheKey,
       async () => {
         const { data, error } = await this.buildDeviceQuery(options);
-        if (error) throw error;
-        return (data as unknown) as Device[];
+        if (error) throw this.handleError(error);
+        return (data ?? []) as unknown as Device[];
       },
       options.cacheTTL
     );
@@ -173,21 +158,81 @@ export class DeviceRepository extends BaseRepository<Device> {
   async findDevicesPaginated(
     options: DeviceQueryOptions & PaginationOptions
   ): Promise<PaginatedResult<Device>> {
+    const { page, limit, search, ...queryOptions } = options;
+
+    const filters: Record<string, unknown> = {};
+
+    if (queryOptions.onlineOnly) {
+      filters.status = ['online', 'gone_silent', 'unsynced'];
+    } else if (queryOptions.status) {
+      filters.status = queryOptions.status;
+    }
+
+    if (queryOptions.type) filters.type = queryOptions.type;
+    if (queryOptions.risk) filters.risk = queryOptions.risk;
+    if (queryOptions.agentVersion) filters.agent_version = queryOptions.agentVersion;
+
+    // Add range filters that need special handling
+    const additionalFilters: Record<string, unknown> = {};
+
+    if (queryOptions.minCpuUsage !== undefined || queryOptions.maxCpuUsage !== undefined) {
+      const cpuFilter: Record<string, unknown> = {};
+      if (queryOptions.minCpuUsage !== undefined) cpuFilter.gte = queryOptions.minCpuUsage;
+      if (queryOptions.maxCpuUsage !== undefined) cpuFilter.lte = queryOptions.maxCpuUsage;
+      additionalFilters.cpu_percent = cpuFilter;
+    }
+
+    if (queryOptions.minRamUsage !== undefined || queryOptions.maxRamUsage !== undefined) {
+      const ramFilter: Record<string, unknown> = {};
+      if (queryOptions.minRamUsage !== undefined) ramFilter.gte = queryOptions.minRamUsage;
+      if (queryOptions.maxRamUsage !== undefined) ramFilter.lte = queryOptions.maxRamUsage;
+      additionalFilters.ram_percent = ramFilter;
+    }
+
+    // Combine all filters
+    const combinedFilters = { ...filters, ...additionalFilters };
+
+    // Handle search and OS type separately since they require OR/ILIKE conditions
+    if (search || queryOptions.osType) {
+      return this.findDevicesWithCustomFiltersPaginated(options);
+    }
+
+    return this.findPaginated({
+      page,
+      limit,
+      select: queryOptions.select ?? DEFAULT_DEVICE_SELECT,
+      filters: combinedFilters,
+      orderBy: queryOptions.orderBy,
+      cacheTTL: queryOptions.cacheTTL
+    });
+  }
+
+  /**
+   * Helper method for paginated queries that require OR/ILIKE conditions
+   */
+  private async findDevicesWithCustomFiltersPaginated(
+    options: DeviceQueryOptions & PaginationOptions
+  ): Promise<PaginatedResult<Device>> {
     const { page, limit, ...queryOptions } = options;
     const offset = (page - 1) * limit;
 
-    // Count without device-specific filters so we get the total filtered count
+    let query = this.buildDeviceQuery(queryOptions);
+    query = query.range(offset, offset + limit - 1);
+
     const { count, error: countError } = await this.supabase
       .from(this.tableName)
       .select('*', { count: 'exact', head: true });
 
     if (countError) throw this.handleError(countError);
 
-    const data = await this.findDevices({ ...queryOptions, limit, offset });
+    // Get paginated data
+    const { data, error } = await query;
+    if (error) throw this.handleError(error);
+
     const totalPages = Math.ceil((count ?? 0) / limit);
 
     return {
-      data,
+      data: (data ?? []) as unknown as Device[],
       count: count ?? 0,
       page,
       limit,
@@ -348,11 +393,11 @@ export class DeviceRepository extends BaseRepository<Device> {
         for (const d of devices) {
           // Status counters
           switch (d.status) {
-            case 'online':       metrics.online++;       onlineCount++; totalCpu += d.cpu_percent ?? 0; totalRam += d.ram_percent ?? 0; break;
-            case 'offline':      metrics.offline++;      break;
-            case 'isolated':     metrics.isolated++;     break;
-            case 'gone_silent':  metrics.gone_silent++;  break;
-            case 'unsynced':     metrics.unsynced++;     break;
+            case 'online': metrics.online++; onlineCount++; totalCpu += d.cpu_percent ?? 0; totalRam += d.ram_percent ?? 0; break;
+            case 'offline': metrics.offline++; break;
+            case 'isolated': metrics.isolated++; break;
+            case 'gone_silent': metrics.gone_silent++; break;
+            case 'unsynced': metrics.unsynced++; break;
           }
 
           // Distribution maps
@@ -363,7 +408,7 @@ export class DeviceRepository extends BaseRepository<Device> {
           metrics.byRisk[risk] = (metrics.byRisk[risk] ?? 0) + 1;
 
           // Totals
-          metrics.totalAlerts        += d.alerts_count ?? 0;
+          metrics.totalAlerts += d.alerts_count ?? 0;
           metrics.totalSyncQueueDepth += d.sync_queue_depth ?? 0;
 
           if (risk === 'critical') metrics.criticalDevices++;
@@ -396,7 +441,7 @@ export class DeviceRepository extends BaseRepository<Device> {
         const byStatus: Record<string, number> = {};
 
         for (const d of devices) {
-          const type   = d.type   ?? 'unknown';
+          const type = d.type ?? 'unknown';
           const status = d.status ?? 'unknown';
 
           // byType
@@ -442,8 +487,8 @@ export class DeviceRepository extends BaseRepository<Device> {
       try {
         const p = payload as RealtimeDevicePayload;
         switch (p.eventType) {
-          case 'INSERT': callbacks.onInsert?.(p.new);          break;
-          case 'UPDATE': callbacks.onUpdate?.(p.new);          break;
+          case 'INSERT': callbacks.onInsert?.(p.new); break;
+          case 'UPDATE': callbacks.onUpdate?.(p.new); break;
           case 'DELETE': callbacks.onDelete?.(p.old as Device); break;
         }
       } catch (error) {
@@ -451,7 +496,6 @@ export class DeviceRepository extends BaseRepository<Device> {
       }
     });
 
-    // Return the channel name so the caller can unsubscribe later.
     return channelName;
   }
 

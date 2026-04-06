@@ -28,7 +28,7 @@ interface AlertStore {
   searchAlerts: (query: string) => Promise<Alert[]>;
   getAlertsByDevice: (deviceId: string) => Promise<Alert[]>;
   getCriticalAlerts: () => Promise<Alert[]>;
-
+  getAlertById: (id: string) => Promise<Alert | null>;
   getMetrics: () => Promise<unknown>;
 
   subscribeToAlerts: () => void;
@@ -51,8 +51,6 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'An unexpected error occurred';
 }
 
-// ─── Store ─────────────────────────────────────────────────────────────────────
-
 export const useAlertStore = create<AlertStore>((set, get) => ({
   // ── Initial state ──────────────────────────────────────────────────────────
   alerts: [],
@@ -66,8 +64,8 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   initialize: async () => {
     try {
       set({ loading: true, error: null });
-      const alerts = await alertService.getAlerts({ limit: 100 });
-      set({ alerts, ...deriveCounters(alerts), loading: false });
+      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
+      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
       get().subscribeToAlerts();
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
@@ -77,8 +75,8 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   refreshAlerts: async () => {
     try {
       set({ loading: true, error: null });
-      const alerts = await alertService.getAlerts({ limit: 100 });
-      set({ alerts, ...deriveCounters(alerts), loading: false });
+      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
+      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
     }
@@ -131,7 +129,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   },
 
   markMultipleRead: async (ids) => {
-    // Optimistic
     ids.forEach((id) => get().markRead(id));
 
     try {
@@ -142,7 +139,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   },
 
   bulkUpdateStatus: async (ids, status, userId) => {
-    // Optimistic
     ids.forEach((id) => get().updateAlert(id, { status }));
 
     const operation =
@@ -193,6 +189,15 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     } catch (err) {
       set({ error: errorMessage(err) });
       return [];
+    }
+  },
+
+  getAlertById: async (id: string) => {
+    try {
+      return await alertService.getAlertById(id);
+    } catch (err) {
+      set({ error: errorMessage(err) });
+      return null;
     }
   },
 

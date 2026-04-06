@@ -16,7 +16,6 @@ interface TimeSeriesData {
   detectionCount: number;
 }
 
-// Tooltip component defined outside render to avoid recreation
 interface TimeSeriesTooltipProps {
   active?: boolean;
   payload?: Array<{

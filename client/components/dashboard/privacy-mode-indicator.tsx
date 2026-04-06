@@ -1,24 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Eye, EyeOff, Shield, Lock, AlertTriangle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { usePrivacyStore } from "@/stores/privacy-store";
 
 interface PrivacyModeIndicatorProps {
   deviceId?: string;
 }
 
 export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
-  const [privacyMode, setPrivacyMode] = useState(false);
-  const [privacySettings, setPrivacySettings] = useState({
-    anonymizeIPs: true,
-    encryptPII: true,
-    maskUsernames: true,
-    redactSensitiveData: true,
-  });
-  const supabase = createClient();
+  const { settings, loading, initialize, toggleEnhancedMode } = usePrivacyStore();
 
   const privacyLevels = useMemo(() => [
     {
@@ -29,10 +22,10 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
       bgColor: "bg-blue-500/10",
       borderColor: "border-blue-500/20",
       settings: {
-        anonymizeIPs: true,
-        encryptPII: true,
-        maskUsernames: false,
-        redactSensitiveData: false,
+        anonymize_ips: true,
+        encrypt_pii: true,
+        mask_usernames: false,
+        redact_sensitive_data: false,
       },
     },
     {
@@ -43,62 +36,25 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
       bgColor: "bg-green-500/10",
       borderColor: "border-green-500/20",
       settings: {
-        anonymizeIPs: true,
-        encryptPII: true,
-        maskUsernames: true,
-        redactSensitiveData: true,
+        anonymize_ips: true,
+        encrypt_pii: true,
+        mask_usernames: true,
+        redact_sensitive_data: true,
       },
     },
   ], []);
 
   useEffect(() => {
-    const fetchPrivacySettings = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('privacy_settings')
-          .select('*')
-          .eq('device_id', deviceId || 'global')
-          .single();
+    initialize(deviceId);
+  }, [deviceId, initialize]);
 
-        if (data && !error) {
-          setPrivacyMode(data.enhanced_mode);
-          const currentLevel = data.enhanced_mode ? privacyLevels[1] : privacyLevels[0];
-          setPrivacySettings(currentLevel.settings);
-        }
-      } catch {
-        // Use default privacy settings on error
-      }
-    };
-
-    fetchPrivacySettings();
-  }, [deviceId, supabase, privacyLevels]);
-
-  const handlePrivacyToggle = async () => {
-    const newMode = !privacyMode;
-    setPrivacyMode(newMode);
-
-    // Apply settings for selected level
-    const selectedLevel = newMode ? privacyLevels[1] : privacyLevels[0];
-    setPrivacySettings(selectedLevel.settings);
-
-    try {
-      const { error } = await supabase
-        .from('privacy_settings')
-        .upsert({
-          device_id: deviceId || 'global',
-          enhanced_mode: newMode,
-          ...selectedLevel.settings,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-    } catch {
-      // Handle save error
-    }
+  const handlePrivacyToggle = () => {
+    toggleEnhancedMode(deviceId);
   };
 
-  const currentLevel = privacyMode ? privacyLevels[1] : privacyLevels[0];
+  const currentLevel = settings?.enhanced_mode ? privacyLevels[1] : privacyLevels[0];
   const CurrentIcon = currentLevel.icon;
+  const privacyMode = settings?.enhanced_mode ?? false;
 
   return (
     <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
@@ -108,11 +64,17 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
           <h3 className="text-sm font-semibold text-foreground truncate">Privacy Mode</h3>
         </div>
         <div className="flex items-center gap-2 lg:gap-3 text-xs min-w-0">
-          <div className={cn(
-            "w-2 h-2 rounded-full",
-            privacyMode ? "bg-green-500" : "bg-blue-500"
-          )} />
-          <span className="text-muted-foreground">{currentLevel.level} Protection</span>
+          {loading ? (
+            <div className="w-2 h-2 rounded-full bg-muted animate-pulse" />
+          ) : (
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              privacyMode ? "bg-green-500" : "bg-blue-500"
+            )} />
+          )}
+          <span className="text-muted-foreground">
+            {loading ? "Loading..." : `${currentLevel.level} Protection`}
+          </span>
         </div>
       </div>
 
@@ -132,9 +94,11 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
 
           <button
             onClick={handlePrivacyToggle}
+            disabled={loading}
             className={cn(
               "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-              privacyMode ? "bg-green-500" : "bg-blue-500"
+              privacyMode ? "bg-green-500" : "bg-blue-500",
+              loading && "opacity-50 cursor-not-allowed"
             )}
           >
             <span
@@ -151,10 +115,10 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
           <div className="text-xs font-medium text-foreground mb-2">Active Protections</div>
 
           {[
-            { key: "anonymizeIPs", label: "IP Anonymization", description: "Mask last octet of IP addresses" },
-            { key: "encryptPII", label: "PII Encryption", description: "Encrypt personally identifiable information" },
-            { key: "maskUsernames", label: "Username Masking", description: "Replace usernames with hashes" },
-            { key: "redactSensitiveData", label: "Data Redaction", description: "Remove sensitive telemetry fields" },
+            { key: "anonymize_ips", label: "IP Anonymization", description: "Mask last octet of IP addresses" },
+            { key: "encrypt_pii", label: "PII Encryption", description: "Encrypt personally identifiable information" },
+            { key: "mask_usernames", label: "Username Masking", description: "Replace usernames with hashes" },
+            { key: "redact_sensitive_data", label: "Data Redaction", description: "Remove sensitive telemetry fields" },
           ].map((setting) => (
             <motion.div
               key={setting.key}
@@ -164,7 +128,7 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
               className="flex items-center justify-between p-2 rounded-lg border border-border"
             >
               <div className="flex items-center gap-2 min-w-0">
-                {privacySettings[setting.key as keyof typeof privacySettings] ? (
+                {settings?.[setting.key as keyof typeof settings] ? (
                   <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 ) : (
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -177,11 +141,11 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
 
               <div className={cn(
                 "text-xs px-2 py-0.5 rounded-full",
-                privacySettings[setting.key as keyof typeof privacySettings]
+                settings?.[setting.key as keyof typeof settings]
                   ? "bg-green-500/10 text-green-600"
                   : "bg-amber-500/10 text-amber-600"
               )}>
-                {privacySettings[setting.key as keyof typeof privacySettings] ? "Active" : "Inactive"}
+                {settings?.[setting.key as keyof typeof settings] ? "Active" : "Inactive"}
               </div>
             </motion.div>
           ))}
@@ -222,14 +186,16 @@ export function PrivacyModeIndicator({ deviceId }: PrivacyModeIndicatorProps) {
         {/* Action Button */}
         <button
           onClick={handlePrivacyToggle}
+          disabled={loading}
           className={cn(
             "w-full py-2 px-3 rounded-lg text-xs font-medium transition-colors",
             privacyMode
               ? "bg-blue-500 text-white hover:bg-blue-600"
-              : "bg-green-500 text-white hover:bg-green-600"
+              : "bg-green-500 text-white hover:bg-green-600",
+            loading && "opacity-50 cursor-not-allowed"
           )}
         >
-          {privacyMode ? "Switch to Standard Mode" : "Enable Enhanced Privacy"}
+          {loading ? "Updating..." : (privacyMode ? "Switch to Standard Mode" : "Enable Enhanced Privacy")}
         </button>
       </div>
     </div>

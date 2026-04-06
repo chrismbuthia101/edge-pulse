@@ -23,11 +23,12 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useFocusTrap } from "@/lib/use-focus-trap";
 import { useAuth } from "@/lib/auth/useAuth";
+import { AuthService } from "@/lib/services/auth-service";
+import { AuthRepository } from "@/lib/repositories/auth-repository";
 
 const navItems = [
     {
@@ -74,14 +75,20 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
-    const supabase = createClient();
     const { hasRole } = useAuth();
     const focusTrapRef = useFocusTrap(mobileOpen || false);
 
+    const authRepository = new AuthRepository();
+    const authService = new AuthService(authRepository);
+
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        toast.success("Logged out successfully");
-        router.push("/auth/login");
+        const result = await authService.signOut();
+        if (result.success) {
+            toast.success("Logged out successfully");
+            router.push("/auth/login");
+        } else {
+            toast.error(result.error || "Failed to sign out");
+        }
     };
 
     // Close mobile sidebar when navigating to a new route

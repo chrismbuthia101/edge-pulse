@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session, AuthError } from "@supabase/supabase-js";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { User, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,36 +29,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   const supabase = createClient();
   const router = useRouter();
 
   // Fetch user role from analyst_users table
-  const fetchUserRole = async (userId: string): Promise<string | null> => {
+  const fetchUserRole = useCallback(async (userId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase
         .from("analyst_users")
         .select("role")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error("Error fetching user role:", error);
         return null;
       }
-
-      return data?.role || null;
+      return (data as unknown as { role: string | null })?.role ?? null;
     } catch (error) {
       console.error("Error fetching user role:", error);
       return null;
     }
-  };
+  }, [supabase]);
 
   // Refresh session and role
   const refreshSession = async () => {
     try {
       const { data: { session }, error } = await supabase.auth.refreshSession();
-      
+
       if (error) {
         console.error("Error refreshing session:", error);
         setUser(null);
@@ -118,7 +117,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (!mounted) return;
 
         if (error) {
@@ -182,7 +181,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, fetchUserRole]);
 
   const value: AuthContextType = {
     user,

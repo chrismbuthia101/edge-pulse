@@ -33,7 +33,7 @@ serve(async (req) => {
     // Extract device authentication headers
     const deviceId = req.headers.get('x-edgepulse-device-id')
     const apiKey = req.headers.get('x-edgepulse-api-key')
-    
+
     if (!deviceId || !apiKey) {
       return new Response(
         JSON.stringify({ success: false, error: 'Device authentication headers required' }),
@@ -44,7 +44,7 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Validate API key
@@ -90,7 +90,6 @@ serve(async (req) => {
         key_hash: newApiKeyHash,
         key_name: `Rotated Key - ${new Date().toISOString()}`,
         is_active: true,
-        created_at: new Date().toISOString(),
         created_by: keyData.created_by
       })
       .select()
@@ -141,8 +140,8 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { 
-        status: 200, 
+      {
+        status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json'
@@ -152,33 +151,29 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('API key rotation error:', error)
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Internal server error' 
+      JSON.stringify({
+        success: false,
+        error: 'Internal server error'
       }),
-      { 
-        status: 500, 
-        headers: corsHeaders 
+      {
+        status: 500,
+        headers: corsHeaders
       }
     )
   }
 })
 
 async function hashApiKey(apiKey: string): Promise<string> {
-  // Use bcrypt-style hashing for API keys
+  // Use SHA-256 hashing for API keys (aligned with schema)
   const encoder = new TextEncoder()
   const data = encoder.encode(apiKey)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  // Add salt (in production, use proper bcrypt)
-  const salt = 'edgepulse-api-key-salt-v1'
-  const saltedHash = await hashToken(apiKey + salt)
-  
-  return saltedHash
+
+  return hashHex
 }
 
 async function hashToken(token: string): Promise<string> {

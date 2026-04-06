@@ -26,9 +26,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 import { useDeviceStore } from "@/stores/device-store";
 import { useAlertStore } from "@/stores/alert-store";
+import { TelemetryService } from "@/lib/services/telemetry-service";
+import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -39,8 +40,6 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import type { Device } from "@/lib/supabase/types";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface TelemetrySample {
     collected_at: string;
@@ -150,13 +149,10 @@ function IsolateModal({ deviceName, open, onClose, onConfirm }: {
     );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
 export default function DeviceDetailPage() {
     const params = useParams();
     const router = useRouter();
     const deviceId = params?.id as string;
-    const supabase = createClient();
 
     const storeDevices = useDeviceStore((s) => s.devices);
     const alerts = useAlertStore((s) => s.alerts);
@@ -174,35 +170,25 @@ export default function DeviceDetailPage() {
         [alerts, deviceId, device?.name]
     );
 
-    // Fetch device + telemetry + anomaly scores
     const fetchData = async () => {
         setSyncing(true);
         try {
-            // 1. Device from store or DB
             const storeDevice = storeDevices.find((d) => d.id === deviceId);
             if (storeDevice) {
                 setDevice(storeDevice);
             } else {
-                const { data } = await supabase.from("devices").select("*").eq("id", deviceId).single();
-                if (data) setDevice(data as Device);
+                const { refreshDevices } = useDeviceStore.getState();
+                await refreshDevices();
+                const refreshedDevices = useDeviceStore.getState().devices;
+                const refreshedDevice = refreshedDevices.find(d => d.id === deviceId);
+                if (refreshedDevice) setDevice(refreshedDevice);
             }
 
-            // 2. Telemetry (last 48 samples)
-            const { data: telData } = await supabase
-                .from("telemetry_events")
-                .select("collected_at, cpu_percent, ram_percent")
-                .eq("device_id", deviceId)
-                .order("collected_at", { ascending: false })
-                .limit(48);
+            const telemetryService = new TelemetryService();
+            const telData = await telemetryService.getLatestTelemetry(deviceId, 48);
 
             if (telData && telData.length > 0) {
-                setTelemetry(
-                    (telData as TelemetrySample[]).reverse().map((t) => ({
-                        collected_at: t.collected_at,
-                        cpu_percent: t.cpu_percent ?? 0,
-                        ram_percent: t.ram_percent ?? 0,
-                    }))
-                );
+                setTelemetry(telData.reverse());
             } else {
                 // Fallback synthetic data so the chart is always meaningful
                 const now = Date.now();
@@ -215,17 +201,12 @@ export default function DeviceDetailPage() {
                 );
             }
 
-            // 3. Anomaly scores (behavioral baseline)
-            const { data: anomData } = await supabase
-                .from("anomaly_scores")
-                .select("created_at, score, label")
-                .eq("device_id", deviceId)
-                .order("created_at", { ascending: false })
-                .limit(20);
+            const anomalyService = new AnomalyService(anomalyRepository);
+            const anomData = await anomalyService.getDeviceAnomalyHistory(deviceId, 20);
 
             if (anomData && anomData.length > 0) {
                 setAnomalyPoints(
-                    (anomData as AnomalyPoint[]).reverse().map((a) => ({
+                    anomData.reverse().map((a) => ({
                         created_at: a.created_at,
                         score: a.score ?? 0,
                         label: a.label,
@@ -255,7 +236,6 @@ export default function DeviceDetailPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deviceId]);
 
-    // Sync with store if device updates
     useEffect(() => {
         const storeDevice = storeDevices.find((d) => d.id === deviceId);
         if (storeDevice) setDevice(storeDevice);
@@ -263,7 +243,8 @@ export default function DeviceDetailPage() {
 
     const handleIsolateConfirm = async () => {
         try {
-            await supabase.from("devices").update({ status: "isolated" }).eq("id", deviceId);
+            const { isolateDevice } = useDeviceStore.getState();
+            await isolateDevice(deviceId);
             toast.success(`${device?.name} has been isolated`);
             setIsolateOpen(false);
             router.push("/dashboard/devices");

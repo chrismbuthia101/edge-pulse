@@ -1,24 +1,26 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Database, Clock, Trash2, Settings, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { useRetentionStore } from "@/stores/retention-store";
 
 interface TelemetryRetentionProps {
   deviceId?: string;
 }
 
 export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
-  const [retentionPeriod, setRetentionPeriod] = useState(90);
-  const [storageUsage, setStorageUsage] = useState({
-    telemetry: 15.7,
-    alerts: 2.3,
-    features: 8.9,
-    total: 26.9,
-  });
-  const supabase = createClient();
+  const {
+    retentionPeriod,
+    storageUsage,
+    loading,
+    error,
+    initialize,
+    updateRetentionPeriod,
+    purgeOldData,
+    clearError,
+  } = useRetentionStore();
 
   const retentionOptions = [
     { label: "30 days", value: 30, description: "Minimal storage" },
@@ -28,68 +30,24 @@ export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
   ];
 
   useEffect(() => {
-    const fetchRetentionSettings = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('retention_settings')
-          .select('retention_days')
-          .eq('device_id', deviceId || 'global')
-          .single();
+    initialize(deviceId);
+  }, [deviceId, initialize]);
 
-        if (data && !error) {
-          setRetentionPeriod(data.retention_days);
-        }
-      } catch {
-        // Use default retention on error
-      }
-    };
-
-    fetchRetentionSettings();
-  }, [deviceId, supabase]);
-
-  const handleRetentionChange = async (days: number) => {
-    setRetentionPeriod(days);
-    try {
-      const { error } = await supabase
-        .from('retention_settings')
-        .upsert({
-          device_id: deviceId || 'global',
-          retention_days: days,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-    } catch {
-      // Handle save error
+  const handleRetentionChange = (days: number) => {
+    if (!loading) {
+      updateRetentionPeriod(days, deviceId);
     }
   };
 
-  const handlePurgeOldData = async () => {
-    try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - retentionPeriod);
-
-      const { error } = await supabase
-        .from('telemetry_events')
-        .delete()
-        .lt('collected_at', cutoffDate.toISOString())
-        .eq('device_id', deviceId || undefined);
-
-      if (error) throw error;
-
-      // Recalculate storage usage
-      const baseSize = 26.9;
-      const multiplier = retentionPeriod / 90;
-      const newUsage = {
-        telemetry: parseFloat((15.7 * multiplier).toFixed(1)),
-        alerts: parseFloat((2.3 * multiplier).toFixed(1)),
-        features: parseFloat((8.9 * multiplier).toFixed(1)),
-        total: parseFloat((baseSize * multiplier).toFixed(1)),
-      };
-      setStorageUsage(newUsage);
-    } catch {
-      // Handle purge error
+  const handlePurgeOldData = () => {
+    if (!loading) {
+      purgeOldData(deviceId);
     }
+  };
+
+  const handleRetry = () => {
+    clearError();
+    initialize(deviceId);
   };
 
   const getStorageColor = (usage: number) => {
@@ -100,6 +58,19 @@ export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
 
   return (
     <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
+      {error && (
+        <div className="p-4 bg-destructive/10 border-b border-destructive/20">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-destructive">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="text-xs text-destructive underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Database className="h-4 w-4 text-primary shrink-0" />
@@ -115,7 +86,11 @@ export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
         {/* Current Retention Period */}
         <div className="text-center py-3">
           <div className="text-2xl font-bold font-display text-foreground mb-1">
-            {retentionPeriod} days
+            {loading ? (
+              <div className="animate-pulse bg-muted h-8 w-16 mx-auto rounded" />
+            ) : (
+              `${retentionPeriod} days`
+            )}
           </div>
           <div className="text-xs text-muted-foreground">Data retention period</div>
         </div>
@@ -126,11 +101,13 @@ export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
             <button
               key={option.value}
               onClick={() => handleRetentionChange(option.value)}
+              disabled={loading}
               className={cn(
                 "p-3 rounded-lg border text-xs transition-all text-left",
                 retentionPeriod === option.value
                   ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-border hover:bg-accent/50"
+                  : "bg-background border-border hover:bg-accent/50",
+                loading && "opacity-50 cursor-not-allowed"
               )}
             >
               <div className="font-medium">{option.label}</div>
@@ -191,10 +168,14 @@ export function TelemetryRetention({ deviceId }: TelemetryRetentionProps) {
         <div className="flex gap-2">
           <button
             onClick={handlePurgeOldData}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+            disabled={loading}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors",
+              loading && "opacity-50 cursor-not-allowed"
+            )}
           >
             <Trash2 className="h-3 w-3" />
-            Purge Old Data
+            {loading ? "Processing..." : "Purge Old Data"}
           </button>
           <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
             <Settings className="h-3 w-3" />

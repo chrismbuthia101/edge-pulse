@@ -1,24 +1,23 @@
-import { SyncQueueStatus } from '@/lib/supabase/types/shared';
+import type { SyncQueueStatus } from '@/lib/supabase/types/shared';
 
 export interface TamperEvidentLog {
   id: string;
   device_id: string;
-  sequence_number: number;        // monotonically increasing per device
-  event_type: string;             // e.g. "ALERT_CREATED", "AGENT_START"
+  sequence_number: number;
+  event_type: string;
   payload: Record<string, unknown>;
-  entry_hash: string;             // SHA-256 of (prev_hash + payload)
-  prev_hash: string;              // hash of previous entry (genesis = "0000...")
+  entry_hash: string;
+  prev_hash: string;
   created_at: string;
-  verified: boolean | null;       // null = not yet verified
+  verified: boolean | null;
 }
 
-// Verification result for a device's hash chain
 export interface HashChainStatus {
   device_id: string;
   device_name: string;
   total_entries: number;
   verified: boolean;
-  broken_at_sequence: number | null; // sequence number where chain breaks
+  broken_at_sequence: number | null;
   last_verified_at: string | null;
 }
 
@@ -33,7 +32,6 @@ export interface SyncQueueEntry {
   last_error: string | null;
 }
 
-// Aggregated per-device sync queue summary
 export interface DeviceSyncQueueSummary {
   device_id: string;
   device_name: string;

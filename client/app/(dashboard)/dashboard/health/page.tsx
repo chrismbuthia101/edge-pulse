@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
     Activity,
@@ -22,57 +22,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/useAuth";
-import { toast } from "sonner";
+import { useHealthStore } from "@/stores/health-store";
 
-interface DeviceHealth {
-    device_id: string;
-    hostname: string;
-    operating_system: string;
-    agent_version: string;
-    last_seen_utc: string;
-    is_active: boolean;
-    status: "ONLINE" | "OFFLINE" | "WARNING" | "ERROR";
-    cpu_usage: number;
-    memory_usage: number;
-    disk_usage: number;
-    network_status: boolean;
-    alerts_last_24h: number;
-    uptime_percentage: number;
-    response_time_ms: number;
-    error_count: number;
-    warning_count: number;
-    last_restart: string | null;
-}
-
-interface SystemHealth {
-    total_devices: number;
-    online_devices: number;
-    offline_devices: number;
-    warning_devices: number;
-    error_devices: number;
-    avg_cpu_usage: number;
-    avg_memory_usage: number;
-    avg_disk_usage: number;
-    total_alerts_24h: number;
-    critical_alerts_24h: number;
-    system_uptime: number;
-    api_response_time: number;
-}
 
 export default function HealthPage() {
     const { hasRole } = useAuth();
-    const supabase = createClient();
+    const { devices, systemHealth, loading, initialize, refreshHealthData } = useHealthStore();
 
-    const [devices, setDevices] = useState<DeviceHealth[]>([]);
-    const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
-    const [loading, setLoading] = useState(true);
     const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
     const [autoRefresh, setAutoRefresh] = useState(true);
 
+    const fetchHealthData = useCallback(async () => {
+        await refreshHealthData();
+    }, [refreshHealthData]);
+
     useEffect(() => {
-        fetchHealthData();
+        initialize();
 
         let interval: ReturnType<typeof setInterval>;
         if (autoRefresh) {
@@ -82,90 +48,7 @@ export default function HealthPage() {
         return () => {
             if (interval) clearInterval(interval);
         };
-    }, [autoRefresh]);
-
-    const fetchHealthData = async () => {
-        try {
-            setLoading(true);
-
-            const { data: deviceHealth, error: deviceError } = await supabase
-                .from("device_health_snapshots")
-                .select(`
-                    *,
-                    device_registry:device_registry(
-                        hostname,
-                        operating_system,
-                        agent_version,
-                        is_active,
-                        last_seen_utc
-                    )
-                `)
-                .order("created_at", { ascending: false })
-                .limit(100);
-
-            if (deviceError) throw deviceError;
-
-            const processedDevices: DeviceHealth[] = (deviceHealth || []).map((device: any) => ({
-                device_id: device.device_id,
-                hostname: device.device_registry?.hostname || "Unknown",
-                operating_system: device.device_registry?.operating_system || "Unknown",
-                agent_version: device.device_registry?.agent_version || "Unknown",
-                last_seen_utc: device.device_registry?.last_seen_utc || device.created_at,
-                is_active: device.device_registry?.is_active || false,
-                status: device.status || "OFFLINE",
-                cpu_usage: device.cpu_usage || 0,
-                memory_usage: device.memory_usage || 0,
-                disk_usage: device.disk_usage || 0,
-                network_status: device.network_status || false,
-                alerts_last_24h: device.alerts_last_24h || 0,
-                uptime_percentage: device.uptime_percentage || 0,
-                response_time_ms: device.response_time_ms || 0,
-                error_count: device.error_count || 0,
-                warning_count: device.warning_count || 0,
-                last_restart: device.last_restart || null,
-            }));
-
-            const totalDevices = processedDevices.length;
-            const onlineDevices = processedDevices.filter(d => d.status === "ONLINE").length;
-            const offlineDevices = processedDevices.filter(d => d.status === "OFFLINE").length;
-            const warningDevices = processedDevices.filter(d => d.status === "WARNING").length;
-            const errorDevices = processedDevices.filter(d => d.status === "ERROR").length;
-
-            const avgCpuUsage = totalDevices > 0
-                ? processedDevices.reduce((sum, d) => sum + d.cpu_usage, 0) / totalDevices
-                : 0;
-            const avgMemoryUsage = totalDevices > 0
-                ? processedDevices.reduce((sum, d) => sum + d.memory_usage, 0) / totalDevices
-                : 0;
-            const avgDiskUsage = totalDevices > 0
-                ? processedDevices.reduce((sum, d) => sum + d.disk_usage, 0) / totalDevices
-                : 0;
-
-            const totalAlerts24h = processedDevices.reduce((sum, d) => sum + d.alerts_last_24h, 0);
-
-            setDevices(processedDevices);
-            setSystemHealth({
-                total_devices: totalDevices,
-                online_devices: onlineDevices,
-                offline_devices: offlineDevices,
-                warning_devices: warningDevices,
-                error_devices: errorDevices,
-                avg_cpu_usage: avgCpuUsage,
-                avg_memory_usage: avgMemoryUsage,
-                avg_disk_usage: avgDiskUsage,
-                total_alerts_24h: totalAlerts24h,
-                critical_alerts_24h: totalAlerts24h,
-                system_uptime: 99.9,
-                api_response_time: 150,
-            });
-
-        } catch (error) {
-            console.error("Failed to fetch health data:", error);
-            toast.error("Failed to load health data");
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [autoRefresh, fetchHealthData, initialize]);
 
     // Role check AFTER all hooks
     if (!hasRole(["ANALYST", "ADMINISTRATOR"])) {

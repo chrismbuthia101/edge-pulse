@@ -1,0 +1,145 @@
+import { create } from 'zustand';
+import { PrivacyRepository } from '@/lib/repositories';
+import { PrivacyService } from '@/lib/services/privacy-service';
+import type { PrivacySettings, PrivacySettingsUpdate } from '@/lib/supabase/types/privacy-settings';
+import { toast } from 'sonner';
+
+interface PrivacyStore {
+  // State
+  settings: PrivacySettings | null;
+  loading: boolean;
+  error: string | null;
+
+  // Actions
+  initialize: (deviceId?: string) => Promise<void>;
+  refreshSettings: (deviceId?: string) => Promise<void>;
+  updateSettings: (updates: PrivacySettingsUpdate, deviceId?: string) => Promise<void>;
+  toggleEnhancedMode: (deviceId?: string) => Promise<void>;
+  setSettings: (settings: PrivacySettings) => void;
+  clearError: () => void;
+
+  // Realtime
+  subscribeToSettings: (deviceId?: string) => void;
+  unsubscribeFromSettings: (deviceId?: string) => void;
+}
+
+const privacyRepository = new PrivacyRepository();
+const privacyService = new PrivacyService(privacyRepository);
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'An unexpected error occurred';
+}
+
+// ─── Store ─────────────────────────────────────────────────────────────────────
+
+export const usePrivacyStore = create<PrivacyStore>((set, get) => ({
+  // ── Initial state ──────────────────────────────────────────────────────────
+  settings: null,
+  loading: false,
+  error: null,
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  initialize: async (deviceId?: string) => {
+    try {
+      set({ loading: true, error: null });
+      const settings = await privacyService.getPrivacySettings({ deviceId });
+      set({ settings, loading: false });
+      get().subscribeToSettings(deviceId);
+    } catch (err) {
+      set({ error: errorMessage(err), loading: false });
+    }
+  },
+
+  refreshSettings: async (deviceId?: string) => {
+    try {
+      set({ loading: true, error: null });
+      const settings = await privacyService.getPrivacySettings({ deviceId });
+      set({ settings, loading: false });
+    } catch (err) {
+      set({ error: errorMessage(err), loading: false });
+    }
+  },
+
+  // ── Mutations ───────────────────────────────────────────────────────────────
+
+  updateSettings: async (updates, deviceId) => {
+    const previous = get().settings;
+
+    // Optimistic update
+    if (previous) {
+      set({ settings: { ...previous, ...updates, updated_at: new Date().toISOString() } });
+    }
+
+    try {
+      const updated = await privacyService.updatePrivacySettings(updates, { deviceId });
+      set({ settings: updated });
+      toast.success('Privacy settings updated successfully');
+    } catch (err) {
+      // Rollback
+      if (previous) set({ settings: previous });
+      set({ error: errorMessage(err) });
+      toast.error('Failed to update privacy settings');
+    }
+  },
+
+  toggleEnhancedMode: async (deviceId) => {
+    const previous = get().settings;
+
+    // Optimistic update
+    if (previous) {
+      const newMode = !previous.enhanced_mode;
+      set({
+        settings: {
+          ...previous,
+          enhanced_mode: newMode,
+          mask_usernames: newMode,
+          redact_sensitive_data: newMode,
+          updated_at: new Date().toISOString(),
+        },
+      });
+    }
+
+    try {
+      const updated = await privacyService.toggleEnhancedMode({ deviceId });
+      set({ settings: updated });
+      toast.success(
+        updated.enhanced_mode ? 'Enhanced privacy mode enabled' : 'Standard privacy mode enabled'
+      );
+    } catch (err) {
+      // Rollback
+      if (previous) set({ settings: previous });
+      set({ error: errorMessage(err) });
+      toast.error('Failed to toggle privacy mode');
+    }
+  },
+
+  setSettings: (settings) => set({ settings }),
+
+  clearError: () => set({ error: null }),
+
+  // ── Realtime ───────────────────────────────────────────────────────────────
+
+  subscribeToSettings: (deviceId) => {
+    privacyService.subscribeToPrivacySettings(
+      deviceId || null,
+      {
+        onUpdate: (settings) => {
+          set({ settings });
+        },
+        onError: (error) => {
+          console.error('[PrivacyStore] Realtime error:', error);
+          set({ error: errorMessage(error) });
+        },
+      }
+    );
+  },
+
+  unsubscribeFromSettings: (deviceId) => {
+    privacyService.unsubscribeFromPrivacySettings(deviceId || null);
+  },
+}));
+
+export { privacyService, privacyRepository };

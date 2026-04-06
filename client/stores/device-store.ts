@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { DeviceRepository } from '@/lib/repositories';
 import { DeviceService } from '@/lib/services/device-service';
+import { AnomalyService, anomalyRepository } from '@/lib/services/anomaly-service';
 import type { DeviceAnalytics, UpdateDeviceMetricsParams } from '@/lib/services/device-service';
 import type { Device } from '@/lib/supabase/types';
+import type { AnomalyScore } from '@/lib/repositories/anomaly-repository';
 import { toast } from 'sonner';
 
 interface DeviceStore {
@@ -32,6 +34,11 @@ interface DeviceStore {
 
   getDeviceHealthReport: (deviceId: string) => Promise<unknown>;
 
+  // Anomaly data methods
+  getDeviceAnomalyHistory: (deviceId: string, limit?: number) => Promise<AnomalyScore[]>;
+  getDeviceAnomalyAnalytics: (deviceId: string, timeframe?: '24h' | '7d' | '30d') => Promise<unknown>;
+  getLatestAnomalyScore: (deviceId: string) => Promise<AnomalyScore | null>;
+
   subscribeToDeviceUpdates: () => void;
   unsubscribeFromDeviceUpdates: () => void;
 
@@ -41,6 +48,7 @@ interface DeviceStore {
 
 const deviceRepository = new DeviceRepository();
 const deviceService = new DeviceService(deviceRepository);
+const anomalyService = new AnomalyService(anomalyRepository);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,8 +74,8 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   initialize: async () => {
     try {
       set({ loading: true, error: null });
-      const devices = await deviceService.getDevices({ limit: 200 });
-      set({ devices, onlineCount: countOnline(devices), loading: false });
+      const result = await deviceService.getDevicesPaginated({ page: 1, limit: 200 });
+      set({ devices: result.devices, onlineCount: countOnline(result.devices), loading: false });
       get().subscribeToDeviceUpdates();
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
@@ -77,8 +85,8 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   refreshDevices: async () => {
     try {
       set({ loading: true, error: null });
-      const devices = await deviceService.getDevices({ limit: 200 });
-      set({ devices, onlineCount: countOnline(devices), loading: false });
+      const result = await deviceService.getDevicesPaginated({ page: 1, limit: 200 });
+      set({ devices: result.devices, onlineCount: countOnline(result.devices), loading: false });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
     }
@@ -206,6 +214,35 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   getDeviceHealthReport: async (deviceId) => {
     try {
       return await deviceService.getDeviceHealthReport(deviceId);
+    } catch (err) {
+      set({ error: errorMessage(err) });
+      return null;
+    }
+  },
+
+  // ── Anomaly data methods ─────────────────────────────────────────────────────
+
+  getDeviceAnomalyHistory: async (deviceId, limit = 20) => {
+    try {
+      return await anomalyService.getDeviceAnomalyHistory(deviceId, limit);
+    } catch (err) {
+      set({ error: errorMessage(err) });
+      return [];
+    }
+  },
+
+  getDeviceAnomalyAnalytics: async (deviceId, timeframe = '24h') => {
+    try {
+      return await anomalyService.getAnomalyAnalytics(deviceId, timeframe);
+    } catch (err) {
+      set({ error: errorMessage(err) });
+      return null;
+    }
+  },
+
+  getLatestAnomalyScore: async (deviceId) => {
+    try {
+      return await anomalyService.getLatestAnomalyScore(deviceId);
     } catch (err) {
       set({ error: errorMessage(err) });
       return null;

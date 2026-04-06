@@ -33,7 +33,7 @@ export function ShapChart({ data }: ShapChartProps) {
                 <XAxis type="number" />
                 <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
                 <Tooltip
-                    formatter={(value: number) => [value.toFixed(4), "Attribution Score"]}
+                    formatter={(value) => [typeof value === 'number' ? value.toFixed(4) : String(value || "0"), "Attribution Score"]}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {chartData.map((entry, index) => (

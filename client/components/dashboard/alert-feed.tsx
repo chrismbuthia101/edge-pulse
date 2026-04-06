@@ -66,12 +66,6 @@ const EMPTY_MESSAGES: Record<AlertFilter, string> = {
     CLOSED: "No closed alerts",
 };
 
-function confidenceBadgeClass(score: number) {
-    if (score >= 0.9) return "text-destructive bg-destructive/10 border-destructive/25";
-    if (score >= 0.7) return "text-orange-500 bg-orange-500/10 border-orange-500/25";
-    return "text-amber-500 bg-amber-500/10 border-amber-500/25";
-}
-
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function AlertFeed() {

@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,11 +10,11 @@ import { Separator } from '@/components/ui/separator'
 import { AlertTriangle, Clock, User, Activity, ArrowLeft } from 'lucide-react'
 import { ShapChart } from '@/components/charts/ShapChart'
 import { useAuth } from '@/lib/auth/useAuth'
+import { useAlertStore } from '@/stores/alert-store'
 
-// Raw DB row type (matches alert_records table in migration)
 interface AlertRecord {
-  alert_id: string
-  score_id: string
+  id: string
+  anomaly_score_id: string
   device_id: string
   alert_severity: string
   alert_status: string
@@ -28,6 +27,12 @@ interface AlertRecord {
   investigated_by: string | null
   closed_at: string | null
   closed_by: string | null
+  title: string
+  description: string
+  category: string
+  source: string
+  inference_latency_ms: number
+  read: boolean
 }
 
 // SHAP explanation shape stored in explanation_json
@@ -53,7 +58,6 @@ export default function AlertDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { user, hasRole } = useAuth()
-  const supabase = createClient()
 
   const [alert, setAlert] = useState<AlertRecord | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,42 +65,59 @@ export default function AlertDetailPage() {
 
   const alertId = params.alert_id as string
 
-  useEffect(() => {
-    if (alertId) fetchAlert()
-  }, [alertId])
-
-  const fetchAlert = async () => {
+  const fetchAlert = useCallback(async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('alert_records')
-        .select('*')
-        .eq('alert_id', alertId)
-        .single()
+      const { getAlertById } = useAlertStore.getState()
+      const alertData = await getAlertById(alertId)
 
-      if (error) throw error
-      setAlert(data)
+      if (!alertData) {
+        throw new Error('Alert not found')
+      }
+
+      // Transform Alert to AlertRecord format
+      const alertRecord: AlertRecord = {
+        id: alertData.id,
+        anomaly_score_id: alertData.anomaly_score_id || '',
+        device_id: alertData.device_id,
+        alert_severity: alertData.severity,
+        alert_status: alertData.status,
+        explanation_json: JSON.stringify(alertData.explanation_json),
+        created_at: alertData.created_at,
+        updated_at: alertData.updated_at,
+        acknowledged_at: alertData.acknowledged_at,
+        acknowledged_by: alertData.acknowledged_by,
+        investigated_at: alertData.investigated_at,
+        investigated_by: alertData.investigated_by,
+        closed_at: alertData.closed_at,
+        closed_by: alertData.closed_by,
+        title: alertData.title,
+        description: alertData.description || '',
+        category: alertData.category,
+        source: alertData.telemetry_source,
+        inference_latency_ms: alertData.inference_latency_ms,
+        read: alertData.read,
+      }
+
+      setAlert(alertRecord)
     } catch (error) {
-      console.error('Error fetching alert:', error)
+      console.error('Failed to fetch alert:', error)
+      router.push('/dashboard/alerts')
     } finally {
       setLoading(false)
     }
-  }
+  }, [alertId, router])
+
+  useEffect(() => {
+    if (alertId) fetchAlert()
+  }, [alertId, fetchAlert])
 
   const handleAcknowledge = async () => {
     if (!alert || !user) return
     try {
       setAcknowledging(true)
-      const { error } = await supabase
-        .from('alert_records')
-        .update({
-          alert_status: 'ACKNOWLEDGED',
-          acknowledged_at: new Date().toISOString(),
-          acknowledged_by: user.id,
-        })
-        .eq('alert_id', alert.alert_id)
-
-      if (error) throw error
+      const { updateAlertStatus } = useAlertStore.getState()
+      await updateAlertStatus(alert.id, 'ACKNOWLEDGED', user.id)
       await fetchAlert()
     } catch (error) {
       console.error('Error acknowledging alert:', error)
@@ -173,7 +194,7 @@ export default function AlertDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-semibold">Alert Details</h1>
-            <p className="text-sm text-muted-foreground">Alert ID: {alert.alert_id}</p>
+            <p className="text-sm text-muted-foreground">Alert ID: {alert.id}</p>
           </div>
         </div>
         {alert.alert_status === 'PENDING' && hasRole(['ANALYST', 'ADMINISTRATOR']) && (

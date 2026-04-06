@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Plus,
@@ -16,106 +16,41 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { useDeviceEnrollmentStore } from "@/stores/device-enrollment-store";
 import { toast } from "sonner";
-import type { Database } from "@/lib/supabase/types";
+import type { EnrollmentToken } from "@/lib/supabase/types";
 
-type EnrollmentToken = Database["public"]["Tables"]["device_enrollment_tokens"]["Row"];
-
-// Named export used by settings/page.tsx
 export function DeviceEnrollment() {
-    const [tokens, setTokens] = useState<EnrollmentToken[]>([]);
+    const {
+        tokens,
+        loading,
+        creating,
+        initialize,
+        refreshTokens,
+        createToken: createTokenFromStore,
+        deleteToken: deleteTokenFromStore,
+    } = useDeviceEnrollmentStore();
+
     const [showToken, setShowToken] = useState<Record<string, boolean>>({});
-    const [loading, setLoading] = useState(false);
-    const [creating, setCreating] = useState(false);
     const [newTokenName, setNewTokenName] = useState("");
     const [maxUses, setMaxUses] = useState(1);
 
-    const supabase = createClient();
-
-    const loadTokens = useCallback(async () => {
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from("device_enrollment_tokens")
-                .select("*")
-                .order("created_at", { ascending: false });
-
-            if (error) throw error;
-            setTokens(data ?? []);
-        } catch {
-            toast.error("Failed to load enrollment tokens");
-        } finally {
-            setLoading(false);
-        }
-    }, [supabase]);
-
     useEffect(() => {
-        loadTokens();
-    }, [loadTokens]);
+        initialize();
+    }, [initialize]);
 
     const createToken = async () => {
-        if (!newTokenName.trim()) {
-            toast.error("Please enter a token name");
-            return;
-        }
-
-        setCreating(true);
-        try {
-            const token = generateSecureToken();
-            const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 30);
-
-            const { data: userData } = await supabase.auth.getUser();
-            const userId = userData.user?.id;
-
-            if (!userId) throw new Error("User not authenticated");
-
-            const { data, error } = await supabase
-                .from("device_enrollment_tokens")
-                .insert({
-                    token_hash: await hashToken(token),
-                    created_by: userId,
-                    max_uses: maxUses,
-                    current_uses: 0,
-                    expires_at: expiresAt.toISOString(),
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            await navigator.clipboard.writeText(token);
-            toast.success(`Token "${newTokenName}" created. Copied to clipboard.`);
-
+        const token = await createTokenFromStore(newTokenName, maxUses);
+        if (token) {
             setNewTokenName("");
             setMaxUses(1);
-            await loadTokens();
-
-            if (data) {
-                setShowToken(prev => ({ ...prev, [data.token_id]: true }));
-            }
-        } catch (err) {
-            console.error(err);
-            toast.error("Failed to create enrollment token");
-        } finally {
-            setCreating(false);
+            // Show the newly created token
+            setShowToken(prev => ({ ...prev, [token]: true }));
         }
     };
 
     const deleteToken = async (tokenId: string) => {
-        try {
-            const { error } = await supabase
-                .from("device_enrollment_tokens")
-                .delete()
-                .eq("token_id", tokenId);
-
-            if (error) throw error;
-            toast.success("Enrollment token deleted");
-            await loadTokens();
-        } catch {
-            toast.error("Failed to delete token");
-        }
+        await deleteTokenFromStore(tokenId);
     };
 
     const copyToken = async (text: string) => {
@@ -125,22 +60,6 @@ export function DeviceEnrollment() {
         } catch {
             toast.error("Failed to copy token");
         }
-    };
-
-    const generateSecureToken = () => {
-        const array = new Uint8Array(32);
-        crypto.getRandomValues(array);
-        return btoa(String.fromCharCode(...array))
-            .replace(/[+/=]/g, "")
-            .substring(0, 40);
-    };
-
-    const hashToken = async (token: string): Promise<string> => {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(token);
-        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
     };
 
     const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
@@ -158,7 +77,7 @@ export function DeviceEnrollment() {
                 <Button
                     variant="outline"
                     size="sm"
-                    onClick={loadTokens}
+                    onClick={refreshTokens}
                     disabled={loading}
                     className="gap-1.5"
                 >
@@ -350,10 +269,10 @@ export function DeviceEnrollment() {
                                         <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                                             <motion.div
                                                 className={`h-full rounded-full ${getUsagePercentage(token) >= 100
-                                                        ? "bg-red-500"
-                                                        : getUsagePercentage(token) >= 75
-                                                            ? "bg-amber-500"
-                                                            : "bg-green-500"
+                                                    ? "bg-red-500"
+                                                    : getUsagePercentage(token) >= 75
+                                                        ? "bg-amber-500"
+                                                        : "bg-green-500"
                                                     }`}
                                                 initial={{ width: 0 }}
                                                 animate={{

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, AlertTriangle, User, Calendar, CheckCircle, MessageSquare, Plus, Save, Edit } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Plus, Save, Edit, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,39 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/useAuth";
+import { useCaseStore } from "@/stores/case-store";
 import { toast } from "sonner";
 
-interface IncidentCase {
-    case_id: string;
-    case_number: string;
-    title: string;
-    description: string;
-    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-    status: "OPEN" | "IN_PROGRESS" | "CLOSED" | "ESCALATED";
-    assigned_to: string;
-    created_by: string;
-    created_at: string;
-    updated_at: string;
-}
-
-interface AlertLink {
-    alert_id: string;
-    alert_severity: string;
-    alert_status: string;
-    device_id: string;
-    created_at: string;
-    explanation_json: any;
-}
-
-interface CaseNote {
-    note_id: string;
-    case_id: string;
-    content: string;
-    created_by: string;
-    created_at: string;
-}
+import type { Case, CaseStatus } from "@/lib/supabase/types";
+import type { CaseNote } from "@/lib/supabase/types/database";
+import type { CaseAlertLink } from "@/lib/repositories/case-repository";
 
 const severityColors: Record<string, string> = {
     LOW: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -64,10 +38,10 @@ export default function CaseDetailPage() {
     const params = useParams();
     const router = useRouter();
     const { user, hasRole } = useAuth();
-    const supabase = createClient();
+    const { getCaseById, getCaseAlerts, getCaseNotes, addCaseNote, updateCase } = useCaseStore();
 
-    const [caseData, setCaseData] = useState<IncidentCase | null>(null);
-    const [alerts, setAlerts] = useState<AlertLink[]>([]);
+    const [caseData, setCaseData] = useState<Case | null>(null);
+    const [alerts, setAlerts] = useState<CaseAlertLink[]>([]);
     const [notes, setNotes] = useState<CaseNote[]>([]);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
@@ -81,95 +55,54 @@ export default function CaseDetailPage() {
 
     const caseId = params.case_id as string;
 
-    useEffect(() => {
-        if (caseId) {
-            fetchCase();
-            fetchAlerts();
-            fetchNotes();
-        }
-    }, [caseId]);
-
-    const fetchCase = async () => {
+    const fetchCaseData = useCallback(async () => {
         try {
-            const { data, error } = await supabase
-                .from("incident_cases")
-                .select("*")
-                .eq("case_id", caseId)
-                .single();
+            setLoading(true);
 
-            if (error) throw error;
+            const [caseData, alerts, notes] = await Promise.all([
+                getCaseById(caseId),
+                getCaseAlerts(caseId),
+                getCaseNotes(caseId)
+            ]);
 
-            setCaseData(data);
-            setEditTitle(data.title);
-            setEditDescription(data.description);
-            setEditStatus(data.status);
-            setEditAssignedTo(data.assigned_to);
+            if (caseData) {
+                setCaseData(caseData);
+                setEditTitle(caseData.title);
+                setEditDescription(caseData.description || "");
+                setEditStatus(caseData.status);
+                setEditAssignedTo(caseData.assigned_to ?? "");
+            }
+
+            setAlerts(alerts);
+            setNotes(notes);
         } catch (error) {
-            console.error("Failed to fetch case:", error);
+            console.error("Failed to fetch case data:", error);
             toast.error("Failed to load case");
-        }
-    };
-
-    const fetchAlerts = async () => {
-        try {
-            const { data, error } = await supabase
-                .from("case_alerts")
-                .select(`alert_id, alert_records!inner(alert_severity, alert_status, device_id, created_at, explanation_json)`)
-                .eq("case_id", caseId);
-
-            if (error) throw error;
-
-            const transformedAlerts: AlertLink[] = (data || []).map((item: any) => ({
-                alert_id: item.alert_id,
-                alert_severity: item.alert_records.alert_severity,
-                alert_status: item.alert_records.alert_status,
-                device_id: item.alert_records.device_id,
-                created_at: item.alert_records.created_at,
-                explanation_json: item.alert_records.explanation_json,
-            }));
-
-            setAlerts(transformedAlerts);
-        } catch (error) {
-            console.error("Failed to fetch alerts:", error);
-        }
-    };
-
-    const fetchNotes = async () => {
-        try {
-            const { data, error } = await supabase
-                .from("case_notes")
-                .select("*")
-                .eq("case_id", caseId)
-                .order("created_at", { ascending: false });
-
-            if (error) throw error;
-
-            setNotes(data || []);
-        } catch (error) {
-            console.error("Failed to fetch notes:", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [caseId, getCaseById, getCaseAlerts, getCaseNotes]);
+
+    useEffect(() => {
+        if (caseId) {
+            fetchCaseData();
+        }
+    }, [caseId, fetchCaseData]);
 
     const handleSaveCase = async () => {
+        if (!caseData) return;
         try {
             setSaving(true);
-            const { error } = await supabase
-                .from("incident_cases")
-                .update({
-                    title: editTitle,
-                    description: editDescription,
-                    status: editStatus,
-                    assigned_to: editAssignedTo,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("case_id", caseId);
-
-            if (error) throw error;
+            await updateCase(caseData.id, {
+                title: editTitle,
+                description: editDescription,
+                status: editStatus as CaseStatus,
+                assigned_to: editAssignedTo,
+                updated_at: new Date().toISOString(),
+            });
             toast.success("Case updated successfully");
             setEditing(false);
-            fetchCase();
+            fetchCaseData();
         } catch (error) {
             console.error("Failed to update case:", error);
             toast.error("Failed to update case");
@@ -179,16 +112,11 @@ export default function CaseDetailPage() {
     };
 
     const handleAddNote = async () => {
-        if (!newNote.trim()) return;
+        if (!newNote.trim() || !user?.id) return;
         try {
-            const { error } = await supabase
-                .from("case_notes")
-                .insert({ case_id: caseId, content: newNote.trim(), created_by: user?.id });
-
-            if (error) throw error;
-            toast.success("Note added successfully");
+            await addCaseNote(caseId, newNote.trim(), user.id);
             setNewNote("");
-            fetchNotes();
+            fetchCaseData();
         } catch (error) {
             console.error("Failed to add note:", error);
             toast.error("Failed to add note");
@@ -237,9 +165,9 @@ export default function CaseDetailPage() {
                                 <Button variant="outline" onClick={() => {
                                     setEditing(false);
                                     setEditTitle(caseData.title);
-                                    setEditDescription(caseData.description);
+                                    setEditDescription(caseData.description ?? "");
                                     setEditStatus(caseData.status);
-                                    setEditAssignedTo(caseData.assigned_to);
+                                    setEditAssignedTo(caseData.assigned_to ?? "");
                                 }}>Cancel</Button>
                                 <Button onClick={handleSaveCase} disabled={saving}>
                                     <Save className="h-4 w-4 mr-2" />{saving ? "Saving..." : "Save"}
@@ -281,7 +209,7 @@ export default function CaseDetailPage() {
                         {editing ? (
                             <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Case description..." className="min-h-32" />
                         ) : (
-                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{caseData.description}</p>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{caseData.description ?? ""}</p>
                         )}
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
@@ -289,7 +217,7 @@ export default function CaseDetailPage() {
                                 {editing ? (
                                     <Input value={editAssignedTo} onChange={(e) => setEditAssignedTo(e.target.value)} placeholder="Assign to analyst..." />
                                 ) : (
-                                    <p className="font-medium">{caseData.assigned_to}</p>
+                                    <p className="font-medium">{caseData.assigned_to ?? "Unassigned"}</p>
                                 )}
                             </div>
                             <div>

@@ -28,7 +28,7 @@ export interface AnomalyScore {
   scored_at: string;
   model_id: string;
   score: number;
-  threshold_used: number;
+  threshold_applied: number;
   inference_latency_ms: number;
   above_threshold: boolean;
   connectivity_state: ConnectivityState;

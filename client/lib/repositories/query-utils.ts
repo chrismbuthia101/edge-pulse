@@ -2,8 +2,6 @@
  Shared utilities for query building, caching, formatting, and async control
 **/
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export interface SortOption {
   field: string;
   direction: 'asc' | 'desc';

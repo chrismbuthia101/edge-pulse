@@ -1,6 +1,5 @@
 import { DeviceRepository } from '@/lib/repositories';
 import type {
-  DeviceQueryOptions,
   DeviceMetrics,
   DeviceHealthStatus,
   DeviceSubscriptionCallbacks,
@@ -76,15 +75,36 @@ export class DeviceService {
   }
 
   async getDeviceById(id: string): Promise<Device | null> {
-    const results = await this.repository.findDevices({
-      filters: { id },
-      limit: 1,
-    } as DeviceQueryOptions);
-    return results[0] ?? null;
+    return this.repository.findById(id);
   }
 
   async getOnlineDevices(): Promise<Device[]> {
     return this.repository.getOnlineDevices();
+  }
+
+  async getDevicesPaginated(options: GetDevicesOptions & { page: number; limit: number }): Promise<{ devices: Device[]; total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean }> {
+    const result = await this.repository.findDevicesPaginated({
+      status: options.status,
+      type: options.type,
+      risk: options.risk,
+      search: options.search,
+      onlineOnly: options.onlineOnly,
+      agentVersion: options.agentVersion,
+      osType: options.osType,
+      page: options.page,
+      limit: options.limit,
+      orderBy: { column: 'name', ascending: true },
+    });
+
+    return {
+      devices: result.data,
+      total: result.count,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
+      hasNextPage: result.hasNextPage,
+      hasPreviousPage: result.hasPreviousPage,
+    };
   }
 
   async getCriticalDevices(): Promise<Device[]> {
@@ -115,8 +135,6 @@ export class DeviceService {
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   async isolateDevice(id: string): Promise<Device> {
-    // `reason` could be persisted to an audit log here in future;
-    // for now the repository just flips the status column.
     return this.repository.isolateDevice(id);
   }
 

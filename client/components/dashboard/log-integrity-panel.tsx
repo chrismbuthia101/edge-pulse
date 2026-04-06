@@ -1,114 +1,29 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Shield, ShieldCheck, AlertTriangle, Clock, Hash, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { HashChainStatus } from "@/lib/supabase/types";
+import { useLogIntegrityStore } from "@/stores/log-integrity-store";
 
 interface LogIntegrityPanelProps {
   deviceId?: string;
 }
 
 export function LogIntegrityPanel({ }: LogIntegrityPanelProps) {
-  const [hashChainStatus, setHashChainStatus] = useState<HashChainStatus[]>([]);
-  const [verifying, setVerifying] = useState(false);
-  const supabase = createClient();
+  const {
+    hashChainStatuses,
+    verifying,
+    initialize,
+    verifyDeviceChain
+  } = useLogIntegrityStore();
 
   useEffect(() => {
-    const fetchHashChainStatus = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('tamper_evident_log')
-          .select('device_id, sequence_number, verified, created_at')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        // Process data to get status per device
-        const deviceStatuses = new Map<string, HashChainStatus>();
-
-        data?.forEach(log => {
-          const existing = deviceStatuses.get(log.device_id);
-          if (!existing || log.sequence_number > existing.total_entries) {
-            deviceStatuses.set(log.device_id, {
-              device_id: log.device_id,
-              device_name: `Device-${log.device_id.slice(-4)}`,
-              total_entries: log.sequence_number,
-              verified: log.verified ?? false,
-              broken_at_sequence: null, // Would need verification logic
-              last_verified_at: log.created_at,
-            });
-          }
-        });
-
-        setHashChainStatus(Array.from(deviceStatuses.values()));
-      } catch {
-        // Fallback to mock data on error
-        const mockData: HashChainStatus[] = [
-          {
-            device_id: "device-1",
-            device_name: "Server-01",
-            total_entries: 1247,
-            verified: true,
-            broken_at_sequence: null,
-            last_verified_at: new Date().toISOString(),
-          },
-          {
-            device_id: "device-2",
-            device_name: "Workstation-05",
-            total_entries: 892,
-            verified: false,
-            broken_at_sequence: 845,
-            last_verified_at: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            device_id: "device-3",
-            device_name: "Laptop-12",
-            total_entries: 456,
-            verified: true,
-            broken_at_sequence: null,
-            last_verified_at: new Date(Date.now() - 1800000).toISOString(),
-          },
-        ];
-        setHashChainStatus(mockData);
-      }
-    };
-
-    fetchHashChainStatus();
-  }, [supabase]);
+    initialize();
+  }, [initialize]);
 
   const handleVerifyChain = async (deviceId: string) => {
-    setVerifying(true);
-    try {
-      const { error } = await supabase
-        .from('tamper_evident_log')
-        .update({ verified: true })
-        .eq('device_id', deviceId);
-
-      if (error) throw error;
-
-      // Refresh the status
-      const { data } = await supabase
-        .from('tamper_evident_log')
-        .select('*')
-        .eq('device_id', deviceId)
-        .order('sequence_number', { ascending: false })
-        .limit(1);
-
-      if (data && data.length > 0) {
-        setHashChainStatus(prev => prev.map(status =>
-          status.device_id === deviceId
-            ? { ...status, verified: true, last_verified_at: data[0].created_at }
-            : status
-        ));
-      }
-    } catch {
-      // Handle verification error
-    } finally {
-      setVerifying(false);
-    }
+    await verifyDeviceChain(deviceId);
   };
 
   const getStatusIcon = (verified: boolean, brokenAt: number | null) => {
@@ -137,7 +52,7 @@ export function LogIntegrityPanel({ }: LogIntegrityPanelProps) {
       </div>
 
       <div className="p-4 lg:p-5 space-y-3">
-        {hashChainStatus.map((status, index) => (
+        {hashChainStatuses.map((status, index) => (
           <motion.div
             key={status.device_id}
             initial={{ opacity: 0, y: 10 }}
@@ -184,10 +99,10 @@ export function LogIntegrityPanel({ }: LogIntegrityPanelProps) {
               {!status.verified && (
                 <button
                   onClick={() => handleVerifyChain(status.device_id)}
-                  disabled={verifying}
+                  disabled={verifying === status.device_id}
                   className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
                 >
-                  {verifying ? "Verifying..." : "Verify"}
+                  {verifying === status.device_id ? "Verifying..." : "Verify"}
                 </button>
               )}
             </div>

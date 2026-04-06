@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Shield,
@@ -13,202 +13,47 @@ import {
     WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
-import type { TelemetryEvent } from "@/lib/supabase/types";
-
-const eventTypes = ["all", "threat", "auth", "device", "ok"] as const;
-type EventType = (typeof eventTypes)[number];
-
-interface LiveEvent {
-    id: string;
-    type: EventType;
-    iconName: "AlertTriangle" | "Shield" | "MonitorSmartphone" | "Lock";
-    color: string;
-    bg: string;
-    title: string;
-    device: string;
-    time: string;
-    severity: string;
-    rawCreatedAt: string;
-}
-
-const iconMap = {
-    AlertTriangle,
-    Shield,
-    MonitorSmartphone,
-    Lock,
-};
-
-const severityColor: Record<string, string> = {
-    critical: "text-destructive bg-destructive/10 border-destructive/25",
-    high: "text-orange-500 bg-orange-500/10 border-orange-500/25",
-    medium: "text-amber-500 bg-amber-500/10 border-amber-500/25",
-    info: "text-primary bg-primary/10 border-primary/25",
-    ok: "text-green-500 bg-green-500/10 border-green-500/25",
-};
-
-function alertToLiveEvent(row: Record<string, unknown>): LiveEvent {
-    const severity = (row.severity as string) ?? "info";
-    const isCritical = severity === "critical";
-    const isHigh = severity === "high";
-    const isThreat = isCritical || isHigh;
-    const source = (row.telemetry_source as string) ?? "";
-    const isAuth = source === "PROCESS" && !isThreat;
-
-    return {
-        id: row.id as string,
-        type: isThreat ? "threat" : isAuth ? "auth" : "ok",
-        iconName: isThreat ? "AlertTriangle" : isAuth ? "Lock" : "Shield",
-        color: isCritical
-            ? "text-destructive"
-            : isHigh
-                ? "text-orange-500"
-                : isAuth
-                    ? "text-amber-500"
-                    : "text-green-500",
-        bg: isCritical
-            ? "bg-destructive/10 border-destructive/20"
-            : isHigh
-                ? "bg-orange-500/10 border-orange-500/20"
-                : isAuth
-                    ? "bg-amber-500/10 border-amber-500/20"
-                    : "bg-green-500/10 border-green-500/20",
-        title: (row.title as string) ?? "Security event",
-        device: (row.device_name as string) ?? "Unknown",
-        time: new Date(row.created_at as string).toLocaleTimeString(),
-        severity: severity === "low" ? "info" : severity,
-        rawCreatedAt: row.created_at as string,
-    };
-}
-
-function telemetryToLiveEvent(row: TelemetryEvent): LiveEvent {
-    const isDevice = row.source === "RESOURCE";
-    return {
-        id: row.id,
-        type: isDevice ? "device" : "ok",
-        iconName: isDevice ? "MonitorSmartphone" : "Shield",
-        color: isDevice ? "text-primary" : "text-green-500",
-        bg: isDevice ? "bg-primary/10 border-primary/20" : "bg-green-500/10 border-green-500/20",
-        title: `Telemetry received (${row.source})`,
-        device: row.device_id,
-        time: new Date(row.collected_at).toLocaleTimeString(),
-        severity: "info",
-        rawCreatedAt: row.collected_at,
-    };
-}
+import { useLiveStore } from "@/stores/live-store";
 
 export default function LivePage() {
     useEffect(() => {
         document.title = "Live Feed - EdgePulse";
     }, []);
 
-    const [events, setEvents] = useState<LiveEvent[]>([]);
-    const [filter, setFilter] = useState<EventType>("all");
-    const [paused, setPaused] = useState(false);
-    const [connected, setConnected] = useState(false);
-    const [todayStats, setTodayStats] = useState({ total: 0, critical: 0, blocked: 0 });
-
-    const supabase = createClient();
-    const supabaseRef = useRef(supabase);
-    const pausedRef = useRef(paused);
-
-    useEffect(() => { pausedRef.current = paused; }, [paused]);
+    const {
+        events,
+        filter,
+        paused,
+        connected,
+        todayStats,
+        initialize,
+        setFilter,
+        setPaused,
+        exportCSV,
+    } = useLiveStore();
 
     useEffect(() => {
-        const sb = supabaseRef.current;
-        let mounted = true;
+        initialize();
+    }, [initialize]);
 
-        const fetchInitial = async () => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+    const iconMap = {
+        AlertTriangle,
+        Shield,
+        MonitorSmartphone,
+        Lock,
+    };
 
-            const { data } = await sb
-                .from("alert_records")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(50);
+    const severityColor: Record<string, string> = {
+        critical: "text-destructive bg-destructive/10 border-destructive/25",
+        high: "text-orange-500 bg-orange-500/10 border-orange-500/25",
+        medium: "text-amber-500 bg-amber-500/10 border-amber-500/25",
+        info: "text-primary bg-primary/10 border-primary/25",
+        ok: "text-green-500 bg-green-500/10 border-green-500/25",
+    };
 
-            if (data && mounted) {
-                const liveEvents = data.map((row) => alertToLiveEvent(row as Record<string, unknown>));
-                setEvents(liveEvents);
-                const todayEvents = data.filter((r) => new Date(r.created_at as string) >= today);
-                setTodayStats({
-                    total: todayEvents.length,
-                    critical: todayEvents.filter((r) => r.severity === "critical").length,
-                    blocked: data.filter((r) => r.status === "CLOSED").length,
-                });
-            }
-        };
-
-        fetchInitial();
-
-        const alertChannel = sb
-            .channel("live-feed-alerts")
-            .on(
-                "postgres_changes",
-                { event: "INSERT", schema: "public", table: "alert_records" },
-                (payload) => {
-                    if (!mounted || pausedRef.current) return;
-                    const ev = alertToLiveEvent(payload.new as Record<string, unknown>);
-                    setEvents((prev) => [ev, ...prev.slice(0, 99)]);
-                    setTodayStats((s) => ({
-                        ...s,
-                        total: s.total + 1,
-                        critical: s.critical + ((payload.new as { severity: string }).severity === "critical" ? 1 : 0),
-                    }));
-                }
-            )
-            .subscribe((status) => {
-                if (mounted) setConnected(status === "SUBSCRIBED");
-            });
-
-        const telemetryChannel = sb
-            .channel("live-feed-telemetry")
-            .on(
-                "postgres_changes",
-                { event: "INSERT", schema: "public", table: "telemetry_events" },
-                (payload) => {
-                    if (!mounted || pausedRef.current) return;
-                    const ev = telemetryToLiveEvent(payload.new as TelemetryEvent);
-                    if (ev.type === "device") {
-                        setEvents((prev) => [ev, ...prev.slice(0, 99)]);
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            mounted = false;
-            sb.removeChannel(alertChannel);
-            sb.removeChannel(telemetryChannel);
-        };
-    }, []);
+    const eventTypes: readonly ["all", "threat", "auth", "device", "ok"] = ["all", "threat", "auth", "device", "ok"];
 
     const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
-
-    // CSV export for live feed
-    const handleExport = () => {
-        const rows = [
-            ["Time", "Title", "Device", "Severity", "Type"],
-            ...filtered.map((e) => [
-                new Date(e.rawCreatedAt).toISOString(),
-                `"${e.title}"`,
-                e.device,
-                e.severity,
-                e.type,
-            ]),
-        ];
-        const csv = rows.map((r) => r.join(",")).join("\n");
-        const blob = new Blob([csv], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `edgepulse-live-feed-${new Date().toISOString().split("T")[0]}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success("Live feed exported as CSV");
-    };
 
     return (
         <div className="max-w-[1200px] space-y-6">
@@ -229,7 +74,7 @@ export default function LivePage() {
                         variant="outline"
                         size="sm"
                         className="gap-1.5"
-                        onClick={() => setPaused((p) => !p)}
+                        onClick={() => setPaused(!paused)}
                     >
                         <RefreshCw
                             className={`h-3.5 w-3.5 ${!paused && connected ? "animate-spin" : ""}`}
@@ -237,7 +82,7 @@ export default function LivePage() {
                         />
                         {paused ? "Resume" : "Pause"}
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={exportCSV}>
                         <Download className="h-3.5 w-3.5" />
                         Export CSV
                     </Button>

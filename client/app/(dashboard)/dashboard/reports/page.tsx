@@ -18,26 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
+import { useReportStore } from "@/stores/report-store";
 import { useAuth } from "@/lib/auth/useAuth";
-import { toast } from "sonner";
 
-interface ReportData {
-    totalAlerts: number;
-    criticalAlerts: number;
-    activeDevices: number;
-    totalDevices: number;
-    avgResponseTime: number;
-    alertsBySeverity: Record<string, number>;
-    alertsByDevice: Record<string, number>;
-    recentAlerts: Array<{
-        alert_id: string;
-        severity: string;
-        device_id: string;
-        created_at: string;
-        explanation_json: any;
-    }>;
-}
 
 const severityColors: Record<string, string> = {
     LOW: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -48,110 +31,14 @@ const severityColors: Record<string, string> = {
 
 export default function ReportsPage() {
     const { hasRole } = useAuth();
-    const supabase = createClient();
+    const { reportData, loading, dateRange, setDateRange, initialize, generateReport } = useReportStore();
 
-    const [reportData, setReportData] = useState<ReportData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [dateRange, setDateRange] = useState<string>("7d");
     const [searchTerm, setSearchTerm] = useState("");
 
-    // All hooks must be before any conditional return
     useEffect(() => {
-        fetchReportData();
-    }, [dateRange]);
+        initialize();
+    }, [initialize]);
 
-    const fetchReportData = async () => {
-        try {
-            setLoading(true);
-
-            const now = new Date();
-            let startDate = new Date();
-
-            switch (dateRange) {
-                case "1d": startDate.setDate(now.getDate() - 1); break;
-                case "7d": startDate.setDate(now.getDate() - 7); break;
-                case "30d": startDate.setDate(now.getDate() - 30); break;
-                case "90d": startDate.setDate(now.getDate() - 90); break;
-                default: startDate.setDate(now.getDate() - 7);
-            }
-
-            const { data: alerts, error: alertsError } = await supabase
-                .from("alert_records")
-                .select("*")
-                .gte("created_at", startDate.toISOString())
-                .order("created_at", { ascending: false });
-
-            if (alertsError) throw alertsError;
-
-            const { data: devices, error: devicesError } = await supabase
-                .from("device_registry")
-                .select("*");
-
-            if (devicesError) throw devicesError;
-
-            const totalAlerts = alerts?.length || 0;
-            const criticalAlerts = alerts?.filter(a => a.alert_severity === "CRITICAL").length || 0;
-            const activeDevices = devices?.filter(d => d.is_active).length || 0;
-            const totalDevices = devices?.length || 0;
-
-            const alertsBySeverity = alerts?.reduce((acc: Record<string, number>, alert) => {
-                acc[alert.alert_severity] = (acc[alert.alert_severity] || 0) + 1;
-                return acc;
-            }, {}) || {};
-
-            const alertsByDevice = alerts?.reduce((acc: Record<string, number>, alert) => {
-                acc[alert.device_id] = (acc[alert.device_id] || 0) + 1;
-                return acc;
-            }, {}) || {};
-
-            setReportData({
-                totalAlerts,
-                criticalAlerts,
-                activeDevices,
-                totalDevices,
-                avgResponseTime: 0,
-                alertsBySeverity,
-                alertsByDevice,
-                recentAlerts: (alerts || []).slice(0, 10),
-            });
-
-        } catch (error) {
-            console.error("Failed to fetch report data:", error);
-            toast.error("Failed to load report data");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const generateReport = async (format: "pdf" | "csv") => {
-        try {
-            toast.loading(`Generating ${format.toUpperCase()} report...`);
-
-            const { data, error } = await supabase.functions.invoke("generate-report", {
-                body: { format, dateRange, includeCharts: true },
-            });
-
-            if (error) throw error;
-
-            if (data?.url) {
-                const link = document.createElement("a");
-                link.href = data.url;
-                link.download = `edgepulse-report-${new Date().toISOString().split('T')[0]}.${format}`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                toast.success(`${format.toUpperCase()} report generated successfully`);
-            } else {
-                throw new Error("No download URL received");
-            }
-
-        } catch (error) {
-            console.error("Failed to generate report:", error);
-            toast.error("Failed to generate report");
-        }
-    };
-
-    // Role check AFTER all hooks
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
             <div className="flex items-center justify-center h-64">

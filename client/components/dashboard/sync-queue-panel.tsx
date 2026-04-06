@@ -1,91 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import type { DeviceSyncQueueSummary } from "@/lib/supabase/types";
+import { useSyncQueueStore } from "@/stores/sync-queue-store";
 import { cn } from "@/lib/utils";
 
 export function SyncQueuePanel() {
-    const [summaries, setSummaries] = useState<DeviceSyncQueueSummary[]>([]);
-    const [loading, setLoading] = useState(true);
-    const supabase = createClient();
-
-    const fetchSummaries = async () => {
-        setLoading(true);
-        // Aggregate sync_queue by device_id joining devices for the name
-        const { data, error } = await supabase
-            .from("sync_queue")
-            .select(`
-        device_id,
-        status,
-        queued_at,
-        devices!inner ( name )
-      `)
-            .in("status", ["PENDING", "FAILED"]);
-
-        if (!error && data) {
-            // Build per-device summary client-side
-            const map = new Map<string, DeviceSyncQueueSummary>();
-            for (const row of data as Array<{
-                device_id: string;
-                status: string;
-                queued_at: string;
-                devices: { name: string };
-            }>) {
-                const existing = map.get(row.device_id) ?? {
-                    device_id: row.device_id,
-                    device_name: row.devices?.name ?? row.device_id,
-                    pending_count: 0,
-                    failed_count: 0,
-                    oldest_queued_at: null,
-                };
-                if (row.status === "PENDING") existing.pending_count++;
-                if (row.status === "FAILED") existing.failed_count++;
-                if (
-                    !existing.oldest_queued_at ||
-                    row.queued_at < existing.oldest_queued_at
-                ) {
-                    existing.oldest_queued_at = row.queued_at;
-                }
-                map.set(row.device_id, existing);
-            }
-            setSummaries(Array.from(map.values()));
-        }
-        setLoading(false);
-    };
+    const { summaries, loading, totalPending, totalFailed, initialize, refreshSummaries } = useSyncQueueStore();
 
     useEffect(() => {
-        fetchSummaries();
+        initialize();
+    }, [initialize]);
 
-        // Subscribe to sync_queue changes
-        const channel = supabase
-            .channel("sync-queue-panel")
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "sync_queue" },
-                () => fetchSummaries()
-            )
-            .subscribe();
+    const handleRefresh = useCallback(() => {
+        refreshSummaries();
+    }, [refreshSummaries]);
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const totalPending = summaries.reduce((s, d) => s + d.pending_count, 0);
-    const totalFailed = summaries.reduce((s, d) => s + d.failed_count, 0);
-
-    const relativeTime = (iso: string | null) => {
+    const relativeTime = useCallback((iso: string | null) => {
         if (!iso) return "—";
         const diff = Date.now() - new Date(iso).getTime();
         const m = Math.floor(diff / 60000);
         if (m < 1) return "just now";
         if (m < 60) return `${m}m ago`;
         return `${Math.floor(m / 60)}h ago`;
-    };
+    }, []);
 
     return (
         <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
@@ -100,7 +39,7 @@ export function SyncQueuePanel() {
                     )}
                 </div>
                 <button
-                    onClick={fetchSummaries}
+                    onClick={handleRefresh}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                     aria-label="Refresh sync queue"
                 >

@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { Download, FileText, Calendar, Shield, Database, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { ForensicService, type ExportType } from "@/lib/services/forensic-service";
+import type { ExportQuery } from "@/lib/repositories/forensic-repository";
+import { toast } from "sonner";
 
 interface ForensicExportProps {
   deviceId?: string;
@@ -20,7 +22,8 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
       end: now.toISOString().split('T')[0],
     };
   });
-  const supabase = createClient();
+
+  const forensicService = new ForensicService();
 
   const exportOptions = [
     {
@@ -63,50 +66,38 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
       const startDate = new Date(dateRange.start + 'T00:00:00.000Z');
       const endDate = new Date(dateRange.end + 'T23:59:59.999Z');
 
-      let query = supabase
-        .from(exportId === 'telemetry' ? 'telemetry_events' :
-          exportId === 'alerts' ? 'alert_records' :
-            exportId === 'hashchain' ? 'tamper_evident_log' :
-              'feature_vectors')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString());
+      const query: ExportQuery = {
+        startDate,
+        endDate,
+        deviceId: deviceId || undefined
+      };
 
-      if (deviceId) {
-        query = query.eq('device_id', deviceId);
-      }
+      const option = exportOptions.find(opt => opt.id === exportId);
+      if (!option) throw new Error('Invalid export option');
 
-      const { data, error } = await query;
+      const filename = forensicService.generateFilename(
+        exportId as ExportType,
+        dateRange.start,
+        dateRange.end,
+        option.format
+      );
 
-      if (error) throw error;
+      const result = await forensicService.exportData(
+        exportId as ExportType,
+        query,
+        { format: option.format as 'JSON' | 'CSV' | 'Parquet', filename }
+      );
 
-      // Generate and download file
-      const format = exportOptions.find(opt => opt.id === exportId)?.format;
-      const filename = `${exportId}_export_${dateRange.start}_to_${dateRange.end}.${format?.toLowerCase()}`;
+      // Download the file
+      downloadFile(result.data as string, result.filename, result.mimeType);
 
-      if (format === 'CSV') {
-        // Convert to CSV and download
-        const csv = convertToCSV(data);
-        downloadFile(csv, filename, 'text/csv');
-      } else {
-        // Convert to JSON and download
-        const json = JSON.stringify(data, null, 2);
-        downloadFile(json, filename, 'application/json');
-      }
-    } catch {
+      toast.success(`Successfully exported ${option.name}`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Export failed. Please try again.');
     } finally {
       setExporting(null);
     }
-  };
-
-  const convertToCSV = (data: Record<string, unknown>[]) => {
-    if (!data || data.length === 0) return '';
-    const headers = Object.keys(data[0]);
-    const csvHeaders = headers.join(',');
-    const csvRows = data.map(row =>
-      headers.map(header => `"${row[header] || ''}"`).join(',')
-    );
-    return [csvHeaders, ...csvRows].join('\n');
   };
 
   const downloadFile = (content: string, filename: string, mimeType: string) => {

@@ -297,7 +297,7 @@ class SupabaseSync:
             }
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/devices",
+                f"{self.supabase_url}/rest/v1/device_registry",
                 json=payload,
                 headers={"Prefer": "resolution=merge-duplicates"},
             )
@@ -396,21 +396,32 @@ class SupabaseSync:
     # ------------------------------------------------------------------
 
     def _prepare_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract and format essential alert data for Supabase."""
-        explanation = alert.get("explanation") or {}
+        explanation = alert.get("explanation_json") or alert.get("explanation") or {}
         return {
-            "alert_id": alert.get("alert_id"),
-            "timestamp": alert.get("timestamp"),
-            "device_id": alert.get("device_id"),
-            "severity": alert.get("severity", "medium"),
-            "anomaly_score": alert.get("anomaly_score", 0.0),
-            "explanation_summary": explanation.get("summary", ""),
-            # Support both 'detector_type' and legacy 'detector' keys
-            "detector_type": alert.get("detector_type") or alert.get("detector", "unknown"),
-            "alert_type": alert.get("alert_type", "anomaly"),
-            "feature_importance": explanation.get("feature_importance", {}),
-            "acknowledged": False,
-            "created_at": datetime.utcnow().isoformat(),
+            "score_id":                   alert.get("score_id") or alert.get("anomaly_score_id"),
+            "device_id":                  alert.get("device_id"),
+            "device_name":                alert.get("device_name", ""),
+            "telemetry_source":           alert.get("telemetry_source", "PROCESS"),
+            "title":                      alert.get("title", "Anomaly Detected"),
+            "description":                alert.get("description"),
+            "severity":                   alert.get("severity", "medium"),
+            "category":                   alert.get("category", "Unknown"),
+            "anomaly_score":              alert.get("anomaly_score", 0.0),
+            "confidence":                 alert.get("confidence", 0.0),
+            "model_id":                   alert.get("model_id", "unknown"),
+            "collection_agent_version":   alert.get("agent_version") or self.agent_version,
+            "inference_latency_ms":       alert.get("inference_latency_ms", 0),
+            "explanation_json":           explanation,
+            "status":                     "PENDING",
+            "read":                       False,
+            # network fields
+            "net_destination_ip":         alert.get("net_destination_ip"),
+            "net_destination_port":       alert.get("net_destination_port"),
+            "net_protocol":               alert.get("net_protocol"),
+            # process fields
+            "proc_name":                  alert.get("proc_name"),
+            "proc_privilege_level":       alert.get("proc_privilege_level"),
+            "proc_pid":                   alert.get("proc_pid"),
         }
 
     def _prepare_telemetry(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:

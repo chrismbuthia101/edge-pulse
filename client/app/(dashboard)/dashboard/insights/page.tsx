@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
     Brain,
     Zap,
-    BarChart3,
     RefreshCw,
     Download,
     Info,
@@ -36,13 +35,6 @@ const recentDetections = [
     { device: "srv-prod-01", score: 0.91, label: "Data Exfiltration", time: "8m ago", blocked: true },
     { device: "ws-finance-03", score: 0.88, label: "Brute Force", time: "15m ago", blocked: true },
     { device: "gw-primary", score: 0.82, label: "Port Scan", time: "34m ago", blocked: false },
-];
-
-const modelHistory = [
-    { version: "v2.4.1", date: "3 days ago", accuracy: "99.9%", status: "active" },
-    { version: "v2.4.0", date: "2 weeks ago", accuracy: "99.7%", status: "previous" },
-    { version: "v2.3.9", date: "1 month ago", accuracy: "99.4%", status: "deprecated" },
-    { version: "v2.3.8", date: "6 weeks ago", accuracy: "99.1%", status: "deprecated" },
 ];
 
 const maxImportance = Math.max(...topFeatures.map((f) => f.importance));

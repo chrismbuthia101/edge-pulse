@@ -33,7 +33,6 @@ const mockMetrics: ModelMetrics = {
     driftScore: 0.02,
 };
 
-// Named export for direct imports
 export function ModelPerformance() {
     const [metrics, setMetrics] = useState<ModelMetrics>(mockMetrics);
     const [refreshing, setRefreshing] = useState(false);

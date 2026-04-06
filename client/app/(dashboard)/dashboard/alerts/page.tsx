@@ -23,8 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAlertStore } from "@/stores/alert-store";
-import { createClient } from "@/lib/supabase/client";
-import type { Alert, AlertStatus } from "@/lib/supabase/types";
+import type { AlertStatus } from "@/lib/supabase/types";
 import { toast } from "sonner";
 import {
     Dialog,
@@ -144,8 +143,7 @@ export default function AlertsPage() {
         document.title = "Security Alerts - EdgePulse";
     }, []);
 
-    const { alerts, updateAlert } = useAlertStore();
-    const supabase = createClient();
+    const { alerts, bulkAcknowledge } = useAlertStore();
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
     const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
@@ -182,32 +180,22 @@ export default function AlertsPage() {
         const next = nextStatus[currentStatus];
         if (!next) return;
 
-        const now = new Date().toISOString();
-        const updates: Partial<Alert> = { status: next };
-        if (next === "ACKNOWLEDGED") (updates as Record<string, string>).acknowledged_at = now;
-        if (next === "INVESTIGATED") (updates as Record<string, string>).investigated_at = now;
-        if (next === "CLOSED") (updates as Record<string, string>).closed_at = now;
-
-        updateAlert(alertId, updates);
-        const { error } = await supabase.from("alert_records").update(updates).eq("id", alertId);
-        if (error) {
+        try {
+            const { updateAlertStatus } = useAlertStore.getState();
+            await updateAlertStatus(alertId, next);
+        } catch {
             toast.error("Failed to update alert");
-            updateAlert(alertId, { status: currentStatus });
         }
     };
 
     // Dismiss alert
     const handleDismiss = async (e: React.MouseEvent, alertId: string) => {
         e.stopPropagation();
-        const now = new Date().toISOString();
-        updateAlert(alertId, { status: "CLOSED", closed_at: now } as Partial<Alert>);
-        const { error } = await supabase
-            .from("alert_records")
-            .update({ status: "CLOSED", closed_at: now })
-            .eq("id", alertId);
-        if (error) {
+        try {
+            const { updateAlertStatus } = useAlertStore.getState();
+            await updateAlertStatus(alertId, "CLOSED");
+        } catch {
             toast.error("Failed to dismiss alert");
-            updateAlert(alertId, { status: "PENDING" });
         }
     };
 
@@ -217,20 +205,12 @@ export default function AlertsPage() {
         if (pending.length === 0) { toast.info("No pending alerts to review"); return; }
 
         setBulkLoading(true);
-        const now = new Date().toISOString();
         try {
-            const { error } = await supabase
-                .from("alert_records")
-                .update({ status: "ACKNOWLEDGED", acknowledged_at: now })
-                .eq("status", "PENDING");
-
-            if (error) throw error;
-
-            // Update store optimistically
-            pending.forEach((a) => updateAlert(a.id, { status: "ACKNOWLEDGED", acknowledged_at: now } as Partial<Alert>));
-            toast.success(`${pending.length} alerts marked as acknowledged`);
+            const pendingIds = pending.map(a => a.id);
+            await bulkAcknowledge(pendingIds);
+            toast.success(`Acknowledged ${pendingIds.length} alerts`);
         } catch {
-            toast.error("Failed to bulk update alerts");
+            toast.error("Failed to mark alerts as reviewed");
         } finally {
             setBulkLoading(false);
         }

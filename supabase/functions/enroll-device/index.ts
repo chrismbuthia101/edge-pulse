@@ -40,7 +40,7 @@ serve(async (req) => {
 
     // Parse request body
     const enrollmentData: EnrollmentRequest = await req.json()
-    
+
     if (!enrollmentData.enrollment_token) {
       return new Response(
         JSON.stringify({ success: false, error: 'Enrollment token required' }),
@@ -51,7 +51,7 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Validate enrollment token
@@ -86,10 +86,10 @@ serve(async (req) => {
 
     // Generate device ID
     const deviceId = crypto.randomUUID()
-    
+
     // Generate API key
     const apiKey = await generateApiKey()
-    const apiKeyHash = await hashApiKey(apiKey)
+    const apiKeyHash = await hashApiKey(apiKey, deviceId);
 
     // Create device registry entry
     const { data: deviceData, error: deviceError } = await supabase
@@ -99,11 +99,10 @@ serve(async (req) => {
         hostname: enrollmentData.hostname,
         operating_system: enrollmentData.operating_system,
         agent_version: enrollmentData.agent_version,
+        device_type: 'workstation', // Default device type
         enrolled_by: tokenData.created_by,
         last_seen_utc: new Date().toISOString(),
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        is_active: true
       })
       .select()
       .single()
@@ -123,7 +122,6 @@ serve(async (req) => {
         key_hash: apiKeyHash,
         key_name: `Default Key - ${new Date().toISOString()}`,
         is_active: true,
-        created_at: new Date().toISOString(),
         created_by: tokenData.created_by
       })
       .select()
@@ -177,8 +175,8 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { 
-        status: 200, 
+      {
+        status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json'
@@ -188,15 +186,15 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Enrollment error:', error)
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Internal server error' 
+      JSON.stringify({
+        success: false,
+        error: 'Internal server error'
       }),
-      { 
-        status: 500, 
-        headers: corsHeaders 
+      {
+        status: 500,
+        headers: corsHeaders
       }
     )
   }
@@ -211,19 +209,12 @@ async function hashToken(token: string): Promise<string> {
   return hashHex
 }
 
-async function hashApiKey(apiKey: string): Promise<string> {
-  // Use bcrypt-style hashing for API keys
-  const encoder = new TextEncoder()
-  const data = encoder.encode(apiKey)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  // Add salt (in production, use proper bcrypt)
-  const salt = 'edgepulse-api-key-salt-v1'
-  const saltedHash = await hashToken(apiKey + salt)
-  
-  return saltedHash
+async function hashApiKey(apiKey: string, deviceId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(apiKey + 'ep-v1-' + deviceId);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function generateApiKey(): Promise<string> {

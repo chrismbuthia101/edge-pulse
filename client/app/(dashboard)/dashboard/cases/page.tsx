@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     FileText,
     Plus,
     Search,
-    Filter,
     Calendar,
     User,
     AlertTriangle,
@@ -19,25 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createClient } from "@/lib/supabase/client";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCaseStore } from "@/stores/case-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import { toast } from "sonner";
-
-interface Case {
-    case_id: string;
-    case_number: string;
-    title: string;
-    description: string;
-    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-    status: "OPEN" | "IN_PROGRESS" | "CLOSED" | "ESCALATED";
-    assigned_to: string;
-    created_by: string;
-    created_at: string;
-    updated_at: string;
-    alert_count: number;
-    last_activity: string;
-}
+import type { CaseStatus, CaseSeverity } from "@/lib/supabase/types";
 
 const severityColors = {
     LOW: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -55,86 +40,38 @@ const statusColors = {
 
 export default function CasesPage() {
     const router = useRouter();
-    const { user, hasRole } = useAuth();
-    const supabase = createClient();
+    const { hasRole } = useAuth();
+    const { cases, loading, getCases, setCases } = useCaseStore();
 
-    const [cases, setCases] = useState<Case[]>([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [severityFilter, setSeverityFilter] = useState<string>("all");
 
-    useEffect(() => {
-        document.title = "Cases - EdgePulse";
-        fetchCases();
-    }, []);
-
-    useEffect(() => {
-        fetchCases();
-    }, [statusFilter, severityFilter]);
-
-    const fetchCases = async () => {
+    const fetchCasesData = useCallback(async () => {
         try {
-            setLoading(true);
-            
-            let query = supabase
-                .from("incident_cases")
-                .select(`
-                    *,
-                    case_alerts(alert_id),
-                    assigned_user:analyst_users!incident_cases_assigned_to_fkey(
-                        full_name
-                    ),
-                    creator_user:analyst_users!incident_cases_created_by_fkey(
-                        full_name
-                    )
-                `);
+            const casesData = await getCases({
+                status: statusFilter !== "all" ? statusFilter as CaseStatus : undefined,
+                severity: severityFilter !== "all" ? severityFilter as CaseSeverity : undefined,
+                search: searchTerm || undefined,
+            });
 
-            // Apply filters
-            if (statusFilter !== "all") {
-                query = query.eq("status", statusFilter);
-            }
-            if (severityFilter !== "all") {
-                query = query.eq("severity", severityFilter);
-            }
-
-            // Order by last activity
-            query = query.order("updated_at", { ascending: false });
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            // Transform data
-            const transformedCases: Case[] = (data || []).map((case_: any) => ({
-                case_id: case_.case_id,
-                case_number: case_.case_number,
-                title: case_.title,
-                description: case_.description,
-                severity: case_.severity,
-                status: case_.status,
-                assigned_to: case_.assigned_user?.full_name || "Unassigned",
-                created_by: case_.creator_user?.full_name || "Unknown",
-                created_at: case_.created_at,
-                updated_at: case_.updated_at,
-                alert_count: case_.case_alerts?.length || 0,
-                last_activity: case_.updated_at,
-            }));
-
-            setCases(transformedCases);
+            setCases(casesData);
         } catch (error) {
             console.error("Failed to fetch cases:", error);
             toast.error("Failed to load cases");
-        } finally {
-            setLoading(false);
         }
-    };
+    }, [statusFilter, severityFilter, searchTerm, getCases, setCases]);
+
+    useEffect(() => {
+        document.title = "Cases - EdgePulse";
+        fetchCasesData();
+    }, [statusFilter, severityFilter, searchTerm, fetchCasesData]);
 
     const filteredCases = cases.filter(
-        (case_) =>
-            case_.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            case_.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            case_.case_number.toLowerCase().includes(searchTerm.toLowerCase())
+        (caseItem) =>
+            caseItem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            caseItem.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            caseItem.case_number.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const handleCreateCase = () => {
@@ -251,13 +188,13 @@ export default function CasesPage() {
                 ) : (
                     filteredCases.map((case_, index) => (
                         <motion.div
-                            key={case_.case_id}
+                            key={case_.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.3 + index * 0.05 }}
                         >
                             <Card className="hover:shadow-md transition-shadow cursor-pointer"
-                                  onClick={() => router.push(`/dashboard/cases/${case_.case_id}`)}>
+                                onClick={() => router.push(`/dashboard/cases/${case_.id}`)}>
                                 <CardHeader className="pb-3">
                                     <div className="flex items-start justify-between">
                                         <div className="flex-1">

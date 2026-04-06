@@ -37,22 +37,16 @@ export interface AlertSubscriptionOptions {
   onError?: (error: Error) => void;
 }
 
-// ─── Status mapping ────────────────────────────────────────────────────────────
-
 const OPERATION_TO_STATUS: Record<Exclude<BulkOperation, 'mark_read'>, AlertStatus> = {
   acknowledge: 'ACKNOWLEDGED',
   investigate: 'INVESTIGATED',
   close: 'CLOSED',
 };
 
-// ─── Service ───────────────────────────────────────────────────────────────────
-
 export class AlertService {
   private channelName: string | null = null;
 
   constructor(private readonly repository: AlertRepository) { }
-
-  // ── Queries ────────────────────────────────────────────────────────────────
 
   async getAlerts(options: GetAlertsOptions = {}): Promise<Alert[]> {
     return this.repository.findAlerts({
@@ -70,15 +64,37 @@ export class AlertService {
   }
 
   async getAlertById(id: string): Promise<Alert | null> {
-    const results = await this.repository.findAlerts({
-      filters: { id },
-      limit: 1,
-    } as AlertQueryOptions);
-    return results[0] ?? null;
+    return this.repository.findById(id);
   }
 
   async getRecentAlerts(limit = 50): Promise<Alert[]> {
     return this.repository.getRecentAlerts(limit);
+  }
+
+  async getAlertsPaginated(options: GetAlertsOptions & { page: number; limit: number }): Promise<{ alerts: Alert[]; total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean }> {
+    const result = await this.repository.findAlertsPaginated({
+      deviceId: options.deviceId,
+      status: options.status,
+      severity: options.severity as AlertQueryOptions['severity'],
+      category: options.category,
+      search: options.search,
+      startDate: options.startDate,
+      endDate: options.endDate,
+      unreadOnly: options.unreadOnly,
+      page: options.page,
+      limit: options.limit,
+      orderBy: { column: 'created_at', ascending: false },
+    });
+
+    return {
+      alerts: result.data,
+      total: result.count,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
+      hasNextPage: result.hasNextPage,
+      hasPreviousPage: result.hasPreviousPage,
+    };
   }
 
   async getActiveAlerts(limit = 100): Promise<Alert[]> {
@@ -107,8 +123,6 @@ export class AlertService {
     });
   }
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
   async updateAlertStatus(
     id: string,
     status: AlertStatus,
@@ -132,8 +146,6 @@ export class AlertService {
     return this.repository.bulkUpdateStatus(alertIds, status, options.userId);
   }
 
-  // ── Aggregations ───────────────────────────────────────────────────────────
-
   async getMetrics(): Promise<AlertMetrics> {
     return this.repository.getAlertMetrics();
   }
@@ -149,8 +161,6 @@ export class AlertService {
   async getTopCategories(limit = 10): Promise<{ category: string; count: number }[]> {
     return this.repository.getTopCategories(limit);
   }
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToAlerts(callbacks: AlertSubscriptionOptions): void {
     if (this.channelName) {

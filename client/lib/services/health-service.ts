@@ -1,0 +1,41 @@
+import { HealthRepository } from '@/lib/repositories';
+import type { DeviceHealth, SystemHealth } from '@/lib/supabase/types';
+
+export interface HealthServiceDependencies {
+  repository: HealthRepository;
+}
+
+export class HealthService {
+  private repository: HealthRepository;
+
+  constructor(dependencies: HealthServiceDependencies) {
+    this.repository = dependencies.repository;
+  }
+
+  async getDeviceHealth(options?: { limit?: number }): Promise<DeviceHealth[]> {
+    return this.repository.getDeviceHealth(options);
+  }
+
+  async getSystemHealth(): Promise<SystemHealth | null> {
+    return this.repository.getSystemHealth();
+  }
+
+  async getDeviceById(deviceId: string): Promise<DeviceHealth | null> {
+    return this.repository.getDeviceById(deviceId);
+  }
+
+  async refreshDeviceHealth(): Promise<DeviceHealth[]> {
+    return this.getDeviceHealth({ limit: 100 });
+  }
+
+  subscribeToHealthUpdates(callbacks: {
+    onDeviceHealthUpdate?: (device: DeviceHealth) => void;
+    onSystemHealthUpdate?: (systemHealth: SystemHealth) => void;
+    onError?: (error: Error) => void;
+  }) {
+    // TODO: Implement health updates subscription
+    // For now, return a placeholder channel name
+    console.warn('Health updates subscription not yet implemented');
+    return 'health-updates-placeholder';
+  }
+}

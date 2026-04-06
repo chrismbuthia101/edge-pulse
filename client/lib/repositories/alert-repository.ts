@@ -3,7 +3,7 @@ import {
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
-} from './base-repository';
+} from '@/lib/repositories/base-repository';
 import type {
   Alert,
   AlertStatus,
@@ -11,11 +11,10 @@ import type {
   RealtimeAlertPayload,
 } from '@/lib/supabase/types';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const ACTIVE_STATUSES: AlertStatus[] = ['PENDING', 'ACKNOWLEDGED', 'INVESTIGATED'];
 
 const DEFAULT_ALERT_SELECT = `
-  id,
+  alert_id,
   device_id,
   device_name,
   title,
@@ -49,22 +48,16 @@ const DEFAULT_ALERT_SELECT = `
   read
 `.trim();
 
-/** Minimal projection for metrics aggregation. */
 const METRICS_SELECT =
   'status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
-
-// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface AlertQueryOptions extends QueryOptions {
   deviceId?: string;
   status?: AlertStatus | AlertStatus[];
   severity?: AlertSeverity | AlertSeverity[];
   category?: string;
-  /** Full-text search across title, description, device_name, and category. */
   search?: string;
-  /** ISO date string — inclusive lower bound on created_at. */
   startDate?: string;
-  /** ISO date string — inclusive upper bound on created_at. */
   endDate?: string;
   minAnomalyScore?: number;
   maxAnomalyScore?: number;
@@ -94,22 +87,19 @@ export interface AlertSubscriptionCallbacks {
   onError?: (error: unknown) => void;
 }
 
-// ─── Repository ───────────────────────────────────────────────────────────────
-
 export class AlertRepository extends BaseRepository<Alert> {
   constructor() {
-    super('alert_records');
+    super('alerts');
   }
 
-  // ── Query builder ──────────────────────────────────────────────────────────
   private buildAlertQuery(options: AlertQueryOptions) {
     const standardFilters: Record<string, unknown> = {};
 
-    if (options.deviceId)   standardFilters.device_id = options.deviceId;
-    if (options.status)     standardFilters.status    = options.status;
-    if (options.severity)   standardFilters.severity  = options.severity;
-    if (options.category)   standardFilters.category  = options.category;
-    if (options.unreadOnly) standardFilters.read      = false;
+    if (options.deviceId) standardFilters.device_id = options.deviceId;
+    if (options.status) standardFilters.status = options.status;
+    if (options.severity) standardFilters.severity = options.severity;
+    if (options.category) standardFilters.category = options.category;
+    if (options.unreadOnly) standardFilters.read = false;
 
     let query = this.buildQuery({
       select: options.select ?? DEFAULT_ALERT_SELECT,
@@ -119,15 +109,12 @@ export class AlertRepository extends BaseRepository<Alert> {
       offset: options.offset,
     });
 
-    // Date range
     if (options.startDate) query = query.gte('created_at', options.startDate);
-    if (options.endDate)   query = query.lte('created_at', options.endDate);
+    if (options.endDate) query = query.lte('created_at', options.endDate);
 
-    // Anomaly score range
     if (options.minAnomalyScore !== undefined) query = query.gte('anomaly_score', options.minAnomalyScore);
     if (options.maxAnomalyScore !== undefined) query = query.lte('anomaly_score', options.maxAnomalyScore);
 
-    // Full-text search across key text columns
     if (options.search) {
       const s = options.search.replace(/[%_]/g, '\\$&'); // escape wildcards
       query = query.or(
@@ -138,8 +125,6 @@ export class AlertRepository extends BaseRepository<Alert> {
     return query;
   }
 
-  // ── Read operations ────────────────────────────────────────────────────────
-
   async findAlerts(options: AlertQueryOptions = {}): Promise<Alert[]> {
     const cacheKey = options.cacheKey ?? `alerts_${JSON.stringify(options)}`;
 
@@ -147,7 +132,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       cacheKey,
       async () => {
         const { data, error } = await this.buildAlertQuery(options);
-        if (error) throw error;
+        if (error) throw this.handleError(error);
         return (data ?? []) as unknown as Alert[];
       },
       options.cacheTTL
@@ -158,20 +143,70 @@ export class AlertRepository extends BaseRepository<Alert> {
     options: AlertQueryOptions & PaginationOptions
   ): Promise<PaginatedResult<Alert>> {
     const { page, limit, ...queryOptions } = options;
+
+    const filters: Record<string, unknown> = {};
+
+    if (queryOptions.deviceId) filters.device_id = queryOptions.deviceId;
+    if (queryOptions.status) filters.status = queryOptions.status;
+    if (queryOptions.severity) filters.severity = queryOptions.severity;
+    if (queryOptions.category) filters.category = queryOptions.category;
+    if (queryOptions.unreadOnly) filters.read = false;
+
+    const additionalFilters: Record<string, unknown> = {};
+
+    if (queryOptions.startDate || queryOptions.endDate) {
+      const dateFilter: Record<string, unknown> = {};
+      if (queryOptions.startDate) dateFilter.gte = queryOptions.startDate;
+      if (queryOptions.endDate) dateFilter.lte = queryOptions.endDate;
+      additionalFilters.created_at = dateFilter;
+    }
+
+    if (queryOptions.minAnomalyScore !== undefined || queryOptions.maxAnomalyScore !== undefined) {
+      const scoreFilter: Record<string, unknown> = {};
+      if (queryOptions.minAnomalyScore !== undefined) scoreFilter.gte = queryOptions.minAnomalyScore;
+      if (queryOptions.maxAnomalyScore !== undefined) scoreFilter.lte = queryOptions.maxAnomalyScore;
+      additionalFilters.anomaly_score = scoreFilter;
+    }
+
+    const combinedFilters = { ...filters, ...additionalFilters };
+
+    if (queryOptions.search) {
+      return this.findAlertsWithSearchPaginated(options);
+    }
+
+    return this.findPaginated({
+      page,
+      limit,
+      select: queryOptions.select ?? DEFAULT_ALERT_SELECT,
+      filters: combinedFilters,
+      orderBy: queryOptions.orderBy,
+      cacheTTL: queryOptions.cacheTTL
+    });
+  }
+
+  private async findAlertsWithSearchPaginated(
+    options: AlertQueryOptions & PaginationOptions
+  ): Promise<PaginatedResult<Alert>> {
+    const { page, limit, search, ...queryOptions } = options;
     const offset = (page - 1) * limit;
 
-    // Total count across the full (unfiltered) table
+    let query = this.buildAlertQuery({ ...queryOptions, search });
+
+    query = query.range(offset, offset + limit - 1);
+
     const { count, error: countError } = await this.supabase
       .from(this.tableName)
       .select('*', { count: 'exact', head: true });
 
     if (countError) throw this.handleError(countError);
 
-    const data = await this.findAlerts({ ...queryOptions, limit, offset });
+    const { data, error } = await query;
+    if (error) throw this.handleError(error);
+
     const totalPages = Math.ceil((count ?? 0) / limit);
 
     return {
-      data,
+      data: (data ?? []) as unknown as Alert[],
       count: count ?? 0,
       page,
       limit,
@@ -242,8 +277,6 @@ export class AlertRepository extends BaseRepository<Alert> {
     return this.findAlerts({ ...options, search: query });
   }
 
-  // ── Write operations ───────────────────────────────────────────────────────
-
   async updateAlertStatus(
     id: string,
     status: AlertStatus,
@@ -267,8 +300,6 @@ export class AlertRepository extends BaseRepository<Alert> {
   ): Promise<Alert[]> {
     return this.updateMany({ id: ids }, buildStatusTransition(status, userId));
   }
-
-  // ── Aggregations ───────────────────────────────────────────────────────────
 
   async getAlertMetrics(): Promise<AlertMetrics> {
     return this.cachedQuery(
@@ -301,36 +332,31 @@ export class AlertRepository extends BaseRepository<Alert> {
         let latencyCount = 0;
 
         for (const a of alerts) {
-          // Status
           switch (a.status) {
-            case 'PENDING':      metrics.pending++;      break;
+            case 'PENDING': metrics.pending++; break;
             case 'ACKNOWLEDGED': metrics.acknowledged++; break;
             case 'INVESTIGATED': metrics.investigated++; break;
-            case 'CLOSED':       metrics.closed++;       break;
+            case 'CLOSED': metrics.closed++; break;
           }
 
-          // Severity
           switch (a.severity) {
             case 'critical': metrics.critical++; break;
-            case 'high':     metrics.high++;     break;
-            case 'medium':   metrics.medium++;   break;
-            case 'low':      metrics.low++;      break;
+            case 'high': metrics.high++; break;
+            case 'medium': metrics.medium++; break;
+            case 'low': metrics.low++; break;
           }
 
-          // Anomaly score (prefer anomaly_score, fall back to confidence)
           const score = anomalyScore(a);
           if (score !== null) {
             scoreSum += score;
             scoreCount++;
           }
 
-          // Inference latency
           if ((a.inference_latency_ms ?? 0) > 0) {
             latencySum += a.inference_latency_ms;
             latencyCount++;
           }
 
-          // Threats blocked: high/critical alerts that have been closed
           if (
             a.status === 'CLOSED' &&
             (a.severity === 'critical' || a.severity === 'high')
@@ -423,9 +449,9 @@ export class AlertRepository extends BaseRepository<Alert> {
       try {
         const p = payload as RealtimeAlertPayload;
         switch (p.eventType) {
-          case 'INSERT': callbacks.onInsert?.(p.new);           break;
-          case 'UPDATE': callbacks.onUpdate?.(p.new);           break;
-          case 'DELETE': callbacks.onDelete?.(p.old as Alert);  break;
+          case 'INSERT': callbacks.onInsert?.(p.new); break;
+          case 'UPDATE': callbacks.onUpdate?.(p.new); break;
+          case 'DELETE': callbacks.onDelete?.(p.old as Alert); break;
         }
       } catch (error) {
         callbacks.onError?.(error);
@@ -435,7 +461,6 @@ export class AlertRepository extends BaseRepository<Alert> {
     return channelName;
   }
 
-  /** Unsubscribes a specific alert realtime channel by its name. */
   unsubscribeFromAlerts(channelName: string): void {
     this.unsubscribe(channelName);
   }
@@ -444,14 +469,10 @@ export class AlertRepository extends BaseRepository<Alert> {
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 function anomalyScore(alert: Alert): number | null {
   if (alert.anomaly_score != null) return alert.anomaly_score;
-  if (alert.confidence   != null) return alert.confidence;
+  if (alert.confidence != null) return alert.confidence;
   return null;
 }
 
-/**
- * Builds the partial Alert update for a status transition.
- * Extracted so `updateAlertStatus` and `bulkUpdateStatus` share identical logic.
- */
 function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Alert> {
   const now = new Date().toISOString();
   const updates: Partial<Alert> = { status };
@@ -474,10 +495,6 @@ function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Al
   return updates;
 }
 
-/**
- * Converts a Date to a bucket key for time-range grouping.
- * Pulled out of the switch block to avoid `const`-inside-case lint errors.
- */
 function toGroupKey(date: Date, groupBy: 'hour' | 'day' | 'week'): string {
   switch (groupBy) {
     case 'hour':

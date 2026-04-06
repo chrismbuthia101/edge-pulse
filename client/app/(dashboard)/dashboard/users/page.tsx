@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     Users, UserPlus, Search, MoreHorizontal, Shield,
@@ -18,20 +18,8 @@ import {
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { createClient } from "@/lib/supabase/client";
+import { useUserStore } from "@/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
-import { toast } from "sonner";
-
-interface AnalystUser {
-    user_id: string;
-    full_name: string;
-    role: "ANALYST" | "ADMINISTRATOR";
-    department: string | null;
-    is_active: boolean;
-    created_at: string;
-    updated_at: string;
-    email?: string;
-}
 
 const roleColors: Record<string, string> = {
     ADMINISTRATOR: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -45,41 +33,24 @@ const statusColors: Record<string, string> = {
 
 export default function UsersPage() {
     const { user: currentUser, hasRole } = useAuth();
-    const supabase = createClient();
+    const {
+        users,
+        loading,
+        searchTerm,
+        filterRole,
+        filterStatus,
+        initialize,
+        setSearchTerm,
+        setFilterRole,
+        setFilterStatus,
+        toggleUserStatus,
+        changeUserRole
+    } = useUserStore();
 
-    const [users, setUsers] = useState<AnalystUser[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [filterRole, setFilterRole] = useState<string>("all");
-    const [filterStatus, setFilterStatus] = useState<string>("all");
-
-    // fetchUsers defined with useCallback BEFORE useEffect
-    const fetchUsers = useCallback(async () => {
-        try {
-            setLoading(true);
-
-            const { data, error } = await supabase
-                .from("analyst_users")
-                .select("*")
-                .order("created_at", { ascending: false });
-
-            if (error) throw error;
-
-            setUsers(data || []);
-        } catch (error) {
-            console.error("Failed to fetch users:", error);
-            toast.error("Failed to load users");
-        } finally {
-            setLoading(false);
-        }
-    }, [supabase]);
-
-    // useEffect BEFORE conditional return
     useEffect(() => {
-        fetchUsers();
-    }, [fetchUsers]);
+        initialize();
+    }, [initialize]);
 
-    // Role-gated render — AFTER all hooks
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -91,40 +62,6 @@ export default function UsersPage() {
             </div>
         );
     }
-
-    const toggleUserStatus = async (userId: string, isActive: boolean) => {
-        try {
-            const { error } = await supabase
-                .from("analyst_users")
-                .update({ is_active: !isActive, updated_at: new Date().toISOString() })
-                .eq("user_id", userId);
-
-            if (error) throw error;
-
-            toast.success(`User ${!isActive ? "activated" : "deactivated"} successfully`);
-            fetchUsers();
-        } catch (error) {
-            console.error("Failed to toggle user status:", error);
-            toast.error("Failed to update user status");
-        }
-    };
-
-    const changeUserRole = async (userId: string, newRole: "ANALYST" | "ADMINISTRATOR") => {
-        try {
-            const { error } = await supabase
-                .from("analyst_users")
-                .update({ role: newRole, updated_at: new Date().toISOString() })
-                .eq("user_id", userId);
-
-            if (error) throw error;
-
-            toast.success(`User role changed to ${newRole} successfully`);
-            fetchUsers();
-        } catch (error) {
-            console.error("Failed to change user role:", error);
-            toast.error("Failed to change user role");
-        }
-    };
 
     const filteredUsers = users.filter((user) => {
         const matchesSearch =

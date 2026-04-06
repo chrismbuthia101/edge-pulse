@@ -4,14 +4,14 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Sliders, AlertTriangle, Shield, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { useThresholdStore } from "@/stores/threshold-store";
 
 interface DetectionThresholdSliderProps {
   deviceId?: string;
 }
 
 export function DetectionThresholdSlider({ deviceId }: DetectionThresholdSliderProps) {
-  const [threshold, setThreshold] = useState(0.75);
+  const { threshold, loading, initialize, updateThreshold } = useThresholdStore();
   const [modelStats, setModelStats] = useState({
     precision: 0.92,
     recall: 0.88,
@@ -19,7 +19,6 @@ export function DetectionThresholdSlider({ deviceId }: DetectionThresholdSliderP
     falseNegatives: 23,
     totalAlerts: 156,
   });
-  const supabase = createClient();
 
   const thresholdPresets = [
     { label: "High Sensitivity", value: 0.5, description: "Catch more threats, more false positives" },
@@ -28,28 +27,10 @@ export function DetectionThresholdSlider({ deviceId }: DetectionThresholdSliderP
   ];
 
   useEffect(() => {
-    const fetchThreshold = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('anomaly_scores')
-          .select('threshold_used')
-          .eq('device_id', deviceId || 'global')
-          .order('scored_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (data && !error) {
-          setThreshold(data.threshold_used);
-        }
-      } catch {
-        // Use default threshold on error
-      }
-    };
-
     if (deviceId) {
-      fetchThreshold();
+      initialize(deviceId);
     }
-  }, [deviceId, supabase]);
+  }, [deviceId, initialize]);
 
   useEffect(() => {
     // Simulate model stats based on threshold
@@ -72,21 +53,18 @@ export function DetectionThresholdSlider({ deviceId }: DetectionThresholdSliderP
   };
 
   const handleThresholdChange = async (value: number) => {
-    setThreshold(value);
-    try {
-      const { error } = await supabase
-        .from('detection_settings')
-        .upsert({
-          device_id: deviceId || 'global',
-          threshold: value,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-    } catch {
-      // Handle save error - could show toast notification
-    }
+    await updateThreshold(deviceId, value);
   };
+
+  if (loading) {
+    return (
+      <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-center p-8">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
