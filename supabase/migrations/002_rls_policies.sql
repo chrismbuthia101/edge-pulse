@@ -26,7 +26,7 @@ ALTER TABLE notification_rules         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_queue                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE retention_settings         ENABLE ROW LEVEL SECURITY;
 
--- ─── Helper functions ─────────────────────────────────────────────────────────
+-- ─── Helper functions ─────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER
@@ -46,7 +46,6 @@ SET search_path = public AS $$
     );
 $$;
 
--- Extract device-id from request headers (device API-key auth)
 CREATE OR REPLACE FUNCTION get_device_id_from_headers()
 RETURNS UUID LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = public AS $$
@@ -123,70 +122,63 @@ SET search_path = public AS $$
         );
 $$;
 
--- ─── analyst_users ────────────────────────────────────────────────────────────
+-- ─── analyst_users ────────────────────────────────────────────
 CREATE POLICY "analysts: view own profile"   ON analyst_users FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "admins: view all users"       ON analyst_users FOR SELECT USING (is_admin());
 CREATE POLICY "admins: insert users"         ON analyst_users FOR INSERT WITH CHECK (is_admin());
 CREATE POLICY "admins: update users"         ON analyst_users FOR UPDATE USING (is_admin());
 CREATE POLICY "analysts: update own profile" ON analyst_users FOR UPDATE
     USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id AND (OLD.role = NEW.role OR is_admin()));
+    WITH CHECK (auth.uid() = user_id);
 
--- ─── device_registry ──────────────────────────────────────────────────────────
+-- ─── device_registry ──────────────────────────────────────────
 CREATE POLICY "devices: read own record"         ON device_registry FOR SELECT USING (id = current_device_id());
 CREATE POLICY "devices: update own heartbeat"    ON device_registry FOR UPDATE USING (id = current_device_id()) WITH CHECK (id = current_device_id());
 CREATE POLICY "analysts: read assigned devices"  ON device_registry FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(id));
 CREATE POLICY "admins: full device management"   ON device_registry FOR ALL   USING (is_admin());
 
--- ─── agent_api_keys ───────────────────────────────────────────────────────────
+-- ─── agent_api_keys ───────────────────────────────────────────
 CREATE POLICY "admins: manage api keys" ON agent_api_keys FOR ALL USING (is_admin());
 
--- ─── device_enrollment_tokens ─────────────────────────────────────────────────
+-- ─── device_enrollment_tokens ─────────────────────────────────
 CREATE POLICY "admins: manage enrollment tokens" ON device_enrollment_tokens FOR ALL    USING (is_admin());
 CREATE POLICY "anon: read token for validation"  ON device_enrollment_tokens FOR SELECT USING (TRUE);
 
--- ─── telemetry_events ─────────────────────────────────────────────────────────
+-- ─── telemetry_events ─────────────────────────────────────────
 CREATE POLICY "devices: insert own telemetry"    ON telemetry_events FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read assigned telemetry" ON telemetry_events FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 
--- ─── feature_vectors ──────────────────────────────────────────────────────────
+-- ─── feature_vectors ──────────────────────────────────────────
 CREATE POLICY "devices: insert own features"    ON feature_vectors FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read assigned features" ON feature_vectors FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 
--- ─── anomaly_scores ───────────────────────────────────────────────────────────
+-- ─── anomaly_scores ───────────────────────────────────────────
 CREATE POLICY "devices: insert own scores"    ON anomaly_scores FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read assigned scores" ON anomaly_scores FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 
--- ─── alert_records ────────────────────────────────────────────────────────────
+-- ─── alert_records ────────────────────────────────────────────
 CREATE POLICY "devices: insert own alerts"   ON alert_records FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read assigned alerts" ON alert_records FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 CREATE POLICY "analysts: update alert status"  ON alert_records FOR UPDATE
     USING (is_analyst_or_admin() AND analyst_has_device_access(device_id))
     WITH CHECK (
-        CASE NEW.status
-            WHEN 'PENDING'      THEN TRUE
-            WHEN 'ACKNOWLEDGED' THEN OLD.status = 'PENDING'
-            WHEN 'INVESTIGATED' THEN OLD.status IN ('PENDING','ACKNOWLEDGED')
-            WHEN 'CLOSED'       THEN OLD.status IN ('PENDING','ACKNOWLEDGED','INVESTIGATED')
-        END
-        AND NEW.device_id     = OLD.device_id
-        AND NEW.anomaly_score = OLD.anomaly_score
+        is_analyst_or_admin()
+        AND analyst_has_device_access(device_id)
     );
 
--- ─── tamper_evident_log ───────────────────────────────────────────────────────
+-- ─── tamper_evident_log ───────────────────────────────────────
 CREATE POLICY "devices: insert own log entries" ON tamper_evident_log FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read log entries"      ON tamper_evident_log FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
--- No UPDATE or DELETE policies — tamper-evident means immutable after write
 
--- ─── device_health_snapshots ──────────────────────────────────────────────────
+-- ─── device_health_snapshots ──────────────────────────────────
 CREATE POLICY "devices: insert own health"    ON device_health_snapshots FOR INSERT WITH CHECK (device_id = current_device_id());
 CREATE POLICY "analysts: read assigned health" ON device_health_snapshots FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 
--- ─── analyst_device_assignments ───────────────────────────────────────────────
+-- ─── analyst_device_assignments ───────────────────────────────
 CREATE POLICY "admins: manage assignments"     ON analyst_device_assignments FOR ALL    USING (is_admin());
 CREATE POLICY "analysts: view own assignments" ON analyst_device_assignments FOR SELECT USING (analyst_id = auth.uid());
 
--- ─── incident_cases ───────────────────────────────────────────────────────────
+-- ─── incident_cases ───────────────────────────────────────────
 CREATE POLICY "analysts: read own or assigned cases" ON incident_cases FOR SELECT
     USING (is_analyst_or_admin() AND (created_by = auth.uid() OR assigned_to = auth.uid() OR is_admin()));
 CREATE POLICY "analysts: create cases" ON incident_cases FOR INSERT
@@ -194,7 +186,7 @@ CREATE POLICY "analysts: create cases" ON incident_cases FOR INSERT
 CREATE POLICY "analysts: update own or assigned cases" ON incident_cases FOR UPDATE
     USING (is_analyst_or_admin() AND (created_by = auth.uid() OR assigned_to = auth.uid() OR is_admin()));
 
--- ─── case_alerts ──────────────────────────────────────────────────────────────
+-- ─── case_alerts ──────────────────────────────────────────────
 CREATE POLICY "analysts: manage case alerts" ON case_alerts FOR ALL
     USING (
         is_analyst_or_admin()
@@ -205,7 +197,7 @@ CREATE POLICY "analysts: manage case alerts" ON case_alerts FOR ALL
         )
     );
 
--- ─── case_notes ───────────────────────────────────────────────────────────────
+-- ─── case_notes ───────────────────────────────────────────────
 CREATE POLICY "analysts: manage case notes" ON case_notes FOR ALL
     USING (
         is_analyst_or_admin()
@@ -216,38 +208,36 @@ CREATE POLICY "analysts: manage case notes" ON case_notes FOR ALL
         )
     );
 
--- ─── audit_trail ──────────────────────────────────────────────────────────────
+-- ─── audit_trail ──────────────────────────────────────────────
 CREATE POLICY "analysts: read audit trail" ON audit_trail FOR SELECT USING (is_analyst_or_admin());
 
--- ─── notification_rules ───────────────────────────────────────────────────────
+-- ─── notification_rules ───────────────────────────────────────
 CREATE POLICY "admins: manage notification rules" ON notification_rules FOR ALL    USING (is_admin());
 CREATE POLICY "analysts: read own rules"          ON notification_rules FOR SELECT USING (is_analyst_or_admin() AND created_by = auth.uid());
 
--- ─── agent_config ──────────────────────────────────────────────────────────────
+-- ─── agent_config ─────────────────────────────────────────────
 CREATE POLICY "devices: read own config" ON agent_config FOR SELECT USING (device_id = current_device_id() OR device_id IS NULL);
 CREATE POLICY "admins: manage config"    ON agent_config FOR ALL   USING (is_admin());
 
--- ─── privacy_settings ─────────────────────────────────────────────────────────
+-- ─── privacy_settings ─────────────────────────────────────────
 CREATE POLICY "devices: read own privacy settings"      ON privacy_settings FOR SELECT USING (device_id = current_device_id() OR device_id IS NULL);
 CREATE POLICY "analysts: read assigned privacy settings" ON privacy_settings FOR SELECT USING (is_analyst_or_admin() AND (device_id IS NULL OR analyst_has_device_access(device_id)));
 CREATE POLICY "admins: manage privacy settings"         ON privacy_settings FOR ALL   USING (is_admin());
 
--- ─── sync_queue ───────────────────────────────────────────────────────────────
+-- ─── sync_queue ───────────────────────────────────────────────
 CREATE POLICY "devices: manage own sync queue" ON sync_queue FOR ALL   USING (device_id = current_device_id());
 CREATE POLICY "analysts: read sync queue"      ON sync_queue FOR SELECT USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
 CREATE POLICY "admins: manage all sync queue"  ON sync_queue FOR ALL   USING (is_admin());
 
--- ─── retention_settings ───────────────────────────────────────────────────────
+-- ─── retention_settings ───────────────────────────────────────
 CREATE POLICY "analysts: read retention settings" ON retention_settings FOR SELECT USING (is_analyst_or_admin());
 CREATE POLICY "admins: manage retention settings" ON retention_settings FOR ALL   USING (is_admin());
 
--- ─── Grants ───────────────────────────────────────────────────────────────────
+-- ─── Grants ───────────────────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 
--- anon: enrollment token read only
 GRANT SELECT ON device_enrollment_tokens TO anon;
 
--- authenticated (JWT users)
 GRANT SELECT, INSERT, UPDATE ON analyst_users              TO authenticated;
 GRANT SELECT, UPDATE          ON device_registry           TO authenticated;
 GRANT SELECT                  ON agent_api_keys            TO authenticated;
@@ -256,7 +246,6 @@ GRANT SELECT                  ON telemetry_events          TO authenticated;
 GRANT SELECT                  ON feature_vectors           TO authenticated;
 GRANT SELECT                  ON anomaly_scores            TO authenticated;
 GRANT SELECT, UPDATE          ON alert_records             TO authenticated;
-GRANT SELECT                  ON alerts                    TO authenticated;
 GRANT SELECT                  ON tamper_evident_log        TO authenticated;
 GRANT SELECT                  ON device_health_snapshots   TO authenticated;
 GRANT SELECT, INSERT, UPDATE  ON analyst_device_assignments TO authenticated;
