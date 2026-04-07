@@ -11,14 +11,13 @@ export interface GetTelemetryOptions {
   startDate?: string;
   endDate?: string;
   limit?: number;
-  orderBy?: 'collected_at' | 'cpu_percent' | 'ram_percent';
+  orderBy?: 'collected_at' | 'received_at' | 'created_at';
   orderDirection?: 'asc' | 'desc';
 }
 
 interface TelemetryData {
   collected_at: string;
-  cpu_percent: number | null;
-  ram_percent: number | null;
+  payload: Record<string, unknown>;
 }
 
 export class TelemetryService {
@@ -27,7 +26,7 @@ export class TelemetryService {
   async getTelemetry(options: GetTelemetryOptions = {}): Promise<TelemetrySample[]> {
     let query = this.supabase
       .from('telemetry_events')
-      .select('collected_at, cpu_percent, ram_percent');
+      .select('collected_at, payload');
 
     // Apply filters
     if (options.deviceId) {
@@ -55,11 +54,14 @@ export class TelemetryService {
     const { data, error } = await query;
     if (error) throw error;
 
-    return (data || []).map((t: TelemetryData) => ({
-      collected_at: t.collected_at,
-      cpu_percent: t.cpu_percent ?? 0,
-      ram_percent: t.ram_percent ?? 0,
-    }));
+    return (data || []).map((t: TelemetryData) => {
+      const payload = t.payload as { cpu_percent?: number; ram_percent?: number };
+      return {
+        collected_at: t.collected_at,
+        cpu_percent: payload.cpu_percent ?? 0,
+        ram_percent: payload.ram_percent ?? 0,
+      };
+    });
   }
 
   async getLatestTelemetry(deviceId: string, limit = 48): Promise<TelemetrySample[]> {
