@@ -6,7 +6,9 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Alert, TelemetryEvent } from '@/lib/supabase/types';
 
 const DEFAULT_ALERT_SELECT = `
-  id,
+  alert_id,
+  device_id,
+  device_name,
   title,
   description,
   severity,
@@ -28,9 +30,8 @@ const DEFAULT_ALERT_SELECT = `
   proc_name,
   proc_privilege_level,
   proc_pid,
-  device_name,
-  device_id,
   created_at,
+  updated_at,
   acknowledged_at,
   acknowledged_by,
   investigated_at,
@@ -43,12 +44,14 @@ const DEFAULT_ALERT_SELECT = `
 const DEFAULT_TELEMETRY_SELECT = `
   id,
   device_id,
-  source,
-  event_type,
-  data,
   collected_at,
-  created_at,
-  updated_at
+  received_at,
+  source,
+  payload,
+  collection_agent_version,
+  connectivity_state,
+  payload_hash,
+  created_at
 `.trim();
 
 export interface LiveQueryOptions extends QueryOptions {
@@ -99,7 +102,14 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
       };
     }
 
-    return this.findMany(queryOptions) as Promise<Alert[]>;
+    const alerts = await this.findMany(queryOptions) as unknown;
+    const alertRecords = (alerts as Array<{ alert_id: string } & Record<string, unknown>>)
+      .filter((item) => item && typeof item === 'object' && 'alert_id' in item);
+
+    return alertRecords.map((alert) => ({
+      ...alert,
+      id: alert.alert_id,
+    })) as Alert[];
   }
 
   async getTodayStats(): Promise<LiveStats> {
@@ -164,7 +174,12 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
         (payload) => {
           try {
             if (payload.new) {
-              onNewAlert?.(payload.new as Alert);
+              // Normalize alert_id to id for Alert interface compatibility
+              const normalizedAlert = {
+                ...payload.new,
+                id: payload.new.alert_id,
+              } as Alert;
+              onNewAlert?.(normalizedAlert);
             }
           } catch (error) {
             onError?.(error instanceof Error ? error : new Error('Unknown error in alert subscription'));

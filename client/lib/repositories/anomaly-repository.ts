@@ -13,17 +13,33 @@ import {
 } from '@/lib/repositories/query-utils';
 
 const DEFAULT_ANOMALY_SELECT = `
-  created_at,
+  id,
+  feature_vector_id,
+  device_id,
+  model_id,
   score,
   label,
-  device_id
+  threshold_applied,
+  above_threshold,
+  inference_latency_ms,
+  connectivity_state,
+  created_at,
+  scored_at
 `.trim();
 
 export interface AnomalyScore {
-  created_at: string;
+  id: string;
+  feature_vector_id: string | null;
+  device_id: string;
+  model_id: string;
   score: number;
   label?: string;
-  device_id: string;
+  threshold_applied: number;
+  above_threshold: boolean;
+  inference_latency_ms: number;
+  connectivity_state: 'online' | 'offline';
+  created_at: string;
+  scored_at: string;
 }
 
 export interface GetAnomalyScoresOptions extends QueryOptions {

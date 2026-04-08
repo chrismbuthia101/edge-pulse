@@ -1,6 +1,6 @@
 import type { Alert } from '@/lib/supabase/types/alerts';
 import type { SyncQueueEntry } from '@/lib/supabase/types/sync';
-import type { TelemetryEvent, FeatureVector, AnomalyScore } from '@/lib/supabase/types/telemetry';
+import type { TelemetryEvent, FeatureVector } from '@/lib/supabase/types/telemetry';
 import type { UserRole, CaseSeverity, CaseStatus, DeviceStatus, DeviceRisk, DeviceType } from '@/lib/supabase/types/shared';
 
 export interface TamperEvidentLog {
@@ -122,6 +122,21 @@ export interface RetentionSetting {
   device_id: string;
   retention_days: number;
   updated_at: string;
+}
+
+export interface AnomalyScore {
+  id: string;
+  feature_vector_id: string | null;
+  device_id: string;
+  model_id: string;
+  score: number;
+  label?: string;
+  threshold_applied: number;
+  above_threshold: boolean;
+  inference_latency_ms: number;
+  connectivity_state: 'online' | 'offline';
+  created_at: string;
+  scored_at: string;
 }
 
 export interface Database {

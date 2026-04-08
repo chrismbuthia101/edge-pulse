@@ -39,8 +39,8 @@ export default function DashboardPage() {
     const onlineCount = useDeviceStore((s) => s.onlineCount);
 
     // Derived stats - memoized for performance
-    const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length || 89, [alerts]);
-    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length || 2341, [alerts]);
+    const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length || 3, [alerts]);
+    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length || 12, [alerts]);
     const criticalCount = useMemo(() => alerts.filter((a) => a.severity === "critical" && a.status !== "CLOSED").length, [alerts]);
 
     // Average inference latency from recent alerts
@@ -77,7 +77,7 @@ export default function DashboardPage() {
     const stats = useMemo(() => [
         {
             title: "Total Devices",
-            value: devices.length > 0 ? devices.length.toLocaleString() : "1,247",
+            value: devices.length > 0 ? devices.length.toLocaleString() : "5",
             delta: `${onlineCount} online`,
             deltaPositive: true,
             icon: MonitorSmartphone,
@@ -110,7 +110,7 @@ export default function DashboardPage() {
         },
         {
             title: "Threats Blocked",
-            value: threatsBlocked > 0 ? threatsBlocked.toLocaleString() : "2,341",
+            value: threatsBlocked > 0 ? threatsBlocked.toLocaleString() : "12",
             delta: `${resolvedToday} today`,
             deltaPositive: true,
             icon: Shield,
@@ -145,7 +145,7 @@ export default function DashboardPage() {
         },
         {
             label: "Detection Rate",
-            value: "99.9%",
+            value: "98.5%",
             color: "text-violet-500",
             bg: "bg-violet-500/10",
             icon: TrendingUp,
