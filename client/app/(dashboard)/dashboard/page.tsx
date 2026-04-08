@@ -21,14 +21,9 @@ import { AlertFeed } from "@/components/dashboard/alert-feed";
 import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
 import { LogIntegrityPanel } from "@/components/dashboard/log-integrity-panel";
-import { ForensicExport } from "@/components/dashboard/forensic-export";
-import { DetectionThresholdSlider } from "@/components/dashboard/detection-threshold-slider";
-import { TelemetryRetention } from "@/components/dashboard/telemetry-retention";
-import { PrivacyModeIndicator } from "@/components/dashboard/privacy-mode-indicator";
-import { PurgeDeviceData } from "@/components/dashboard/purge-device-data";
-import { DynamicThreatLevel } from "@/components/dashboard/dynamic-threat-level";
-import { AttackCategoryChart } from "@/components/dashboard/attack-category-chart";
 import { OnlineOfflineDetection } from "@/components/dashboard/online-offline-detection";
+import { AgentPerformance } from "@/components/dashboard/agent-performance";
+import { SyncQueueStatus } from "@/components/dashboard/sync-queue-status";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -264,38 +259,33 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-4 lg:space-y-5">
                     <ShapPanel />
-                    <SystemHealth />
+                    <AgentPerformance />
                 </div>
             </div>
 
-            {/* Analytics Section */}
+            {/* Core Analytics Section */}
             <div className="space-y-4 lg:space-y-5">
                 <div className="flex items-center gap-2 mb-3">
                     <TrendingUp className="h-4 w-4 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Analytics</h2>
+                    <h2 className="text-lg font-semibold text-foreground">Core Analytics</h2>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
-                    <DynamicThreatLevel />
-                    <AttackCategoryChart />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
                     <OnlineOfflineDetection />
+                    <SyncQueueStatus />
                 </div>
             </div>
 
-            {/* Security & Forensics Section */}
+            {/* Security & Integrity Section */}
             <div className="space-y-4 lg:space-y-5">
                 <div className="flex items-center gap-2 mb-3">
                     <Shield className="h-4 w-4 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Security & Forensics</h2>
+                    <h2 className="text-lg font-semibold text-foreground">Security & Integrity</h2>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
                     <LogIntegrityPanel />
-                    <ForensicExport />
-                    <DetectionThresholdSlider />
-                    <TelemetryRetention />
-                    <PrivacyModeIndicator />
-                    <PurgeDeviceData />
+                    <SystemHealth />
                 </div>
             </div>
         </div>

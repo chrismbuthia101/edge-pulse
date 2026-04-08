@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     Brain,
-    Zap,
     RefreshCw,
     Download,
     Info,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModelPerformance } from "@/components/dashboard/model-performance";
+import { Activity, Cpu, MemoryStick, Zap } from "lucide-react";
 
 const modelStats = [
     { label: "Model Version", value: "v2.4.1", sub: "Released 3 days ago", color: "text-primary" },
@@ -19,6 +19,16 @@ const modelStats = [
     { label: "False Positive Rate", value: "0.04%", sub: "Last 7 days", color: "text-amber-500" },
     { label: "Avg Inference Time", value: "12ms", sub: "Edge latency", color: "text-violet-500" },
 ];
+
+const realTimeMetrics = {
+    currentScore: 0.13,
+    cpuUsage: 3.2,
+    memoryUsage: 124,
+    featureVectorSize: 47,
+    lastInference: "8s ago",
+    inferencesPerSecond: 2.4,
+    anomalyThreshold: 0.75
+};
 
 const topFeatures = [
     { label: "CPU Spike Pattern", importance: 0.34, positive: true, description: "Sudden CPU utilization spikes correlating with process anomalies" },
@@ -161,6 +171,78 @@ export default function InsightsPage() {
                     <ModelPerformance />
                 </motion.div>
             </div>
+
+            {/* Real-time Agent Status */}
+            <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="bg-card border border-border rounded-2xl overflow-hidden"
+            >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                    <div className="flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-green-500" />
+                        <h3 className="text-sm font-semibold text-foreground">Real-time Agent Status</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span>Live Monitoring</span>
+                    </div>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-1 mb-2">
+                                <div className={`w-3 h-3 rounded-full ${realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'bg-red-500' : 'bg-green-500'} animate-pulse`} />
+                                <span className={`text-xl font-bold font-display ${realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'text-red-500' : 'text-green-500'}`}>
+                                    {realTimeMetrics.currentScore.toFixed(2)}
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Current Score</p>
+                            <p className="text-[9px] text-muted-foreground">Threshold: {realTimeMetrics.anomalyThreshold}</p>
+                        </div>
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-1 mb-2">
+                                <Cpu className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-xl font-bold font-display text-green-500">
+                                    {realTimeMetrics.cpuUsage}%
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">CPU Usage</p>
+                            <p className="text-[9px] text-green-500">Target: &lt;5%</p>
+                        </div>
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-1 mb-2">
+                                <MemoryStick className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-xl font-bold font-display text-blue-500">
+                                    {realTimeMetrics.memoryUsage}MB
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Memory</p>
+                            <p className="text-[9px] text-blue-500">Target: &lt;150MB</p>
+                        </div>
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-1 mb-2">
+                                <Zap className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-xl font-bold font-display text-violet-500">
+                                    {realTimeMetrics.inferencesPerSecond}/s
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Inferences/sec</p>
+                            <p className="text-[9px] text-violet-500">Last: {realTimeMetrics.lastInference}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span>Feature Vector: {realTimeMetrics.featureVectorSize} dimensions</span>
+                            <span>•</span>
+                            <span>Model: Isolation Forest</span>
+                            <span>•</span>
+                            <span>Status: {realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'ANOMALY DETECTED' : 'Normal Operation'}</span>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
 
             {/* Recent high-confidence detections */}
             <motion.div

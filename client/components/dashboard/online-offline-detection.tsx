@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Wifi, WifiOff, Activity, TrendingUp, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Activity, TrendingUp, AlertTriangle, Database, Clock, CheckCircle2 } from "lucide-react";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -53,6 +53,17 @@ const TimeSeriesTooltip = ({ active, payload }: TimeSeriesTooltipProps) => {
     );
   }
   return null;
+};
+
+// Sync queue metrics
+const syncQueueMetrics = {
+  totalQueued: 1247,
+  pendingSync: 89,
+  syncingNow: 12,
+  lastSync: "3m ago",
+  syncSuccessRate: 99.7,
+  avgSyncTime: "280ms",
+  dataLossEvents: 0
 };
 
 export function OnlineOfflineDetection() {
@@ -274,6 +285,68 @@ export function OnlineOfflineDetection() {
               />
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Sync Queue Status */}
+        <div className="mt-6 pt-6 border-t border-border">
+          <div className="flex items-center gap-2 mb-4">
+            <Database className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-medium text-foreground">Synchronization Queue</h4>
+            <span className="text-xs text-muted-foreground">Offline operation support</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Database className="h-4 w-4 text-blue-500" />
+                <span className="text-xs font-medium text-blue-500">Queued</span>
+              </div>
+              <p className="text-lg font-bold text-foreground">{syncQueueMetrics.totalQueued.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Total records</p>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="h-4 w-4 text-amber-500" />
+                <span className="text-xs font-medium text-amber-500">Pending</span>
+              </div>
+              <p className="text-lg font-bold text-foreground">{syncQueueMetrics.pendingSync}</p>
+              <p className="text-xs text-muted-foreground">Awaiting sync</p>
+            </div>
+
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-xs font-medium text-green-500">Success Rate</span>
+              </div>
+              <p className="text-lg font-bold text-foreground">{syncQueueMetrics.syncSuccessRate}%</p>
+              <p className="text-xs text-muted-foreground">Last 24h</p>
+            </div>
+
+            <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="h-4 w-4 text-violet-500" />
+                <span className="text-xs font-medium text-violet-500">Avg Sync Time</span>
+              </div>
+              <p className="text-lg font-bold text-foreground">{syncQueueMetrics.avgSyncTime}</p>
+              <p className="text-xs text-muted-foreground">Per record</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-xs text-muted-foreground">Sync Active</span>
+              </div>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-muted-foreground">Last sync: {syncQueueMetrics.lastSync}</span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-green-500">{syncQueueMetrics.dataLossEvents} data loss events</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{syncQueueMetrics.syncingNow} syncing now</span>
+            </div>
+          </div>
         </div>
 
         {/* Detection Rate Comparison */}
