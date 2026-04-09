@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/stores/auth-store";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -11,7 +12,9 @@ export type ConnStatus = "live" | "offline" | "syncing";
 export function useNotifications() {
     const router = useRouter();
 
-    const [user, setUser] = useState<{ email?: string; full_name?: string } | null>(null);
+    const authUser = useAuthStore((s) => s.user);
+    const authLoading = useAuthStore((s) => s.loading);
+
     const [connStatus, setConnStatus] = useState<ConnStatus>("live");
     const [queuedCount, setQueuedCount] = useState(0);
     const [notifOpen, setNotifOpen] = useState(false);
@@ -40,17 +43,6 @@ export function useNotifications() {
         clearError: clearDevicesError,
     } = useDeviceStore();
 
-    useEffect(() => {
-        supabaseRef.current.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUser({
-                    email: data.user.email,
-                    full_name: data.user.user_metadata?.full_name,
-                });
-            }
-        });
-    }, []);
-
     const fetchSyncQueue = useCallback(async () => {
         const { count, error } = await supabaseRef.current
             .from("sync_queue")
@@ -75,7 +67,6 @@ export function useNotifications() {
         init();
         fetchSyncQueue();
 
-        // Sync-queue channel: flip to "syncing" while the count refreshes.
         const syncChannel = supabaseRef.current
             .channel("realtime-sync-queue")
             .on("postgres_changes", { event: "*", schema: "public", table: "sync_queue" }, () => {
@@ -113,30 +104,33 @@ export function useNotifications() {
         if (devicesError) clearDevicesError();
     }, [devicesError, clearDevicesError]);
 
+    // ── Derived display values from auth store ──────────────
     const initials = useMemo(() => {
-        if (!user) return "U";
-        return user.full_name
-            ? user.full_name
+        if (!authUser) return "U";
+        const fullName = authUser.user_metadata?.full_name as string | undefined;
+        if (fullName) {
+            return fullName
                 .split(" ")
                 .map((n: string) => n[0])
                 .join("")
                 .toUpperCase()
-                .slice(0, 2)
-            : user.email?.[0]?.toUpperCase() ?? "U";
-    }, [user]);
+                .slice(0, 2);
+        }
+        return authUser.email?.[0]?.toUpperCase() ?? "U";
+    }, [authUser]);
 
-    const displayName = useMemo(
-        () => user?.full_name ?? user?.email?.split("@")[0] ?? "User",
-        [user]
-    );
+    const displayName = useMemo(() => {
+        if (!authUser) return "User";
+        const fullName = authUser.user_metadata?.full_name as string | undefined;
+        return fullName ?? authUser.email?.split("@")[0] ?? "User";
+    }, [authUser]);
 
-    // Only the four most recent alerts are shown in the dropdown.
     const recentNotifs = useMemo(() => alerts.slice(0, 4), [alerts]);
 
-    const isLoading = alertsLoading || devicesLoading;
+    const isLoading = authLoading || alertsLoading || devicesLoading;
     const hasError = Boolean(alertsError || devicesError);
 
-    // ── Notification actions ──────────────────────────────────────────────────
+    // ── Notification actions ─────────────────────────────────────────────────
 
     const openNotifications = useCallback(() => setNotifOpen(true), []);
     const closeNotifications = useCallback(() => setNotifOpen(false), []);
@@ -187,7 +181,10 @@ export function useNotifications() {
     }, [router]);
 
     return {
-        user,
+
+        user: authUser
+            ? { email: authUser.email, full_name: authUser.user_metadata?.full_name as string | undefined }
+            : null,
         initials,
         displayName,
 

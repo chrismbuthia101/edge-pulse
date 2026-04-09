@@ -3,12 +3,16 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopBar } from "@/components/dashboard/topbar";
+import { useAuth } from "@/lib/auth/useAuth";
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    
+    useAuth();
+
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== "undefined") {
             const saved = localStorage.getItem("sidebar-collapsed");

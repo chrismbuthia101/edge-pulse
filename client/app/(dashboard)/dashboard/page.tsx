@@ -8,10 +8,6 @@ import {
     MonitorSmartphone,
     Zap,
     Shield,
-    TrendingUp,
-    AlertTriangle,
-    CheckCircle2,
-    Clock,
     ArrowUpRight,
     ArrowDownRight,
     Activity,
@@ -20,10 +16,6 @@ import { ThreatChart } from "@/components/dashboard/threat-chart";
 import { AlertFeed } from "@/components/dashboard/alert-feed";
 import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
-import { LogIntegrityPanel } from "@/components/dashboard/log-integrity-panel";
-import { OnlineOfflineDetection } from "@/components/dashboard/online-offline-detection";
-import { AgentPerformance } from "@/components/dashboard/agent-performance";
-import { SyncQueueStatus } from "@/components/dashboard/sync-queue-status";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
@@ -32,48 +24,24 @@ export default function DashboardPage() {
         document.title = "Security Dashboard - EdgePulse";
     }, []);
 
-    // ── Live store data ────────────────────────────────────────────────────────
     const alerts = useAlertStore((s) => s.alerts);
     const pendingCount = useAlertStore((s) => s.pendingCount);
     const devices = useDeviceStore((s) => s.devices);
     const onlineCount = useDeviceStore((s) => s.onlineCount);
 
-    // Derived stats - memoized for performance
     const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length || 3, [alerts]);
     const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length || 12, [alerts]);
-    const criticalCount = useMemo(() => alerts.filter((a) => a.severity === "critical" && a.status !== "CLOSED").length, [alerts]);
 
-    // Average inference latency from recent alerts
     const latencyAlerts = useMemo(() => alerts.filter((a) => a.inference_latency_ms > 0).slice(0, 50), [alerts]);
     const avgLatency = useMemo(() => latencyAlerts.length > 0
         ? Math.round(latencyAlerts.reduce((sum: number, a: Alert) => sum + a.inference_latency_ms, 0) / latencyAlerts.length)
         : 312, [latencyAlerts]);
 
-    // Resolved today
     const today = useMemo(() => new Date().toDateString(), []);
     const resolvedToday = useMemo(() => alerts.filter(
         (a) => a.status === "CLOSED" && a.closed_at && new Date(a.closed_at).toDateString() === today
     ).length, [alerts, today]);
 
-    interface StatCard {
-        title: string;
-        value: string;
-        delta: string;
-        deltaPositive: boolean;
-        icon: React.ComponentType<React.SVGAttributes<SVGSVGElement>>;
-        accent: string;
-        accentBg: string;
-        accentBorder: string;
-        href: string | null;
-    }
-
-    interface IncidentItem {
-        label: string;
-        value: number | string;
-        color: string;
-        bg: string;
-        icon: React.ComponentType<React.SVGAttributes<SVGSVGElement>>;
-    }
     const stats = useMemo(() => [
         {
             title: "Total Devices",
@@ -95,7 +63,7 @@ export default function DashboardPage() {
             accent: "text-destructive",
             accentBg: "bg-destructive/10",
             accentBorder: "border-destructive/20",
-            href: "/dashboard/alerts?filter=active",
+            href: "/dashboard/alerts",
         },
         {
             title: "Mean Response",
@@ -121,37 +89,6 @@ export default function DashboardPage() {
         },
     ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, threatsBlocked, resolvedToday]);
 
-    const incidentSummary = useMemo(() => [
-        {
-            label: "Critical",
-            value: criticalCount,
-            color: "text-destructive",
-            bg: "bg-destructive/10",
-            icon: AlertTriangle,
-        },
-        {
-            label: "Resolved Today",
-            value: resolvedToday,
-            color: "text-green-500",
-            bg: "bg-green-500/10",
-            icon: CheckCircle2,
-        },
-        {
-            label: "Avg Response",
-            value: `${avgLatency}ms`,
-            color: "text-primary",
-            bg: "bg-primary/10",
-            icon: Clock,
-        },
-        {
-            label: "Detection Rate",
-            value: "98.5%",
-            color: "text-violet-500",
-            bg: "bg-violet-500/10",
-            icon: TrendingUp,
-        },
-    ], [criticalCount, resolvedToday, avgLatency]);
-
     return (
         <div className="space-y-4 lg:space-y-6 max-w-[1400px]">
             {/* Header */}
@@ -175,7 +112,6 @@ export default function DashboardPage() {
                     </p>
                 </div>
 
-                {/* Live badge */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0">
                     <Activity className="h-3.5 w-3.5 text-green-500" />
                     <span className="text-xs font-medium text-green-600 dark:text-green-400">
@@ -185,9 +121,9 @@ export default function DashboardPage() {
                 </div>
             </motion.div>
 
-            {/* Stat cards — read from stores */}
+            {/* Stat cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-                {stats.map((stat: StatCard, i: number) => (
+                {stats.map((stat, i) => (
                     <motion.div
                         key={stat.title}
                         initial={{ opacity: 0, y: 20 }}
@@ -197,25 +133,13 @@ export default function DashboardPage() {
                         onClick={() => stat.href && (window.location.href = stat.href)}
                         className={`bg-card border border-border rounded-xl lg:rounded-2xl p-4 lg:p-5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 transition-shadow relative overflow-hidden ${stat.href ? "cursor-pointer" : ""}`}
                     >
-                        {/* Colored corner glow */}
-                        <div className={`absolute top-0 right-0 w-12 h-12 rounded-bl-full opacity-10 ${stat.accentBg}`} />
+                        <div className="absolute top-0 right-0 w-12 h-12 rounded-bl-full opacity-10" style={{ background: "currentColor" }} />
                         <div className="flex items-start justify-between mb-3 lg:mb-4">
-                            <div
-                                className={`w-8 lg:w-10 h-8 lg:h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}
-                            >
+                            <div className={`w-8 lg:w-10 h-8 lg:h-10 rounded-xl border flex items-center justify-center ${stat.accentBg} ${stat.accentBorder}`}>
                                 <stat.icon className={`h-4 lg:h-5 w-4 lg:w-5 ${stat.accent}`} />
                             </div>
-                            <span
-                                className={`flex items-center gap-1 text-[10px] lg:text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive
-                                    ? "text-green-400 bg-green-500/10"
-                                    : "text-red-400 bg-red-500/10"
-                                    }`}
-                            >
-                                {stat.deltaPositive ? (
-                                    <ArrowUpRight className="h-3 w-3" />
-                                ) : (
-                                    <ArrowDownRight className="h-3 w-3" />
-                                )}
+                            <span className={`flex items-center gap-1 text-[10px] lg:text-xs font-medium px-2 py-0.5 rounded-full ${stat.deltaPositive ? "text-green-400 bg-green-500/10" : "text-red-400 bg-red-500/10"}`}>
+                                {stat.deltaPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                                 <span className="hidden sm:inline">{stat.delta}</span>
                                 <span className="sm:hidden">{stat.delta.split(" ")[0]}</span>
                             </span>
@@ -228,30 +152,7 @@ export default function DashboardPage() {
                 ))}
             </div>
 
-            {/* Incident summary strip */}
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.4 }}
-                className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3"
-            >
-                {incidentSummary.map((item: IncidentItem) => (
-                    <div
-                        key={item.label}
-                        className={`flex items-center gap-2 lg:gap-3 p-3 lg:p-3.5 rounded-xl border border-border ${item.bg}`}
-                    >
-                        <item.icon className={`h-3.5 lg:h-4 w-3.5 lg:w-4 shrink-0 ${item.color}`} />
-                        <div className="min-w-0">
-                            <p className={`text-sm lg:text-lg font-bold font-display ${item.color} truncate`}>
-                                {item.value}
-                            </p>
-                            <p className="text-[10px] lg:text-xs text-muted-foreground">{item.label}</p>
-                        </div>
-                    </div>
-                ))}
-            </motion.div>
-
-            {/* Main content: chart + alerts */}
+            {/* Main content */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-5">
                 <div className="xl:col-span-2 space-y-4 lg:space-y-5">
                     <ThreatChart />
@@ -259,32 +160,6 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-4 lg:space-y-5">
                     <ShapPanel />
-                    <AgentPerformance />
-                </div>
-            </div>
-
-            {/* Core Analytics Section */}
-            <div className="space-y-4 lg:space-y-5">
-                <div className="flex items-center gap-2 mb-3">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Core Analytics</h2>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
-                    <OnlineOfflineDetection />
-                    <SyncQueueStatus />
-                </div>
-            </div>
-
-            {/* Security & Integrity Section */}
-            <div className="space-y-4 lg:space-y-5">
-                <div className="flex items-center gap-2 mb-3">
-                    <Shield className="h-4 w-4 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Security & Integrity</h2>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
-                    <LogIntegrityPanel />
                     <SystemHealth />
                 </div>
             </div>
