@@ -25,28 +25,34 @@ END $$;
 
 -- ─── 1. analyst_users ─────────────────────────────────────────────────────────
 CREATE TABLE analyst_users (
-    user_id     UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name   TEXT        NOT NULL,
-    role        user_role   NOT NULL DEFAULT 'ANALYST',
-    department  TEXT,
-    is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    user_id           UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name         TEXT        NOT NULL,
+    role              user_role   NOT NULL DEFAULT 'ANALYST',
+    department        TEXT,
+    is_active         BOOLEAN     NOT NULL DEFAULT TRUE,
+    approval_status   VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    approved_by       UUID        REFERENCES analyst_users(user_id),
+    approved_at       TIMESTAMPTZ,
+    rejection_reason  TEXT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_au_role      ON analyst_users(role);
-CREATE INDEX idx_au_is_active ON analyst_users(is_active);
+CREATE INDEX idx_au_role             ON analyst_users(role);
+CREATE INDEX idx_au_is_active        ON analyst_users(is_active);
+CREATE INDEX idx_au_approval_status  ON analyst_users(approval_status);
+CREATE INDEX idx_au_approved_by      ON analyst_users(approved_by);
 
 -- ─── 2. device_registry ───────────────────────────────────────────────────────
 CREATE TABLE device_registry (
     id                  UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name                TEXT            NOT NULL,       -- client: name
+    name                TEXT            NOT NULL,
     type                device_type     NOT NULL DEFAULT 'workstation',
-    os                  TEXT            NOT NULL,       -- client: os
-    ip                  INET,                           -- client: ip
+    os                  TEXT            NOT NULL,
+    ip                  INET,
     agent_version       TEXT            NOT NULL,
     -- live metrics
     status              device_status   NOT NULL DEFAULT 'online',
-    risk                device_risk     NOT NULL DEFAULT 'none',  -- client: risk
+    risk                device_risk     NOT NULL DEFAULT 'none',
     alerts_count        INTEGER         NOT NULL DEFAULT 0,
     cpu_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
     ram_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
@@ -56,7 +62,7 @@ CREATE TABLE device_registry (
     -- enrollment metadata
     enrolled_by         UUID            REFERENCES analyst_users(user_id),
     enrolled_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    last_seen           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),   -- client: last_seen
+    last_seen           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
@@ -139,7 +145,7 @@ CREATE TABLE feature_vectors (
     device_id           UUID        NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     model_id            TEXT        NOT NULL,
-    features            JSONB       NOT NULL DEFAULT '{}', 
+    features            JSONB       NOT NULL DEFAULT '{}',
     feature_version     TEXT        NOT NULL DEFAULT 'v1.0'
 );
 CREATE INDEX idx_fv_device_computed ON feature_vectors(device_id, computed_at DESC);
@@ -152,13 +158,13 @@ CREATE TABLE anomaly_scores (
     device_id               UUID            NOT NULL REFERENCES device_registry(id) ON DELETE CASCADE,
     model_id                TEXT            NOT NULL,
     score                   NUMERIC(10,8)   NOT NULL CHECK (score BETWEEN 0 AND 1),
-    label                   TEXT,          
+    label                   TEXT,
     threshold_applied       NUMERIC(10,8)   NOT NULL DEFAULT 0.75,
     above_threshold         BOOLEAN         NOT NULL DEFAULT FALSE,
     inference_latency_ms    INTEGER         NOT NULL DEFAULT 0 CHECK (inference_latency_ms >= 0),
     connectivity_state      TEXT            NOT NULL DEFAULT 'online'
                                 CHECK (connectivity_state IN ('online','offline')),
-    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),  -- AnomalyRepository orders by this
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     scored_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_asc_device_score    ON anomaly_scores(device_id, score DESC);
@@ -214,7 +220,7 @@ CREATE TABLE alert_records (
 );
 
 CREATE VIEW alerts AS
-    SELECT 
+    SELECT
         alert_id AS id,
         device_id,
         device_name,
@@ -267,7 +273,7 @@ CREATE TABLE tamper_evident_log (
     log_entry_type          TEXT        NOT NULL CHECK (log_entry_type IN ('TELEMETRY','ALERT','DETECTION','SYNC','SYSTEM')),
     log_entry_reference_id  UUID,
     entry_timestamp_utc     TIMESTAMPTZ NOT NULL,
-    entry_content_hash      TEXT        NOT NULL,  
+    entry_content_hash      TEXT        NOT NULL,
     previous_entry_hash     TEXT        NOT NULL,
     digital_signature       TEXT,
     verified                BOOLEAN     NOT NULL DEFAULT FALSE,
@@ -310,11 +316,11 @@ CREATE TABLE incident_cases (
     status          case_status     NOT NULL DEFAULT 'OPEN',
     assigned_to     UUID            REFERENCES analyst_users(user_id),
     created_by      UUID            NOT NULL REFERENCES analyst_users(user_id),
-    started_at      TIMESTAMPTZ,                            -- client: started_at
+    started_at      TIMESTAMPTZ,
     closed_at       TIMESTAMPTZ,
-    closed_by       UUID            REFERENCES analyst_users(user_id),  -- client: closed_by
-    alert_count     INTEGER         NOT NULL DEFAULT 0,    -- client: alert_count (maintained by trigger)
-    last_activity   TIMESTAMPTZ     NOT NULL DEFAULT NOW(), -- client: last_activity
+    closed_by       UUID            REFERENCES analyst_users(user_id),
+    alert_count     INTEGER         NOT NULL DEFAULT 0,
+    last_activity   TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
@@ -376,11 +382,10 @@ CREATE INDEX idx_sq_priority        ON sync_queue(priority DESC, created_at ASC)
 -- ─── 16. retention_settings ──────────────────────────────────────────────────
 CREATE TABLE retention_settings (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id       TEXT        NOT NULL UNIQUE DEFAULT 'global',  -- 'global' or device UUID as text
+    device_id       TEXT        NOT NULL UNIQUE DEFAULT 'global',
     retention_days  INTEGER     NOT NULL DEFAULT 90 CHECK (retention_days > 0),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
--- Seed global default
 INSERT INTO retention_settings (device_id, retention_days) VALUES ('global', 90)
     ON CONFLICT (device_id) DO NOTHING;
 
@@ -443,6 +448,42 @@ CREATE TABLE agent_config (
     UNIQUE(device_id, key)
 );
 
+-- Pending users awaiting admin approval
+CREATE VIEW pending_users AS
+SELECT
+    au.user_id,
+    au.full_name,
+    au.department,
+    au.created_at,
+    auth.email      AS auth_email,
+    auth.raw_user_meta_data->>'department' AS auth_department
+FROM analyst_users au
+JOIN auth.users auth ON au.user_id = auth.id
+WHERE au.approval_status = 'PENDING'
+  AND au.is_active        = TRUE
+  AND au.role             = 'ANALYST';
+
+-- Device assignment management view
+CREATE VIEW device_assignment_details AS
+SELECT
+    ada.assignment_id,
+    ada.analyst_id,
+    ada.device_id,
+    ada.assigned_at,
+    ada.assigned_by,
+    ada.is_active,
+    au.full_name    AS analyst_name,
+    auth.email      AS analyst_email,
+    dr.name         AS device_name,
+    dr.type         AS device_type,
+    dr.status       AS device_status,
+    dr.ip           AS device_ip
+FROM analyst_device_assignments ada
+JOIN analyst_users  au   ON ada.analyst_id = au.user_id
+JOIN auth.users     auth ON au.user_id     = auth.id
+JOIN device_registry dr  ON ada.device_id  = dr.id
+WHERE ada.is_active = TRUE;
+
 -- ─── Triggers ─────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -464,7 +505,7 @@ DECLARE v_case_id UUID;
 BEGIN
     v_case_id := COALESCE(NEW.case_id, OLD.case_id);
     UPDATE incident_cases
-    SET    alert_count  = (SELECT COUNT(*) FROM case_alerts WHERE case_id = v_case_id),
+    SET    alert_count   = (SELECT COUNT(*) FROM case_alerts WHERE case_id = v_case_id),
            last_activity = NOW(),
            updated_at    = NOW()
     WHERE  id = v_case_id;
@@ -491,3 +532,25 @@ $$;
 CREATE TRIGGER tr_alert_records_case_sync
     AFTER UPDATE OF severity, status, explanation_json ON alert_records
     FOR EACH ROW EXECUTE FUNCTION sync_case_alert_metadata();
+
+-- ─── Auto-provision trigger ────────────────
+-- New users start as PENDING; an admin must approve them before they gain access.
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public AS $$
+BEGIN
+    INSERT INTO analyst_users (user_id, full_name, role, approval_status)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+        'ANALYST',
+        'PENDING'
+    )
+    ON CONFLICT (user_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
