@@ -74,14 +74,14 @@ export class SyncQueueRepository extends BaseRepository {
     return this.cachedQuery(
       cacheKey,
       async () => {
-        // Aggregate sync_queue by device_id joining devices for the name
+        // Aggregate sync_queue by device_id joining device_registry for the name
         const { data, error } = await this.supabase
           .from('sync_queue')
           .select(`
             device_id,
             status,
             queued_at,
-            devices!inner ( name )
+            device_registry!inner ( name )
           `)
           .in('status', ['PENDING', 'FAILED']);
 
@@ -93,11 +93,11 @@ export class SyncQueueRepository extends BaseRepository {
           device_id: string;
           status: string;
           queued_at: string;
-          devices: { name: string };
+          device_registry: { name: string };
         }>) {
           const existing = map.get(row.device_id) ?? {
             device_id: row.device_id,
-            device_name: row.devices?.name ?? row.device_id,
+            device_name: row.device_registry?.name ?? row.device_id,
             pending_count: 0,
             failed_count: 0,
             oldest_queued_at: null,

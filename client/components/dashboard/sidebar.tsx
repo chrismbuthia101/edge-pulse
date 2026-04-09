@@ -7,6 +7,7 @@ import {
     LayoutDashboard,
     MonitorSmartphone,
     ShieldAlert,
+    Shield,
     Activity,
     Brain,
     Settings,
@@ -20,6 +21,8 @@ import {
     FileText,
     Heart,
     List,
+    Wifi,
+    BarChart3,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -44,6 +47,8 @@ const navItems = [
             { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "12" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
             { icon: Brain, label: "ML Insights", href: "/dashboard/insights" },
+            { icon: Shield, label: "Integrity", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: BarChart3, label: "Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: List, label: "Cases", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
         ],
     },
@@ -52,6 +57,7 @@ const navItems = [
         items: [
             { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
             { icon: Heart, label: "Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: Wifi, label: "Resilience", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: FileText, label: "Logs", href: "/dashboard/logs", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: Settings, label: "Settings", href: "/dashboard/settings" },
         ],

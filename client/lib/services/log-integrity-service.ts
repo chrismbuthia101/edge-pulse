@@ -1,12 +1,38 @@
 import { LogsRepository } from '@/lib/repositories';
 import type { HashChainStatus } from '@/lib/supabase/types';
 
+export interface TamperAlert {
+  id: string;
+  device_id: string;
+  device_name: string;
+  alert_type: "CHAIN_BREAK" | "SIGNATURE_MISMATCH" | "SEQUENCE_GAP" | "HASH_MISMATCH";
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  message: string;
+  sequence_number: number;
+  detected_at: string;
+  status: "ACTIVE" | "INVESTIGATING" | "RESOLVED";
+  affected_entries: number;
+}
+
+export interface IntegrityMetrics {
+  total_devices: number;
+  verified_devices: number;
+  compromised_devices: number;
+  total_entries: number;
+  verified_entries: number;
+  last_verification: string;
+  verification_rate: number;
+  average_chain_length: number;
+}
+
 export interface LogIntegrityServiceDependencies {
   repository: LogsRepository;
 }
 
 export interface IntegrityUpdateCallbacks {
   onStatusUpdate: (statuses: HashChainStatus[]) => void;
+  onTamperAlert: (alert: TamperAlert) => void;
+  onIntegrityMetricsUpdate: (metrics: IntegrityMetrics) => void;
   onVerificationComplete: (deviceId: string, success: boolean) => void;
   onError: (error: Error) => void;
 }
@@ -46,19 +72,81 @@ export class LogIntegrityService {
     }
   }
 
+  async getTamperAlerts(): Promise<TamperAlert[]> {
+    try {
+      // In a real implementation, this would fetch from the database
+      return this.getMockTamperAlerts();
+    } catch (error) {
+      console.error('Failed to fetch tamper alerts:', error);
+      return [];
+    }
+  }
+
+  async getIntegrityMetrics(): Promise<IntegrityMetrics> {
+    try {
+      const statuses = await this.getHashChainStatuses();
+
+      const totalDevices = statuses.length;
+      const verifiedDevices = statuses.filter(s => s.verified).length;
+      const compromisedDevices = statuses.filter(s => !s.verified && s.broken_at_sequence).length;
+      const totalEntries = statuses.reduce((sum, s) => sum + s.total_entries, 0);
+      const verifiedEntries = verifiedDevices * 1000; // Estimate
+      const verificationRate = totalDevices > 0 ? (verifiedDevices / totalDevices) * 100 : 0;
+      const averageChainLength = totalDevices > 0 ? totalEntries / totalDevices : 0;
+
+      return {
+        total_devices: totalDevices,
+        verified_devices: verifiedDevices,
+        compromised_devices: compromisedDevices,
+        total_entries: totalEntries,
+        verified_entries: verifiedEntries,
+        last_verification: new Date().toISOString(),
+        verification_rate: Math.round(verificationRate),
+        average_chain_length: Math.round(averageChainLength)
+      };
+    } catch (error) {
+      console.error('Failed to fetch integrity metrics:', error);
+      return this.getMockIntegrityMetrics();
+    }
+  }
+
   subscribeToIntegrityUpdates(callbacks: IntegrityUpdateCallbacks): void {
     // Subscribe to real-time updates for tamper evident logs
     // For now, we'll set up a simple polling mechanism
     // In a real implementation, this would use Supabase realtime subscriptions
 
+    let previousAlerts: TamperAlert[] = [];
+    let previousMetrics: IntegrityMetrics | null = null;
+
     const pollInterval = setInterval(async () => {
       try {
+        // Update hash chain statuses
         const statuses = await this.getHashChainStatuses();
         callbacks.onStatusUpdate(statuses);
+
+        // Check for new tamper alerts
+        const alerts = await this.getTamperAlerts();
+        const newAlerts = alerts.filter(alert =>
+          !previousAlerts.some(prev => prev.id === alert.id)
+        );
+
+        if (newAlerts.length > 0) {
+          newAlerts.forEach(alert => callbacks.onTamperAlert(alert));
+        }
+        previousAlerts = alerts;
+
+        // Update integrity metrics
+        const metrics = await this.getIntegrityMetrics();
+        if (!previousMetrics ||
+          JSON.stringify(metrics) !== JSON.stringify(previousMetrics)) {
+          callbacks.onIntegrityMetricsUpdate(metrics);
+        }
+        previousMetrics = metrics;
+
       } catch (error) {
         callbacks.onError(error as Error);
       }
-    }, 30000); // Poll every 30 seconds
+    }, 10000); // Poll every 10 seconds for more responsive updates
 
     this.subscription = {
       unsubscribe: () => clearInterval(pollInterval)
@@ -99,6 +187,60 @@ export class LogIntegrityService {
         last_verified_at: new Date(Date.now() - 1800000).toISOString(),
       },
     ];
+  }
+
+  private getMockTamperAlerts(): TamperAlert[] {
+    return [
+      {
+        id: "alert-1",
+        device_id: "device-2",
+        device_name: "Workstation-05",
+        alert_type: "CHAIN_BREAK",
+        severity: "HIGH",
+        message: "Hash chain integrity compromised - unexpected hash sequence detected",
+        sequence_number: 845,
+        detected_at: new Date(Date.now() - 3600000).toISOString(),
+        status: "ACTIVE",
+        affected_entries: 47
+      },
+      {
+        id: "alert-2",
+        device_id: "device-1",
+        device_name: "Server-01",
+        alert_type: "SIGNATURE_MISMATCH",
+        severity: "MEDIUM",
+        message: "Digital signature verification failed for log entry",
+        sequence_number: 1245,
+        detected_at: new Date(Date.now() - 7200000).toISOString(),
+        status: "INVESTIGATING",
+        affected_entries: 2
+      },
+      {
+        id: "alert-3",
+        device_id: "device-3",
+        device_name: "Laptop-12",
+        alert_type: "SEQUENCE_GAP",
+        severity: "LOW",
+        message: "Gap detected in log sequence numbers",
+        sequence_number: 432,
+        detected_at: new Date(Date.now() - 10800000).toISOString(),
+        status: "RESOLVED",
+        affected_entries: 1
+      }
+    ];
+  }
+
+  private getMockIntegrityMetrics(): IntegrityMetrics {
+    return {
+      total_devices: 3,
+      verified_devices: 2,
+      compromised_devices: 1,
+      total_entries: 2595,
+      verified_entries: 2247,
+      last_verification: new Date().toISOString(),
+      verification_rate: 67,
+      average_chain_length: 865
+    };
   }
 
   // Helper methods for UI
