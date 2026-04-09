@@ -29,8 +29,8 @@ export default function DashboardPage() {
     const devices = useDeviceStore((s) => s.devices);
     const onlineCount = useDeviceStore((s) => s.onlineCount);
 
-    const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length || 3, [alerts]);
-    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length || 12, [alerts]);
+    const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length, [alerts]);
+    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length, [alerts]);
 
     const latencyAlerts = useMemo(() => alerts.filter((a) => a.inference_latency_ms > 0).slice(0, 50), [alerts]);
     const avgLatency = useMemo(() => latencyAlerts.length > 0
@@ -45,7 +45,7 @@ export default function DashboardPage() {
     const stats = useMemo(() => [
         {
             title: "Total Devices",
-            value: devices.length > 0 ? devices.length.toLocaleString() : "5",
+            value: devices.length.toLocaleString(),
             delta: `${onlineCount} online`,
             deltaPositive: true,
             icon: MonitorSmartphone,
@@ -78,7 +78,7 @@ export default function DashboardPage() {
         },
         {
             title: "Threats Blocked",
-            value: threatsBlocked > 0 ? threatsBlocked.toLocaleString() : "12",
+            value: threatsBlocked.toLocaleString(),
             delta: `${resolvedToday} today`,
             deltaPositive: true,
             icon: Shield,

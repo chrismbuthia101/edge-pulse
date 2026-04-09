@@ -386,6 +386,25 @@ export class AlertRepository extends BaseRepository<Alert> {
     );
   }
 
+  async findById(id: string): Promise<Alert | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .select(DEFAULT_ALERT_SELECT)
+        .eq('alert_id', id)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") return null;
+        throw this.handleError(error);
+      }
+
+      return this.normaliseAlerts([data])[0];
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async getAlertsByTimeRange(
     startDate: string,
     endDate: string,

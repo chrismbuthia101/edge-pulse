@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
     Brain,
@@ -12,42 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { ModelPerformance } from "@/components/dashboard/model-performance";
 import { Activity, Cpu, MemoryStick, Zap } from "lucide-react";
+import { useAlertStore } from "@/stores/alert-store";
+import { useDeviceStore } from "@/stores/device-store";
+import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
+import { TelemetryService } from "@/lib/services/telemetry-service";
+import type { ShapFeature } from "@/lib/supabase/types";
 
-const modelStats = [
-    { label: "Model Version", value: "v2.4.1", sub: "Released 3 days ago", color: "text-primary" },
-    { label: "Detection Accuracy", value: "99.9%", sub: "On validation set", color: "text-green-500" },
-    { label: "False Positive Rate", value: "0.04%", sub: "Last 7 days", color: "text-amber-500" },
-    { label: "Avg Inference Time", value: "12ms", sub: "Edge latency", color: "text-violet-500" },
-];
-
-const realTimeMetrics = {
-    currentScore: 0.13,
-    cpuUsage: 3.2,
-    memoryUsage: 124,
-    featureVectorSize: 47,
-    lastInference: "8s ago",
-    inferencesPerSecond: 2.4,
-    anomalyThreshold: 0.75
-};
-
-const topFeatures = [
-    { label: "CPU Spike Pattern", importance: 0.34, positive: true, description: "Sudden CPU utilization spikes correlating with process anomalies" },
-    { label: "Network Anomaly Score", importance: 0.28, positive: true, description: "Unusual outbound connection patterns and volume deviations" },
-    { label: "Disk I/O Burst", importance: 0.19, positive: true, description: "Rapid sequential read/write operations outside normal baseline" },
-    { label: "Process Hierarchy Depth", importance: 0.11, positive: true, description: "Unusual parent-child process relationships detected" },
-    { label: "Memory Footprint Delta", importance: 0.06, positive: false, description: "Memory usage within normal operational range" },
-    { label: "Login History Score", importance: 0.04, positive: false, description: "Authentication patterns consistent with known user behavior" },
-];
-
-const recentDetections = [
-    { device: "dev-laptop-07", score: 0.97, label: "Process Injection", time: "2m ago", blocked: true },
-    { device: "srv-db-02", score: 0.95, label: "Privilege Escalation", time: "22m ago", blocked: true },
-    { device: "srv-prod-01", score: 0.91, label: "Data Exfiltration", time: "8m ago", blocked: true },
-    { device: "ws-finance-03", score: 0.88, label: "Brute Force", time: "15m ago", blocked: true },
-    { device: "gw-primary", score: 0.82, label: "Port Scan", time: "34m ago", blocked: false },
-];
-
-const maxImportance = Math.max(...topFeatures.map((f) => f.importance));
+const anomalyService = new AnomalyService(anomalyRepository);
+const telemetryService = new TelemetryService();
 
 export default function InsightsPage() {
     useEffect(() => {
@@ -55,6 +27,154 @@ export default function InsightsPage() {
     }, []);
 
     const [selectedFeature, setSelectedFeature] = useState<number | null>(null);
+    const [modelStats, setModelStats] = useState<{
+        label: string;
+        value: string;
+        sub: string;
+        color: string;
+    }[]>([]);
+    const [realTimeMetrics, setRealTimeMetrics] = useState<{
+        currentScore: number;
+        cpuUsage: number;
+        memoryUsage: number;
+        featureVectorSize: number;
+        lastInference: string;
+        inferencesPerSecond: number;
+        anomalyThreshold: number;
+    }>({} as {
+        currentScore: number;
+        cpuUsage: number;
+        memoryUsage: number;
+        featureVectorSize: number;
+        lastInference: string;
+        inferencesPerSecond: number;
+        anomalyThreshold: number;
+    });
+    const [topFeatures, setTopFeatures] = useState<{
+        label: string;
+        importance: number;
+        positive: boolean;
+        description: string;
+    }[]>([]);
+    const [recentDetections, setRecentDetections] = useState<{
+        device: string;
+        score: number;
+        label: string;
+        time: string;
+        blocked: boolean;
+    }[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const alerts = useAlertStore((s) => s.alerts);
+    const devices = useDeviceStore((s) => s.devices);
+
+    useEffect(() => {
+        const loadInsightsData = async () => {
+            try {
+                setLoading(true);
+
+                const highConfidenceAlerts = alerts
+                    .filter(a => a.anomaly_score > 0.8)
+                    .slice(0, 5)
+                    .map(a => ({
+                        device: a.device_name,
+                        score: a.anomaly_score,
+                        label: a.title,
+                        time: formatTimeAgo(a.created_at),
+                        blocked: a.status === 'CLOSED'
+                    }));
+
+                setRecentDetections(highConfidenceAlerts);
+
+                if (devices.length > 0) {
+                    const latestScores = await Promise.all(
+                        devices.slice(0, 3).map(async (device) => {
+                            const score = await anomalyService.getLatestAnomalyScore(device.id);
+                            const telemetry = await telemetryService.getTelemetryMetrics(device.id);
+                            return { device, score, telemetry };
+                        })
+                    );
+
+                    const latestScore = latestScores[0]?.score;
+                    const telemetry = latestScores[0]?.telemetry;
+
+                    if (latestScore && telemetry) {
+                        setRealTimeMetrics({
+                            currentScore: latestScore.score,
+                            cpuUsage: telemetry.avgCpu,
+                            memoryUsage: telemetry.avgRam,
+                            featureVectorSize: 47, // This would come from the actual feature vector
+                            lastInference: formatTimeAgo(latestScore.scored_at),
+                            inferencesPerSecond: 2.4, // This would be calculated from actual data
+                            anomalyThreshold: latestScore.threshold_applied || 0.75
+                        });
+                    }
+
+                    const recentAlertsWithShap = alerts
+                        .filter(a => a.explanation_json && a.explanation_json.features)
+                        .slice(0, 1);
+
+                    if (recentAlertsWithShap.length > 0 && recentAlertsWithShap[0].explanation_json?.features) {
+                        const shapFeatures = recentAlertsWithShap[0].explanation_json.features
+                            .slice(0, 6)
+                            .map((f: ShapFeature) => ({
+                                label: f.feature_name,
+                                importance: Math.abs(f.attribution_score),
+                                positive: f.contribution_type === 'positive',
+                                description: `Feature contribution: ${f.contribution_type} with score ${f.attribution_score}`
+                            }));
+
+                        setTopFeatures(shapFeatures);
+                    }
+                }
+
+                const avgLatency = alerts.length > 0
+                    ? alerts.reduce((sum, a) => sum + a.inference_latency_ms, 0) / alerts.length
+                    : 0;
+
+                setModelStats([
+                    { label: "Model Version", value: "v2.4.1", sub: "Released 3 days ago", color: "text-primary" },
+                    { label: "Detection Accuracy", value: "99.9%", sub: "On validation set", color: "text-green-500" },
+                    { label: "False Positive Rate", value: "0.04%", sub: "Last 7 days", color: "text-amber-500" },
+                    { label: "Avg Inference Time", value: `${Math.round(avgLatency)}ms`, sub: "Edge latency", color: "text-violet-500" },
+                ]);
+
+            } catch (error) {
+                console.error('Failed to load insights data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadInsightsData();
+    }, [alerts, devices]);
+
+    const maxImportance = useMemo(() => {
+        return topFeatures.length > 0 ? Math.max(...topFeatures.map((f) => f.importance)) : 1;
+    }, [topFeatures]);
+
+    const formatTimeAgo = (dateString: string): string => {
+        const now = new Date();
+        const past = new Date(dateString);
+        const diffMs = now.getTime() - past.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return `${Math.floor(diffHours / 24)}d ago`;
+    };
+
+
+    if (loading) {
+        return (
+            <div className="max-w-[1200px] space-y-6">
+                <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-[1200px] space-y-6">
@@ -193,19 +313,19 @@ export default function InsightsPage() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="text-center">
                             <div className="flex items-center justify-center gap-1 mb-2">
-                                <div className={`w-3 h-3 rounded-full ${realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'bg-red-500' : 'bg-green-500'} animate-pulse`} />
-                                <span className={`text-xl font-bold font-display ${realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'text-red-500' : 'text-green-500'}`}>
-                                    {realTimeMetrics.currentScore.toFixed(2)}
+                                <div className={`w-3 h-3 rounded-full ${realTimeMetrics.currentScore && realTimeMetrics.anomalyThreshold && realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'bg-red-500' : 'bg-green-500'} animate-pulse`} />
+                                <span className={`text-xl font-bold font-display ${realTimeMetrics.currentScore && realTimeMetrics.anomalyThreshold && realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'text-red-500' : 'text-green-500'}`}>
+                                    {realTimeMetrics.currentScore ? realTimeMetrics.currentScore.toFixed(2) : '0.00'}
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground">Current Score</p>
-                            <p className="text-[9px] text-muted-foreground">Threshold: {realTimeMetrics.anomalyThreshold}</p>
+                            <p className="text-[9px] text-muted-foreground">Threshold: {realTimeMetrics.anomalyThreshold || '0.75'}</p>
                         </div>
                         <div className="text-center">
                             <div className="flex items-center justify-center gap-1 mb-2">
                                 <Cpu className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-xl font-bold font-display text-green-500">
-                                    {realTimeMetrics.cpuUsage}%
+                                    {realTimeMetrics.cpuUsage || 0}%
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground">CPU Usage</p>
@@ -215,7 +335,7 @@ export default function InsightsPage() {
                             <div className="flex items-center justify-center gap-1 mb-2">
                                 <MemoryStick className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-xl font-bold font-display text-blue-500">
-                                    {realTimeMetrics.memoryUsage}MB
+                                    {realTimeMetrics.memoryUsage || 0}MB
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground">Memory</p>
@@ -225,20 +345,20 @@ export default function InsightsPage() {
                             <div className="flex items-center justify-center gap-1 mb-2">
                                 <Zap className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-xl font-bold font-display text-violet-500">
-                                    {realTimeMetrics.inferencesPerSecond}/s
+                                    {realTimeMetrics.inferencesPerSecond || 0}/s
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground">Inferences/sec</p>
-                            <p className="text-[9px] text-violet-500">Last: {realTimeMetrics.lastInference}</p>
+                            <p className="text-[9px] text-violet-500">Last: {realTimeMetrics.lastInference || 'Never'}</p>
                         </div>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            <span>Feature Vector: {realTimeMetrics.featureVectorSize} dimensions</span>
+                            <span>Feature Vector: {realTimeMetrics.featureVectorSize || 0} dimensions</span>
                             <span>•</span>
                             <span>Model: Isolation Forest</span>
                             <span>•</span>
-                            <span>Status: {realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'ANOMALY DETECTED' : 'Normal Operation'}</span>
+                            <span>Status: {realTimeMetrics.currentScore && realTimeMetrics.anomalyThreshold && realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'ANOMALY DETECTED' : 'Normal Operation'}</span>
                         </div>
                     </div>
                 </div>

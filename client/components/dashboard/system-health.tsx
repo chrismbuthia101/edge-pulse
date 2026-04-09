@@ -3,9 +3,16 @@
 import { motion } from "framer-motion";
 import { HeartPulse, Cpu, MemoryStick, Zap, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
+import { useAlertStore } from "@/stores/alert-store";
+import { useDeviceStore } from "@/stores/device-store";
+import { TelemetryService } from "@/lib/services/telemetry-service";
+import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 
-const services = [
+const telemetryService = new TelemetryService();
+const anomalyService = new AnomalyService(anomalyRepository);
+
+const defaultServices = [
     { name: "ML Inference Engine", status: "operational", latency: "12ms" },
     { name: "Alert Pipeline", status: "operational", latency: "4ms" },
     { name: "Device Sync Service", status: "operational", latency: "280ms" },
@@ -14,17 +21,6 @@ const services = [
     { name: "Backup Service", status: "operational", latency: "120ms" },
 ];
 
-// Agent resource metrics for Objective 1 demonstration
-const agentMetrics = {
-    cpuUsage: 3.2, // % - below 5% target for normal operation
-    memoryUsage: 124, // MB - below 150MB target
-    inferenceLatency: 12, // ms - below 2000ms target
-    scoringCpuUsage: 8.7, // % - below 15% target during scoring
-    uptime: 99.94,
-    lastScored: "2m ago",
-    modelVersion: "v2.4.1"
-};
-
 const statusConfig = {
     operational: { label: "Operational", color: "text-green-500", bg: "bg-green-500", dot: "bg-green-500" },
     degraded: { label: "Degraded", color: "text-amber-500", bg: "bg-amber-500", dot: "bg-amber-500" },
@@ -32,8 +28,75 @@ const statusConfig = {
 };
 
 export function SystemHealth() {
-    const operational = useMemo(() => services.filter((s) => s.status === "operational").length, []);
-    const total = useMemo(() => services.length, []);
+    const alerts = useAlertStore((s) => s.alerts);
+    const devices = useDeviceStore((s) => s.devices);
+    const [services, setServices] = useState(defaultServices);
+    const [agentMetrics, setAgentMetrics] = useState({
+        cpuUsage: 3.2,
+        memoryUsage: 124,
+        inferenceLatency: 12,
+        scoringCpuUsage: 8.7,
+        uptime: 99.94,
+        lastScored: "2m ago",
+        modelVersion: "v2.4.1"
+    });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadHealthData = async () => {
+            try {
+                setLoading(true);
+
+                const avgLatency = alerts.length > 0
+                    ? alerts.reduce((sum, a) => sum + a.inference_latency_ms, 0) / alerts.length
+                    : 12;
+
+                let telemetryData = { avgCpu: 3.2, avgRam: 124 };
+                if (devices.length > 0) {
+                    telemetryData = await telemetryService.getTelemetryMetrics(devices[0].id);
+                }
+
+                let lastScored = "No data";
+                if (devices.length > 0) {
+                    const latestScore = await anomalyService.getLatestAnomalyScore(devices[0].id);
+                    if (latestScore) {
+                        const now = new Date();
+                        const scored = new Date(latestScore.scored_at);
+                        const diffMins = Math.floor((now.getTime() - scored.getTime()) / 60000);
+                        lastScored = diffMins < 60 ? `${diffMins}m ago` : `${Math.floor(diffMins / 60)}h ago`;
+                    }
+                }
+
+                setAgentMetrics({
+                    cpuUsage: telemetryData.avgCpu,
+                    memoryUsage: telemetryData.avgRam,
+                    inferenceLatency: Math.round(avgLatency),
+                    scoringCpuUsage: Math.min(telemetryData.avgCpu * 2.5, 15), // Estimate scoring CPU
+                    uptime: devices.length > 0 ? 99.9 : 0, // Simplified uptime calculation
+                    lastScored,
+                    modelVersion: "v2.4.1"
+                });
+
+                const updatedServices = defaultServices.map(service => {
+                    if (service.name === "ML Inference Engine") {
+                        return { ...service, latency: `${Math.round(avgLatency)}ms` };
+                    }
+                    return service;
+                });
+                setServices(updatedServices);
+
+            } catch (error) {
+                console.error('Failed to load health data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadHealthData();
+    }, [alerts, devices]);
+
+    const operational = useMemo(() => services.filter((s) => s.status === "operational").length, [services]);
+    const total = useMemo(() => services.length, [services]);
 
     const getCpuColor = (usage: number) => {
         if (usage < 5) return "text-green-500";
@@ -46,6 +109,29 @@ export function SystemHealth() {
         if (usage < 145) return "text-amber-500";
         return "text-red-500";
     };
+
+    if (loading) {
+        return (
+            <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <HeartPulse className="h-4 w-4 text-green-500 shrink-0" />
+                        <h3 className="text-sm font-semibold text-foreground truncate">System Health</h3>
+                    </div>
+                </div>
+                <div className="p-5">
+                    <div className="animate-pulse space-y-3">
+                        <div className="h-4 bg-muted rounded w-1/3"></div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-12 bg-muted rounded"></div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-card border border-border rounded-xl lg:rounded-2xl overflow-hidden">

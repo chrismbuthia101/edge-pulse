@@ -214,7 +214,45 @@ CREATE TABLE alert_records (
 );
 
 CREATE VIEW alerts AS
-    SELECT alert_id AS id, * FROM alert_records;
+    SELECT 
+        alert_id AS id,
+        device_id,
+        device_name,
+        telemetry_event_id,
+        feature_vector_id,
+        anomaly_score_id,
+        anomaly_score,
+        model_id,
+        collection_agent_version,
+        inference_latency_ms,
+        telemetry_source,
+        title,
+        description,
+        severity,
+        category,
+        confidence,
+        detection_window_start,
+        detection_window_end,
+        detection_window_minutes,
+        explanation_json,
+        net_destination_ip,
+        net_destination_port,
+        net_protocol,
+        net_duration_ms,
+        proc_name,
+        proc_privilege_level,
+        proc_pid,
+        status,
+        read,
+        created_at,
+        updated_at,
+        acknowledged_at,
+        acknowledged_by,
+        investigated_at,
+        investigated_by,
+        closed_at,
+        closed_by
+    FROM alert_records;
 
 CREATE INDEX idx_ar_device_created  ON alert_records(device_id, created_at DESC);
 CREATE INDEX idx_ar_severity_status ON alert_records(severity, status);
