@@ -10,8 +10,33 @@
 -- incident_cases  → CaseRepository.subscribeToCases
 -- sync_queue      → SyncQueueRepository.subscribeToSyncQueue
 -- telemetry_events → LiveRepository.subscribeToLiveFeed
-ALTER PUBLICATION supabase_realtime ADD TABLE alert_records;
-ALTER PUBLICATION supabase_realtime ADD TABLE device_registry;
-ALTER PUBLICATION supabase_realtime ADD TABLE incident_cases;
-ALTER PUBLICATION supabase_realtime ADD TABLE sync_queue;
-ALTER PUBLICATION supabase_realtime ADD TABLE telemetry_events;
+
+-- Handle tables that might already be in the publication
+DO $$
+BEGIN
+    -- Try to add each table, ignore if already exists
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE alert_records;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE device_registry;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE incident_cases;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE sync_queue;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE telemetry_events;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+END $$;

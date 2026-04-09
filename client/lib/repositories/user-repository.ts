@@ -15,6 +15,10 @@ export interface AnalystUser {
   created_at: string;
   updated_at: string;
   email?: string;
+  approval_status?: "PENDING" | "APPROVED" | "REJECTED";
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
 }
 
 export interface UserQueryOptions extends QueryOptions {
@@ -22,6 +26,7 @@ export interface UserQueryOptions extends QueryOptions {
   isActive?: boolean;
   department?: string;
   search?: string;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
 }
 
 export interface UserSubscriptionCallbacks {
@@ -42,6 +47,7 @@ export class UserRepository extends BaseRepository<AnalystUser> {
     if (options.role) standardFilters.role = options.role;
     if (options.isActive !== undefined) standardFilters.is_active = options.isActive;
     if (options.department) standardFilters.department = options.department;
+    if (options.approvalStatus) standardFilters.approval_status = options.approvalStatus;
 
     let query = this.buildQuery({
       select: options.select ?? '*',
@@ -136,6 +142,78 @@ export class UserRepository extends BaseRepository<AnalystUser> {
 
   async deleteUser(id: string): Promise<void> {
     await this.delete(id);
+  }
+
+  async getPendingUsers(): Promise<AnalystUser[]> {
+    return this.findUsers({
+      approvalStatus: 'PENDING',
+      isActive: true,
+      orderBy: { column: 'created_at', ascending: false },
+      cacheTTL: 30 * 1000,
+    });
+  }
+
+  async approveUser(
+    userId: string,
+    role: 'ANALYST' | 'ADMINISTRATOR',
+    approvedBy: string
+  ): Promise<AnalystUser> {
+    const updateData = {
+      role,
+      approval_status: 'APPROVED' as const,
+      approved_by: approvedBy,
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      rejection_reason: null as string | null,
+    };
+    return this.update(userId, updateData as Partial<AnalystUser>);
+  }
+
+  async rejectUser(
+    userId: string,
+    rejectionReason: string,
+    rejectedBy: string
+  ): Promise<AnalystUser> {
+    return this.update(userId, {
+      approval_status: 'REJECTED',
+      approved_by: rejectedBy,
+      approved_at: new Date().toISOString(),
+      rejection_reason: rejectionReason,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  async getUsersByApprovalStatus(status: 'PENDING' | 'APPROVED' | 'REJECTED'): Promise<AnalystUser[]> {
+    return this.findUsers({
+      approvalStatus: status,
+      orderBy: { column: 'created_at', ascending: false },
+      cacheTTL: 60 * 1000,
+    });
+  }
+
+  async getApprovedUsers(): Promise<AnalystUser[]> {
+    return this.getUsersByApprovalStatus('APPROVED');
+  }
+
+  async getRejectedUsers(): Promise<AnalystUser[]> {
+    return this.getUsersByApprovalStatus('REJECTED');
+  }
+
+  async reapproveUser(
+    userId: string,
+    role: 'ANALYST' | 'ADMINISTRATOR',
+    approvedBy: string
+  ): Promise<AnalystUser> {
+    const updateData = {
+      role,
+      approval_status: 'APPROVED' as const,
+      approved_by: approvedBy,
+      approved_at: new Date().toISOString(),
+      is_active: true,
+      updated_at: new Date().toISOString(),
+      rejection_reason: null as string | null,
+    };
+    return this.update(userId, updateData as Partial<AnalystUser>);
   }
 
   // ── Realtime ───────────────────────────────────────────────────────────────

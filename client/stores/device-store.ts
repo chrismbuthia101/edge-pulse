@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { DeviceRepository } from '@/lib/repositories';
 import { DeviceService } from '@/lib/services/device-service';
 import { AnomalyService, anomalyRepository } from '@/lib/services/anomaly-service';
+import { DeviceAssignmentRepository } from '@/lib/repositories/device-assignment-repository';
 import type { DeviceAnalytics, UpdateDeviceMetricsParams } from '@/lib/services/device-service';
 import type { Device } from '@/lib/supabase/types';
 import type { AnomalyScore } from '@/lib/repositories/anomaly-repository';
@@ -16,6 +17,7 @@ interface DeviceStore {
 
   initialize: () => Promise<void>;
   refreshDevices: () => Promise<void>;
+  refreshDevicesForUser: (userId: string, isAdmin: boolean) => Promise<void>;
   updateDevice: (device: Device) => void;
   setDevices: (devices: Device[]) => void;
   clearError: () => void;
@@ -49,6 +51,7 @@ interface DeviceStore {
 const deviceRepository = new DeviceRepository();
 const deviceService = new DeviceService(deviceRepository);
 const anomalyService = new AnomalyService(anomalyRepository);
+const deviceAssignmentRepository = new DeviceAssignmentRepository();
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -59,8 +62,6 @@ function countOnline(devices: Device[]): number {
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'An unexpected error occurred';
 }
-
-// ─── Store ─────────────────────────────────────────────────────────────────────
 
 export const useDeviceStore = create<DeviceStore>((set, get) => ({
   // ── Initial state ──────────────────────────────────────────────────────────
@@ -77,6 +78,40 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
       const result = await deviceService.getDevicesPaginated({ page: 1, limit: 200 });
       set({ devices: result.devices, onlineCount: countOnline(result.devices), loading: false });
       get().subscribeToDeviceUpdates();
+    } catch (err) {
+      set({ error: errorMessage(err), loading: false });
+    }
+  },
+
+  refreshDevicesForUser: async (userId: string, isAdmin: boolean) => {
+    try {
+      set({ loading: true, error: null });
+
+      let devices: Device[];
+      if (isAdmin) {
+        const result = await deviceService.getDevicesPaginated({ page: 1, limit: 200 });
+        devices = result.devices;
+      } else {
+        const assignments = await deviceAssignmentRepository.getAnalystDevices(userId);
+        const deviceIds = assignments.map(a => a.device_id);
+
+        if (deviceIds.length === 0) {
+          devices = [];
+        } else {
+          devices = await Promise.all(
+            deviceIds.map(async (deviceId) => {
+              try {
+                return await deviceRepository.findById(deviceId);
+              } catch {
+                console.warn(`Device ${deviceId} not found`);
+                return null;
+              }
+            })
+          ).then(devices => devices.filter(Boolean) as Device[]);
+        }
+      }
+
+      set({ devices, onlineCount: countOnline(devices), loading: false });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
     }
@@ -273,8 +308,6 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   unsubscribeFromDeviceUpdates: () => {
     deviceService.unsubscribeFromDeviceUpdates();
   },
-
-  // ── Bulk operations ────────────────────────────────────────────────────────
 
   bulkIsolate: async (deviceIds, reason) => {
     try {

@@ -66,6 +66,7 @@ const navItems = [
         group: "Administration",
         items: [
             { icon: Users, label: "Users", href: "/dashboard/users", roles: ["ADMINISTRATOR"] },
+            { icon: MonitorSmartphone, label: "Device Assignments", href: "/dashboard/assignments", roles: ["ADMINISTRATOR"] },
             { icon: FileText, label: "Reports", href: "/dashboard/reports", roles: ["ADMINISTRATOR"] },
         ],
     },

@@ -35,21 +35,31 @@ export default function UsersPage() {
     const { user: currentUser, hasRole } = useAuth();
     const {
         users,
+        pendingUsers,
         loading,
         searchTerm,
         filterRole,
         filterStatus,
+        filterApprovalStatus,
         initialize,
+        refreshPendingUsers,
         setSearchTerm,
         setFilterRole,
         setFilterStatus,
+        setFilterApprovalStatus,
         toggleUserStatus,
-        changeUserRole
+        changeUserRole,
+        approveUser,
+        rejectUser,
+        reapproveUser
     } = useUserStore();
 
     useEffect(() => {
         initialize();
-    }, [initialize]);
+        if (hasRole(["ADMINISTRATOR"])) {
+            refreshPendingUsers();
+        }
+    }, [initialize, refreshPendingUsers, hasRole]);
 
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
@@ -75,8 +85,11 @@ export default function UsersPage() {
             filterStatus === "all" ||
             (filterStatus === "active" && user.is_active) ||
             (filterStatus === "inactive" && !user.is_active);
+        const matchesApproval =
+            filterApprovalStatus === "all" ||
+            user.approval_status === filterApprovalStatus;
 
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch && matchesRole && matchesStatus && matchesApproval;
     });
 
     return (
@@ -112,11 +125,75 @@ export default function UsersPage() {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
+                                {hasRole(["ADMINISTRATOR"]) && (
+                                    <select value={filterApprovalStatus} onChange={(e) => setFilterApprovalStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
+                                        <option value="all">All Approval</option>
+                                        <option value="PENDING">Pending</option>
+                                        <option value="APPROVED">Approved</option>
+                                        <option value="REJECTED">Rejected</option>
+                                    </select>
+                                )}
                             </div>
                         </div>
                     </CardContent>
                 </Card>
             </motion.div>
+
+            {/* Pending Approvals Section for Administrators */}
+            {hasRole(["ADMINISTRATOR"]) && pendingUsers.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                    <Card className="mb-6 border-orange-200 bg-orange-50/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-orange-800">
+                                <UserPlus className="h-5 w-5" />
+                                Pending User Approvals ({pendingUsers.length})
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {pendingUsers.map((user) => (
+                                    <div key={user.user_id} className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-white">
+                                        <div className="flex-1">
+                                            <div className="font-medium text-orange-900">{user.full_name}</div>
+                                            <div className="text-sm text-orange-700">{user.email}</div>
+                                            <div className="text-xs text-orange-600">
+                                                Applied {new Date(user.created_at).toLocaleDateString()} · {user.department || "No department"}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                size="sm"
+                                                onClick={() => approveUser(user.user_id, "ANALYST")}
+                                                className="bg-green-600 hover:bg-green-700"
+                                            >
+                                                Approve as Analyst
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => approveUser(user.user_id, "ADMINISTRATOR")}
+                                                className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                                            >
+                                                Approve as Admin
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={() => {
+                                                    const reason = prompt("Rejection reason (optional):") || "No reason provided";
+                                                    rejectUser(user.user_id, reason);
+                                                }}
+                                            >
+                                                Reject
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            )}
 
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                 <Card>
@@ -143,6 +220,7 @@ export default function UsersPage() {
                                         <TableHead>Role</TableHead>
                                         <TableHead>Department</TableHead>
                                         <TableHead>Status</TableHead>
+                                        {hasRole(["ADMINISTRATOR"]) && <TableHead>Approval</TableHead>}
                                         <TableHead>Created</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -171,6 +249,17 @@ export default function UsersPage() {
                                                     {user.is_active ? "Active" : "Inactive"}
                                                 </Badge>
                                             </TableCell>
+                                            {hasRole(["ADMINISTRATOR"]) && (
+                                                <TableCell>
+                                                    <Badge className={
+                                                        user.approval_status === "APPROVED" ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                                                            user.approval_status === "PENDING" ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
+                                                                "bg-red-500/10 text-red-500 border-red-500/20"
+                                                    }>
+                                                        {user.approval_status || "UNKNOWN"}
+                                                    </Badge>
+                                                </TableCell>
+                                            )}
                                             <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
@@ -187,6 +276,12 @@ export default function UsersPage() {
                                                             <Shield className="h-4 w-4 mr-2" />
                                                             Change to {user.role === "ADMINISTRATOR" ? "Analyst" : "Administrator"}
                                                         </DropdownMenuItem>
+                                                        {user.approval_status === "REJECTED" && (
+                                                            <DropdownMenuItem onClick={() => reapproveUser(user.user_id, user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR")}>
+                                                                <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                                                                Reapprove User
+                                                            </DropdownMenuItem>
+                                                        )}
                                                         {user.user_id !== currentUser?.id && (
                                                             <>
                                                                 <DropdownMenuSeparator />

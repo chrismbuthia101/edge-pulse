@@ -17,6 +17,8 @@ interface AuthContextType {
   hasRole: (roles: string[]) => boolean;
   isAdmin: boolean;
   isAnalyst: boolean;
+  isApproved: boolean;
+  approvalStatus: string | null;
   resetInactivityTimer: () => void;
 }
 
@@ -67,6 +69,9 @@ export function useAuth(): AuthContextType {
     };
   }, []);
 
+  const isApproved = authStore.user?.approval_status === 'APPROVED' && authStore.user?.is_active === true;
+  const approvalStatus = authStore.user?.approval_status || null;
+
   return {
     user: authStore.user,
     session: authStore.session,
@@ -77,6 +82,8 @@ export function useAuth(): AuthContextType {
     hasRole: authStore.hasRole,
     isAdmin: authStore.isAdmin,
     isAnalyst: authStore.isAnalyst,
+    isApproved,
+    approvalStatus,
     resetInactivityTimer: authStore.resetInactivityTimer,
   };
 }

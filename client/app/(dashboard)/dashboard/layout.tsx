@@ -10,8 +10,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    
-    useAuth();
+    const { user, loading, isApproved } = useAuth();
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== "undefined") {
@@ -25,6 +24,45 @@ export default function DashboardLayout({
     useEffect(() => {
         localStorage.setItem("sidebar-collapsed", JSON.stringify(sidebarCollapsed));
     }, [sidebarCollapsed]);
+
+    // Show loading state while checking authentication
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    // Show approval pending screen if user is not approved
+    if (!user || !isApproved) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center max-w-md mx-auto p-6">
+                    <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
+                        Account Pending Approval
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                        Your account is awaiting administrator approval. You will receive access once an administrator has reviewed and approved your registration.
+                    </p>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                        <p>• Status: <span className="text-orange-600 font-medium">Pending Approval</span></p>
+                        <p>• Email: {user?.email || 'Unknown'}</p>
+                    </div>
+                    <div className="mt-8 pt-6 border-t border-border">
+                        <p className="text-xs text-muted-foreground">
+                            If you believe this is an error, please contact your system administrator.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background flex">
