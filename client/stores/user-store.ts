@@ -102,28 +102,77 @@ export const useUserStore = create<UserStore>((set, get) => ({
   },
 
   toggleUserStatus: async (userId: string, isActive: boolean) => {
+    const newStatus = !isActive;
+    const { users } = get();
+
+    // Optimistic update
+    set({
+      users: users.map(user =>
+        user.user_id === userId
+          ? { ...user, is_active: newStatus }
+          : user
+      )
+    });
+
     try {
-      await userService.updateUserStatus(userId, { isActive: !isActive });
-      toast.success(`User ${!isActive ? "activated" : "deactivated"} successfully`);
-      get().refreshUsers();
+      await userService.updateUserStatus(userId, { isActive: newStatus });
+      toast.success(`User ${newStatus ? "activated" : "deactivated"} successfully`);
     } catch (err) {
       console.error("Failed to toggle user status:", err);
       toast.error("Failed to update user status");
+      // Revert optimistic update on error
+      set({ users });
     }
   },
 
   changeUserRole: async (userId: string, newRole: "ANALYST" | "ADMINISTRATOR") => {
+    const { users } = get();
+    const oldUser = users.find(u => u.user_id === userId);
+    const oldRole = oldUser?.role;
+
+    set({
+      users: users.map(user =>
+        user.user_id === userId
+          ? { ...user, role: newRole }
+          : user
+      )
+    });
+
     try {
       await userService.updateUserRole(userId, { role: newRole });
       toast.success(`User role changed to ${newRole} successfully`);
-      get().refreshUsers();
     } catch (err) {
       console.error("Failed to change user role:", err);
       toast.error("Failed to change user role");
+
+      if (oldRole) {
+        set({
+          users: users.map(user =>
+            user.user_id === userId
+              ? { ...user, role: oldRole }
+              : user
+          )
+        });
+      }
     }
   },
 
   createUser: async (userData: { full_name: string; role: "ANALYST" | "ADMINISTRATOR"; department?: string; email?: string }) => {
+    const { users } = get();
+
+    const optimisticUser: AnalystUser = {
+      user_id: `temp-${Date.now()}`,
+      full_name: userData.full_name,
+      role: userData.role,
+      department: userData.department || null,
+      is_active: true,
+      approval_status: "APPROVED",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    set({ users: [...users, optimisticUser] });
+
     try {
       await userService.createUser({
         ...userData,
@@ -135,57 +184,117 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch (err) {
       console.error("Failed to create user:", err);
       toast.error("Failed to create user");
+      set({ users });
     }
   },
 
   approveUser: async (userId: string, role: "ANALYST" | "ADMINISTRATOR") => {
+    const { users, pendingUsers } = get();
+    const pendingUser = pendingUsers.find(u => u.user_id === userId);
+
+    if (pendingUser) {
+      set({
+        pendingUsers: pendingUsers.filter(u => u.user_id !== userId),
+
+        users: [...users, {
+          ...pendingUser,
+          role,
+          approval_status: "APPROVED" as const,
+          is_active: true
+        }]
+      });
+    } else {
+      set({
+        users: users.map(user =>
+          user.user_id === userId
+            ? { ...user, role, approval_status: "APPROVED" as const, is_active: true }
+            : user
+        )
+      });
+    }
+
     try {
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       await userRepository.approveUser(userId, role, currentUser.id);
       toast.success(`User approved as ${role}`);
-      get().refreshUsers();
-      get().refreshPendingUsers();
     } catch (err) {
       console.error("Failed to approve user:", err);
       toast.error("Failed to approve user");
+      set({ users, pendingUsers });
     }
   },
 
   rejectUser: async (userId: string, reason: string) => {
+    const { users, pendingUsers } = get();
+    const pendingUser = pendingUsers.find(u => u.user_id === userId);
+
+    if (pendingUser) {
+      set({
+        pendingUsers: pendingUsers.filter(u => u.user_id !== userId),
+        users: [...users, {
+          ...pendingUser,
+          approval_status: "REJECTED" as const,
+          is_active: false
+        }]
+      });
+    } else {
+      set({
+        users: users.map(user =>
+          user.user_id === userId
+            ? { ...user, approval_status: "REJECTED" as const, is_active: false }
+            : user
+        )
+      });
+    }
+
     try {
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       await userRepository.rejectUser(userId, reason, currentUser.id);
       toast.success("User rejected");
-      get().refreshUsers();
-      get().refreshPendingUsers();
     } catch (err) {
       console.error("Failed to reject user:", err);
       toast.error("Failed to reject user");
+      set({ users, pendingUsers });
     }
   },
 
   reapproveUser: async (userId: string, role: "ANALYST" | "ADMINISTRATOR") => {
+    const { users } = get();
+
+    set({
+      users: users.map(user =>
+        user.user_id === userId
+          ? { ...user, role, approval_status: "APPROVED" as const, is_active: true }
+          : user
+      )
+    });
+
     try {
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       await userRepository.reapproveUser(userId, role, currentUser.id);
       toast.success(`User reapproved as ${role}`);
-      get().refreshUsers();
-      get().refreshPendingUsers();
     } catch (err) {
       console.error("Failed to reapprove user:", err);
       toast.error("Failed to reapprove user");
+      get().refreshUsers();
     }
   },
 
   deleteUser: async (userId: string) => {
+    const { users, pendingUsers } = get();
+
+    set({
+      users: users.filter(u => u.user_id !== userId),
+      pendingUsers: pendingUsers.filter(u => u.user_id !== userId)
+    });
+
     try {
       await userService.deleteUser(userId);
       toast.success("User deleted successfully");
-      get().refreshUsers();
-      get().refreshPendingUsers();
     } catch (err) {
       console.error("Failed to delete user:", err);
       toast.error("Failed to delete user");
+      set({ users, pendingUsers });
     }
   },
 

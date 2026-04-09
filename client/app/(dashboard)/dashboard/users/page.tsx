@@ -17,7 +17,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useUserStore } from "@/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
 
@@ -77,7 +77,6 @@ export default function UsersPage() {
         const matchesSearch =
             !searchTerm ||
             user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesRole = filterRole === "all" || user.role === filterRole;
@@ -91,6 +90,9 @@ export default function UsersPage() {
 
         return matchesSearch && matchesRole && matchesStatus && matchesApproval;
     });
+
+    const getInitials = (name: string) =>
+        name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
     return (
         <div className="space-y-6">
@@ -111,10 +113,15 @@ export default function UsersPage() {
                             <div className="flex-1">
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+                                    <Input
+                                        placeholder="Search by name or department..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="pl-10"
+                                    />
                                 </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                                 <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
                                     <option value="all">All Roles</option>
                                     <option value="ADMINISTRATOR">Administrators</option>
@@ -125,26 +132,24 @@ export default function UsersPage() {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
-                                {hasRole(["ADMINISTRATOR"]) && (
-                                    <select value={filterApprovalStatus} onChange={(e) => setFilterApprovalStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
-                                        <option value="all">All Approval</option>
-                                        <option value="PENDING">Pending</option>
-                                        <option value="APPROVED">Approved</option>
-                                        <option value="REJECTED">Rejected</option>
-                                    </select>
-                                )}
+                                <select value={filterApprovalStatus} onChange={(e) => setFilterApprovalStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
+                                    <option value="all">All Approval</option>
+                                    <option value="PENDING">Pending</option>
+                                    <option value="APPROVED">Approved</option>
+                                    <option value="REJECTED">Rejected</option>
+                                </select>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
             </motion.div>
 
-            {/* Pending Approvals Section for Administrators */}
-            {hasRole(["ADMINISTRATOR"]) && pendingUsers.length > 0 && (
+            {/* Pending Approvals Section */}
+            {pendingUsers.length > 0 && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                    <Card className="mb-6 border-orange-200 bg-orange-50/50">
+                    <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-950/20 dark:border-orange-800/50">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-orange-800">
+                            <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-300">
                                 <UserPlus className="h-5 w-5" />
                                 Pending User Approvals ({pendingUsers.length})
                             </CardTitle>
@@ -152,15 +157,15 @@ export default function UsersPage() {
                         <CardContent>
                             <div className="space-y-3">
                                 {pendingUsers.map((user) => (
-                                    <div key={user.user_id} className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-white">
-                                        <div className="flex-1">
-                                            <div className="font-medium text-orange-900">{user.full_name}</div>
-                                            <div className="text-sm text-orange-700">{user.email}</div>
-                                            <div className="text-xs text-orange-600">
+                                    <div key={user.user_id} className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-white dark:bg-orange-950/30 dark:border-orange-800/30">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-orange-900 dark:text-orange-200 truncate">{user.full_name}</div>
+                                            {/* user.email doesn't exist in analyst_users — omit it */}
+                                            <div className="text-xs text-orange-600 dark:text-orange-400">
                                                 Applied {new Date(user.created_at).toLocaleDateString()} · {user.department || "No department"}
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 shrink-0">
                                             <Button
                                                 size="sm"
                                                 onClick={() => approveUser(user.user_id, "ANALYST")}
@@ -220,7 +225,7 @@ export default function UsersPage() {
                                         <TableHead>Role</TableHead>
                                         <TableHead>Department</TableHead>
                                         <TableHead>Status</TableHead>
-                                        {hasRole(["ADMINISTRATOR"]) && <TableHead>Approval</TableHead>}
+                                        <TableHead>Approval</TableHead>
                                         <TableHead>Created</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -231,53 +236,76 @@ export default function UsersPage() {
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar>
-                                                        <AvatarImage src={undefined} />
+                                                        {/* No AvatarImage since we have no email/avatar URL */}
                                                         <AvatarFallback>
-                                                            {user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                                                            {getInitials(user.full_name)}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div>
                                                         <div className="font-medium">{user.full_name}</div>
-                                                        <div className="text-sm text-muted-foreground">{user.email}</div>
+                                                        {/* Show user_id truncated instead of email */}
+                                                        <div className="text-xs text-muted-foreground font-mono">
+                                                            {user.user_id.slice(0, 8)}…
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </TableCell>
-                                            <TableCell><Badge className={roleColors[user.role]}>{user.role}</Badge></TableCell>
+                                            <TableCell>
+                                                <Badge className={roleColors[user.role]}>{user.role}</Badge>
+                                            </TableCell>
                                             <TableCell>{user.department || "—"}</TableCell>
                                             <TableCell>
                                                 <Badge className={statusColors[user.is_active ? "active" : "inactive"]}>
                                                     {user.is_active ? "Active" : "Inactive"}
                                                 </Badge>
                                             </TableCell>
-                                            {hasRole(["ADMINISTRATOR"]) && (
-                                                <TableCell>
-                                                    <Badge className={
-                                                        user.approval_status === "APPROVED" ? "bg-green-500/10 text-green-500 border-green-500/20" :
-                                                            user.approval_status === "PENDING" ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                                                                "bg-red-500/10 text-red-500 border-red-500/20"
-                                                    }>
-                                                        {user.approval_status || "UNKNOWN"}
-                                                    </Badge>
-                                                </TableCell>
-                                            )}
-                                            <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                                            <TableCell>
+                                                <Badge className={
+                                                    user.approval_status === "APPROVED"
+                                                        ? "bg-green-500/10 text-green-500 border-green-500/20"
+                                                        : user.approval_status === "PENDING"
+                                                            ? "bg-orange-500/10 text-orange-500 border-orange-500/20"
+                                                            : "bg-red-500/10 text-red-500 border-red-500/20"
+                                                }>
+                                                    {user.approval_status || "UNKNOWN"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {new Date(user.created_at).toLocaleDateString()}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
+                                                        <Button variant="ghost" size="sm">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem><Edit className="h-4 w-4 mr-2" />Edit User</DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem onClick={() => toggleUserStatus(user.user_id, user.is_active)}>
-                                                            {user.is_active ? <><XCircle className="h-4 w-4 mr-2" />Deactivate</> : <><CheckCircle className="h-4 w-4 mr-2" />Activate</>}
+                                                        <DropdownMenuItem>
+                                                            <Edit className="h-4 w-4 mr-2" />Edit User
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => changeUserRole(user.user_id, user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR")}>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={() => toggleUserStatus(user.user_id, user.is_active)}
+                                                        >
+                                                            {user.is_active
+                                                                ? <><XCircle className="h-4 w-4 mr-2" />Deactivate</>
+                                                                : <><CheckCircle className="h-4 w-4 mr-2" />Activate</>
+                                                            }
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={() => changeUserRole(
+                                                                user.user_id,
+                                                                user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR"
+                                                            )}
+                                                        >
                                                             <Shield className="h-4 w-4 mr-2" />
                                                             Change to {user.role === "ADMINISTRATOR" ? "Analyst" : "Administrator"}
                                                         </DropdownMenuItem>
                                                         {user.approval_status === "REJECTED" && (
-                                                            <DropdownMenuItem onClick={() => reapproveUser(user.user_id, user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR")}>
+                                                            <DropdownMenuItem
+                                                                onClick={() => reapproveUser(user.user_id, "ANALYST")}
+                                                            >
                                                                 <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
                                                                 Reapprove User
                                                             </DropdownMenuItem>

@@ -24,13 +24,11 @@ interface EnrollmentResponse {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Only POST requests allowed
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ success: false, error: 'Method not allowed' }),
@@ -38,7 +36,6 @@ serve(async (req) => {
       )
     }
 
-    // Parse request body
     const enrollmentData: EnrollmentRequest = await req.json()
 
     if (!enrollmentData.enrollment_token) {
@@ -48,10 +45,8 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Validate enrollment token
@@ -68,7 +63,6 @@ serve(async (req) => {
       )
     }
 
-    // Check if token is expired
     if (new Date(tokenData.expires_at) < new Date()) {
       return new Response(
         JSON.stringify({ success: false, error: 'Enrollment token expired' }),
@@ -76,7 +70,6 @@ serve(async (req) => {
       )
     }
 
-    // Check if token usage limit reached
     if (tokenData.current_uses >= tokenData.max_uses) {
       return new Response(
         JSON.stringify({ success: false, error: 'Enrollment token usage limit reached' }),
@@ -84,30 +77,29 @@ serve(async (req) => {
       )
     }
 
-    // Generate device ID
     const deviceId = crypto.randomUUID()
-
-    // Generate API key
     const apiKey = await generateApiKey()
-    const apiKeyHash = await hashApiKey(apiKey, deviceId);
+    const apiKeyHash = await hashApiKey(apiKey, deviceId)
 
-    // Create device registry entry
     const { data: deviceData, error: deviceError } = await supabase
       .from('device_registry')
       .insert({
-        device_id: deviceId,
-        hostname: enrollmentData.hostname,
-        operating_system: enrollmentData.operating_system,
+        id: deviceId,
+        name: enrollmentData.hostname,
+        type: 'workstation',
+        os: enrollmentData.operating_system,
         agent_version: enrollmentData.agent_version,
-        device_type: 'workstation', // Default device type
+        status: 'online',
+        risk: 'none',
         enrolled_by: tokenData.created_by,
-        last_seen_utc: new Date().toISOString(),
-        is_active: true
+        last_seen: new Date().toISOString(),
+        is_active: true,
       })
       .select()
       .single()
 
     if (deviceError || !deviceData) {
+      console.error('Device creation error:', deviceError)
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create device registry entry' }),
         { status: 500, headers: corsHeaders }
@@ -122,17 +114,14 @@ serve(async (req) => {
         key_hash: apiKeyHash,
         key_name: `Default Key - ${new Date().toISOString()}`,
         is_active: true,
-        created_by: tokenData.created_by
+        created_by: tokenData.created_by,
       })
       .select()
       .single()
 
     if (apiKeyError || !apiKeyData) {
       // Rollback device creation
-      await supabase
-        .from('device_registry')
-        .delete()
-        .eq('device_id', deviceId)
+      await supabase.from('device_registry').delete().eq('id', deviceId)
 
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create API key' }),
@@ -147,7 +136,7 @@ serve(async (req) => {
         current_uses: tokenData.current_uses + 1,
         is_used: true,
         used_at: new Date().toISOString(),
-        used_by_device_id: deviceId
+        used_by_device_id: deviceId,
       })
       .eq('token_id', tokenData.token_id)
 
@@ -160,42 +149,29 @@ serve(async (req) => {
         resource_type: 'device_registry',
         resource_id: deviceId,
         new_values: {
-          hostname: enrollmentData.hostname,
-          operating_system: enrollmentData.operating_system,
-          agent_version: enrollmentData.agent_version
+          name: enrollmentData.hostname,
+          os: enrollmentData.operating_system,
+          agent_version: enrollmentData.agent_version,
         },
-        timestamp_utc: new Date().toISOString()
+        timestamp_utc: new Date().toISOString(),
       })
 
     const response: EnrollmentResponse = {
       success: true,
       device_id: deviceId,
-      api_key: apiKey
+      api_key: apiKey,
     }
 
-    return new Response(
-      JSON.stringify(response),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
-    )
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
 
   } catch (error) {
     console.error('Enrollment error:', error)
-
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Internal server error'
-      }),
-      {
-        status: 500,
-        headers: corsHeaders
-      }
+      JSON.stringify({ success: false, error: 'Internal server error' }),
+      { status: 500, headers: corsHeaders }
     )
   }
 })
@@ -205,20 +181,18 @@ async function hashToken(token: string): Promise<string> {
   const data = encoder.encode(token)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  return hashHex
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 async function hashApiKey(apiKey: string, deviceId: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(apiKey + 'ep-v1-' + deviceId);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const encoder = new TextEncoder()
+  const data = encoder.encode(apiKey + 'ep-v1-' + deviceId)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 async function generateApiKey(): Promise<string> {
-  // Generate 32-byte random API key
   const array = new Uint8Array(32)
   crypto.getRandomValues(array)
   return encodeBase64(array).replace(/[+/=]/g, '').substring(0, 40)

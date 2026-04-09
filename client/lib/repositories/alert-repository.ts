@@ -39,6 +39,7 @@ const DEFAULT_ALERT_SELECT = `
   proc_privilege_level,
   proc_pid,
   created_at,
+  updated_at,
   acknowledged_at,
   acknowledged_by,
   investigated_at,
@@ -49,7 +50,7 @@ const DEFAULT_ALERT_SELECT = `
 `.trim();
 
 const METRICS_SELECT =
-  'status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
+  'alert_id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
 
 export interface AlertQueryOptions extends QueryOptions {
   deviceId?: string;
@@ -111,7 +112,6 @@ export class AlertRepository extends BaseRepository<Alert> {
 
     if (options.startDate) query = query.gte('created_at', options.startDate);
     if (options.endDate) query = query.lte('created_at', options.endDate);
-
     if (options.minAnomalyScore !== undefined) query = query.gte('anomaly_score', options.minAnomalyScore);
     if (options.maxAnomalyScore !== undefined) query = query.lte('anomaly_score', options.maxAnomalyScore);
 
@@ -158,49 +158,45 @@ export class AlertRepository extends BaseRepository<Alert> {
     if (queryOptions.category) filters.category = queryOptions.category;
     if (queryOptions.unreadOnly) filters.read = false;
 
-    const additionalFilters: Record<string, unknown> = {};
-    if (queryOptions.startDate || queryOptions.endDate) {
-      const dateFilter: Record<string, unknown> = {};
-      if (queryOptions.startDate) dateFilter.gte = queryOptions.startDate;
-      if (queryOptions.endDate) dateFilter.lte = queryOptions.endDate;
-      additionalFilters.created_at = dateFilter;
-    }
-    if (queryOptions.minAnomalyScore !== undefined || queryOptions.maxAnomalyScore !== undefined) {
-      const scoreFilter: Record<string, unknown> = {};
-      if (queryOptions.minAnomalyScore !== undefined) scoreFilter.gte = queryOptions.minAnomalyScore;
-      if (queryOptions.maxAnomalyScore !== undefined) scoreFilter.lte = queryOptions.maxAnomalyScore;
-      additionalFilters.anomaly_score = scoreFilter;
-    }
-
     if (queryOptions.search) {
       return this.findAlertsWithSearchPaginated(options);
     }
 
-    const result = await this.findPaginated({
+    const offset = (page - 1) * limit;
+
+    const { count, error: countError } = await this.supabase
+      .from(this.tableName)
+      .select('*', { count: 'exact', head: true });
+    if (countError) throw this.handleError(countError);
+
+    const { data, error } = await this.buildAlertQuery({ ...queryOptions, limit, offset });
+    if (error) throw this.handleError(error);
+
+    const totalPages = Math.ceil((count ?? 0) / limit);
+
+    return {
+      data: this.normaliseAlerts(data ?? []),
+      count: count ?? 0,
       page,
       limit,
-      select: queryOptions.select ?? DEFAULT_ALERT_SELECT,
-      filters: { ...filters, ...additionalFilters },
-      orderBy: queryOptions.orderBy,
-      cacheTTL: queryOptions.cacheTTL,
-    });
-
-    return { ...result, data: this.normaliseAlerts(result.data as unknown[]) };
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    };
   }
 
   private async findAlertsWithSearchPaginated(
     options: AlertQueryOptions & PaginationOptions
   ): Promise<PaginatedResult<Alert>> {
-    const { page, limit, search, ...queryOptions } = options;
+    const { page, limit, ...queryOptions } = options;
     const offset = (page - 1) * limit;
 
-    let query = this.buildAlertQuery({ ...queryOptions, search });
+    let query = this.buildAlertQuery(queryOptions);
     query = query.range(offset, offset + limit - 1);
 
     const { count, error: countError } = await this.supabase
       .from(this.tableName)
       .select('*', { count: 'exact', head: true });
-
     if (countError) throw this.handleError(countError);
 
     const { data, error } = await query;
@@ -395,7 +391,7 @@ export class AlertRepository extends BaseRepository<Alert> {
         .single();
 
       if (error) {
-        if (error.code === "PGRST116") return null;
+        if (error.code === 'PGRST116') return null;
         throw this.handleError(error);
       }
 

@@ -22,7 +22,7 @@ interface DeviceStore {
   setDevices: (devices: Device[]) => void;
   clearError: () => void;
 
-  isolateDevice: (deviceId: string, reason?: string) => Promise<void>;
+  isolateDevice: (deviceId: string) => Promise<void>;
   unisolateDevice: (deviceId: string) => Promise<void>;
   updateDeviceMetrics: (deviceId: string, metrics: UpdateDeviceMetricsParams) => Promise<void>;
 
@@ -149,27 +149,71 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   // ── Remote mutations ───────────────────────────────────────────────────────
 
   isolateDevice: async (deviceId) => {
+    const { devices } = get();
+    const previousDevice = devices.find(d => d.id === deviceId);
+
+    // Optimistic update
+    set({
+      devices: devices.map(device =>
+        device.id === deviceId
+          ? { ...device, status: 'isolated' }
+          : device
+      )
+    });
+
     try {
       await deviceService.isolateDevice(deviceId);
-      await get().refreshDevices();
+      toast.success('Device isolated successfully');
     } catch (err) {
-      set({ error: errorMessage(err) });
+      console.error('Failed to isolate device:', err);
+      toast.error('Failed to isolate device');
+      // Revert optimistic update on error
+      if (previousDevice) {
+        set({
+          devices: devices.map(device =>
+            device.id === deviceId
+              ? previousDevice
+              : device
+          )
+        });
+      }
     }
   },
 
   unisolateDevice: async (deviceId) => {
+    const { devices } = get();
+    const previousDevice = devices.find(d => d.id === deviceId);
+
+    set({
+      devices: devices.map(device =>
+        device.id === deviceId
+          ? { ...device, status: 'online' }
+          : device
+      )
+    });
+
     try {
       await deviceService.unisolateDevice(deviceId);
-      await get().refreshDevices();
+      toast.success('Device unisolated successfully');
     } catch (err) {
-      set({ error: errorMessage(err) });
+      console.error('Failed to unisolate device:', err);
+      toast.error('Failed to unisolate device');
+
+      if (previousDevice) {
+        set({
+          devices: devices.map(device =>
+            device.id === deviceId
+              ? previousDevice
+              : device
+          )
+        });
+      }
     }
   },
 
   updateDeviceMetrics: async (deviceId, metrics) => {
     const previous = get().devices.find((d) => d.id === deviceId);
 
-    // Optimistic update
     if (previous) {
       get().updateDevice({
         ...previous,
@@ -310,27 +354,68 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   },
 
   bulkIsolate: async (deviceIds, reason) => {
+    const { devices } = get();
+    const previousDevices = devices.filter(d => deviceIds.includes(d.id));
+
+    set({
+      devices: devices.map(device =>
+        deviceIds.includes(device.id)
+          ? { ...device, status: 'isolated' }
+          : device
+      )
+    });
+
     try {
       await deviceService.bulkDeviceOperation({
         deviceIds,
         operation: 'isolate',
         options: { reason },
       });
-      await get().refreshDevices();
+      toast.success(`${deviceIds.length} devices isolated successfully`);
     } catch (err) {
-      set({ error: errorMessage(err) });
+      console.error('Failed to bulk isolate devices:', err);
+      toast.error('Failed to isolate devices');
+      set({
+        devices: devices.map(device => {
+          const previous = previousDevices.find(p => p.id === device.id);
+          return deviceIds.includes(device.id) && previous
+            ? previous
+            : device;
+        })
+      });
     }
   },
 
   bulkUnisolate: async (deviceIds) => {
+    const { devices } = get();
+    const previousDevices = devices.filter(d => deviceIds.includes(d.id));
+
+    set({
+      devices: devices.map(device =>
+        deviceIds.includes(device.id)
+          ? { ...device, status: 'online' }
+          : device
+      )
+    });
+
     try {
       await deviceService.bulkDeviceOperation({
         deviceIds,
         operation: 'unisolate',
       });
-      await get().refreshDevices();
+      toast.success(`${deviceIds.length} devices unisolated successfully`);
     } catch (err) {
-      set({ error: errorMessage(err) });
+      console.error('Failed to bulk unisolate devices:', err);
+      toast.error('Failed to unisolate devices');
+
+      set({
+        devices: devices.map(device => {
+          const previous = previousDevices.find(p => p.id === device.id);
+          return deviceIds.includes(device.id) && previous
+            ? previous
+            : device;
+        })
+      });
     }
   },
 }));

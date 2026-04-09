@@ -101,8 +101,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           localStorage.setItem(LAST_ACTIVITY_KEY, now.toString());
         }
 
-        const userRole = await get().fetchUserRole(sessionResult.user.id);
-        set({ role: userRole });
+        const userProfile = await authRepository.getUserWithProfile(sessionResult.user.id);
+        if (userProfile.user) {
+          set({
+            user: userProfile.user,
+            role: userProfile.user.role || null
+          });
+        } else {
+          // Fallback to role-only fetch if profile fetch fails
+          const userRole = await get().fetchUserRole(sessionResult.user.id);
+          set({ role: userRole });
+        }
       } else {
         set({ role: null });
         get().clearSessionData();
@@ -137,10 +146,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
       set({ session, user: refreshResult.user });
 
-      // Fetch role if user exists
       if (refreshResult.user) {
-        const userRole = await get().fetchUserRole(refreshResult.user.id);
-        set({ role: userRole });
+        const userProfile = await authRepository.getUserWithProfile(refreshResult.user.id);
+        if (userProfile.user) {
+          set({
+            user: userProfile.user,
+            role: userProfile.user.role || null
+          });
+        } else {
+          const userRole = await get().fetchUserRole(refreshResult.user.id);
+          set({ role: userRole });
+        }
       } else {
         set({ role: null });
       }
@@ -167,7 +183,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  // Fetch user role
   fetchUserRole: async (userId: string): Promise<string | null> => {
     try {
       const result = await authService.getUserRole(userId);
@@ -182,7 +197,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  // Check if user has specific role(s)
   hasRole: (roles: string[]): boolean => {
     const { role } = get();
     // Default to ANALYST role if no role is assigned to ensure access

@@ -154,11 +154,32 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
       };
     }
 
-    this.tableName = 'telemetry_events';
-    const result = await this.findMany(queryOptions) as TelemetryEvent[];
-    this.tableName = 'alert_records';
+    let query = this.supabase
+      .from('telemetry_events')
+      .select(queryOptions.select)
+      .order(queryOptions.orderBy!.column, { ascending: queryOptions.orderBy!.ascending ?? true })
+      .limit(queryOptions.limit!);
 
-    return result;
+    // Apply filters if they exist
+    if (queryOptions.filters) {
+      for (const [key, value] of Object.entries(queryOptions.filters)) {
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object' && value !== null && 'gte' in value) {
+            query = query.gte(key, (value as { gte: unknown }).gte);
+          } else if (typeof value === 'object' && value !== null && 'lte' in value) {
+            query = query.lte(key, (value as { lte: unknown }).lte);
+          } else {
+            query = Array.isArray(value)
+              ? query.in(key, value)
+              : query.eq(key, value);
+          }
+        }
+      }
+    }
+
+    const { data, error } = await query;
+    if (error) throw this.handleError(error);
+    return data as unknown as TelemetryEvent[];
   }
 
   subscribeToLiveFeed(callbacks: LiveSubscriptionCallbacks = {}): () => void {

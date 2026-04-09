@@ -3,7 +3,14 @@ import type { DeviceHealth, SystemHealth } from '@/lib/supabase/types';
 import type { Database } from '@/lib/supabase/types/database';
 
 type DeviceHealthSnapshot = Database['public']['Tables']['device_health_snapshots']['Row'];
-type DeviceRegistry = Database['public']['Tables']['device_registry']['Row'];
+
+interface DeviceRegistryJoin {
+  name?: string;
+  os?: string;
+  agent_version?: string;
+  is_active?: boolean;
+  last_seen?: string;
+}
 
 export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
   constructor() {
@@ -17,20 +24,22 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
       .from(this.tableName)
       .select(`
         *,
-        device_registry:device_registry(
-          hostname,
-          operating_system,
+        device_registry:device_id (
+          name,
+          os,
           agent_version,
           is_active,
-          last_seen_utc
+          last_seen
         )
       `)
-      .order("created_at", { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) throw this.handleError(error);
 
-    return (data || []).map(this.transformDeviceHealth);
+    return (data || []).map(row => this.transformDeviceHealth(
+      row as DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
+    ));
   }
 
   async getDeviceById(deviceId: string): Promise<DeviceHealth | null> {
@@ -38,16 +47,16 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
       .from(this.tableName)
       .select(`
         *,
-        device_registry:device_registry(
-          hostname,
-          operating_system,
+        device_registry:device_id (
+          name,
+          os,
           agent_version,
           is_active,
-          last_seen_utc
+          last_seen
         )
       `)
-      .eq("device_id", deviceId)
-      .order("created_at", { ascending: false })
+      .eq('device_id', deviceId)
+      .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
@@ -56,26 +65,31 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
       throw this.handleError(error);
     }
 
-    return this.transformDeviceHealth(data);
+    return this.transformDeviceHealth(
+      data as DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
+    );
   }
 
   async getLatestHealthSnapshot(deviceId: string): Promise<DeviceHealth | null> {
     return this.getDeviceById(deviceId);
   }
 
-  private transformDeviceHealth(snapshot: DeviceHealthSnapshot & { device_registry?: DeviceRegistry | null }): DeviceHealth {
+  private transformDeviceHealth(
+    snapshot: DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
+  ): DeviceHealth {
+    const reg = snapshot.device_registry;
     return {
       device_id: snapshot.device_id,
-      hostname: snapshot.device_registry?.hostname || "Unknown",
-      operating_system: snapshot.device_registry?.operating_system || "Unknown",
-      agent_version: snapshot.device_registry?.agent_version || "Unknown",
-      last_seen_utc: snapshot.device_registry?.last_seen_utc || snapshot.created_at,
-      is_active: snapshot.device_registry?.is_active || false,
-      status: snapshot.status as "ONLINE" | "OFFLINE" | "WARNING" | "ERROR",
+      hostname: reg?.name || 'Unknown',
+      operating_system: reg?.os || 'Unknown',
+      agent_version: reg?.agent_version || 'Unknown',
+      last_seen_utc: reg?.last_seen || snapshot.created_at,
+      is_active: reg?.is_active ?? false,
+      status: snapshot.status as 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR',
       cpu_usage: Number(snapshot.cpu_usage) || 0,
       memory_usage: Number(snapshot.memory_usage) || 0,
       disk_usage: Number(snapshot.disk_usage) || 0,
-      network_status: snapshot.network_status || false,
+      network_status: snapshot.network_status ?? false,
       alerts_last_24h: snapshot.alerts_last_24h || 0,
       uptime_percentage: Number(snapshot.uptime_percentage) || 0,
       response_time_ms: snapshot.response_time_ms || 0,
@@ -106,7 +120,7 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
             critical_alerts_24h: 0,
             system_uptime: 0,
             api_response_time: 0,
-            system_status: "HEALTHY" as const,
+            system_status: 'HEALTHY' as const,
             last_updated: new Date().toISOString(),
           };
         }
@@ -121,19 +135,17 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
         const totalDisk = deviceHealth.reduce((sum, d) => sum + d.disk_usage, 0);
         const totalAlerts = deviceHealth.reduce((sum, d) => sum + d.alerts_last_24h, 0);
 
-        const avgCpu = totalCpu / deviceHealth.length;
-        const avgMemory = totalMemory / deviceHealth.length;
-        const avgDisk = totalDisk / deviceHealth.length;
+        const n = deviceHealth.length;
+        const avgCpu = totalCpu / n;
+        const avgMemory = totalMemory / n;
+        const avgDisk = totalDisk / n;
 
-        let systemStatus: "HEALTHY" | "WARNING" | "CRITICAL" = "HEALTHY";
-        if (errorCount > 0) {
-          systemStatus = "CRITICAL";
-        } else if (warningCount > 0 || avgCpu > 80 || avgMemory > 80 || avgDisk > 80) {
-          systemStatus = "WARNING";
-        }
+        let systemStatus: 'HEALTHY' | 'WARNING' | 'CRITICAL' = 'HEALTHY';
+        if (errorCount > 0) systemStatus = 'CRITICAL';
+        else if (warningCount > 0 || avgCpu > 80 || avgMemory > 80 || avgDisk > 80) systemStatus = 'WARNING';
 
         return {
-          total_devices: deviceHealth.length,
+          total_devices: n,
           online_devices: onlineCount,
           offline_devices: offlineCount,
           warning_devices: warningCount,
@@ -150,7 +162,7 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
           last_updated: new Date().toISOString(),
         };
       },
-      30 * 1000 // 30 seconds cache
+      30 * 1000
     );
   }
 }

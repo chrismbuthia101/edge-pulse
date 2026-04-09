@@ -46,14 +46,11 @@ export class AuthRepository extends BaseRepository {
     try {
       const { data: { session }, error } = await this.supabase.auth.getSession();
       if (error) throw error;
-      return {
-        user: session?.user as AuthUser || null,
-        error: null
-      };
+      return { user: session?.user as AuthUser || null, error: null };
     } catch (error) {
       return {
         user: null,
-        error: error instanceof Error ? error : new Error('Failed to get session')
+        error: error instanceof Error ? error : new Error('Failed to get session'),
       };
     }
   }
@@ -61,20 +58,20 @@ export class AuthRepository extends BaseRepository {
   async getUserRole(userId: string): Promise<{ role: string | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
-        .from("analyst_users")
-        .select("role")
-        .eq("user_id", userId)
+        .from('analyst_users')
+        .select('role')
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (error) throw error;
       return {
         role: (data as unknown as { role: string | null })?.role ?? null,
-        error: null
+        error: null,
       };
     } catch (error) {
       return {
         role: null,
-        error: error instanceof Error ? error : new Error('Failed to fetch user role')
+        error: error instanceof Error ? error : new Error('Failed to fetch user role'),
       };
     }
   }
@@ -83,34 +80,57 @@ export class AuthRepository extends BaseRepository {
     try {
       const { data: { session }, error } = await this.supabase.auth.refreshSession();
       if (error) throw error;
-      return {
-        user: session?.user as AuthUser || null,
-        error: null
-      };
+      return { user: session?.user as AuthUser || null, error: null };
     } catch (error) {
       return {
         user: null,
-        error: error instanceof Error ? error : new Error('Failed to refresh session')
+        error: error instanceof Error ? error : new Error('Failed to refresh session'),
       };
     }
   }
 
   async getUserWithProfile(userId: string): Promise<{ user: AuthUser | null; error: Error | null }> {
     try {
-      const { data: authUser, error: authError } = await this.supabase.auth.admin.getUserById(userId);
+      const { data: { user: authUser }, error: authError } = await this.supabase.auth.getUser();
       if (authError) throw authError;
+      if (!authUser || authUser.id !== userId) {
+        const { data: profile, error: profileError } = await this.supabase
+          .from('analyst_users')
+          .select('full_name, role, is_active, approval_status, department')
+          .eq('user_id', userId)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') throw profileError;
+
+        return {
+          user: {
+            id: userId,
+            email: '',
+            user_metadata: {},
+            app_metadata: {},
+            approval_status: profile?.approval_status,
+            role: profile?.role,
+            is_active: profile?.is_active,
+            full_name: profile?.full_name,
+            department: profile?.department,
+          },
+          error: null,
+        };
+      }
 
       const { data: profile, error: profileError } = await this.supabase
         .from('analyst_users')
-        .select('*')
+        .select('full_name, role, is_active, approval_status, department')
         .eq('user_id', userId)
         .single();
 
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
 
       const combinedUser: AuthUser = {
-        ...authUser.user,
-        email: authUser.user.email || '',
+        id: authUser.id,
+        email: authUser.email || '',
+        user_metadata: authUser.user_metadata || {},
+        app_metadata: authUser.app_metadata || {},
         approval_status: profile?.approval_status,
         role: profile?.role,
         is_active: profile?.is_active,
@@ -122,7 +142,7 @@ export class AuthRepository extends BaseRepository {
     } catch (error) {
       return {
         user: null,
-        error: error instanceof Error ? error : new Error('Failed to fetch user profile')
+        error: error instanceof Error ? error : new Error('Failed to fetch user profile'),
       };
     }
   }
@@ -142,7 +162,7 @@ export class AuthRepository extends BaseRepository {
     } catch (error) {
       return {
         approved: false,
-        error: error instanceof Error ? error : new Error('Failed to check approval status')
+        error: error instanceof Error ? error : new Error('Failed to check approval status'),
       };
     }
   }
@@ -151,14 +171,14 @@ export class AuthRepository extends BaseRepository {
     try {
       const { data, error } = await this.supabase
         .from('pending_users')
-        .select('*');
+        .select('user_id, full_name, department, created_at, approval_status, role, is_active');
 
       if (error) throw error;
 
       const users: AuthUser[] = (data || []).map(user => ({
         id: user.user_id,
-        email: user.auth_email,
-        user_metadata: { department: user.auth_department },
+        email: '',
+        user_metadata: {},
         app_metadata: {},
         approval_status: 'PENDING',
         full_name: user.full_name,
@@ -169,7 +189,7 @@ export class AuthRepository extends BaseRepository {
     } catch (error) {
       return {
         users: [],
-        error: error instanceof Error ? error : new Error('Failed to fetch pending users')
+        error: error instanceof Error ? error : new Error('Failed to fetch pending users'),
       };
     }
   }

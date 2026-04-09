@@ -70,7 +70,6 @@ export class CaseRepository extends BaseRepository<Case> {
 
         if (options.startDate) query = query.gte('created_at', options.startDate);
         if (options.endDate) query = query.lte('created_at', options.endDate);
-
         if (options.orderBy) {
           query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? true });
         }
@@ -149,19 +148,39 @@ export class CaseRepository extends BaseRepository<Case> {
   }
 
   async getCaseById(id: string): Promise<Case | null> {
-    return this.findById(id);
+    try {
+      const { data, error } = await this.supabase
+        .from(this.tableName)
+        .select(DEFAULT_CASE_SELECT)
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw this.handleError(error);
+      }
+      return data as unknown as Case;
+    } catch (error) {
+      throw this.handleError(error);
+    }
   }
 
   async getCaseMetrics(): Promise<CaseMetrics> {
     return this.cachedQuery(
       'case_metrics',
       async () => {
-        const cases = await this.findMany();
+        const { data, error } = await this.supabase
+          .from(this.tableName)
+          .select('status, severity');
+        if (error) throw this.handleError(error);
+
+        const cases = (data ?? []) as { status: string; severity: string }[];
         const metrics: CaseMetrics = {
           total: cases.length,
           open: 0, inProgress: 0, closed: 0,
           critical: 0, high: 0, medium: 0, low: 0,
         };
+
         for (const c of cases) {
           switch (c.status) {
             case 'OPEN': metrics.open++; break;
@@ -184,21 +203,28 @@ export class CaseRepository extends BaseRepository<Case> {
   async getCaseNotes(caseId: string): Promise<CaseNote[]> {
     const { data, error } = await this.supabase
       .from('case_notes')
-      .select('*')
+      .select('note_id, case_id, content, created_by, created_at')
       .eq('case_id', caseId)
       .order('created_at', { ascending: true });
+
     if (error) throw this.handleError(error);
-    return data || [];
+    return (data || []) as unknown as CaseNote[];
   }
 
   async addCaseNote(caseId: string, content: string, createdBy: string): Promise<CaseNote> {
     const { data, error } = await this.supabase
       .from('case_notes')
-      .insert({ case_id: caseId, content, created_by: createdBy, created_at: new Date().toISOString() })
-      .select()
+      .insert({
+        case_id: caseId,
+        content,
+        created_by: createdBy,
+        created_at: new Date().toISOString(),
+      })
+      .select('note_id, case_id, content, created_by, created_at')
       .single();
+
     if (error) throw this.handleError(error);
-    return data;
+    return data as unknown as CaseNote;
   }
 
   async getCaseAlerts(caseId: string): Promise<CaseAlertLink[]> {
@@ -207,8 +233,9 @@ export class CaseRepository extends BaseRepository<Case> {
       .select('alert_id, alert_severity, alert_status, device_id, created_at, explanation_json')
       .eq('case_id', caseId)
       .order('created_at', { ascending: false });
+
     if (error) throw this.handleError(error);
-    return data || [];
+    return (data || []) as CaseAlertLink[];
   }
 
   subscribeToCases(

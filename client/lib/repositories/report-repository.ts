@@ -36,12 +36,20 @@ export class ReportRepository extends BaseRepository<unknown> {
     return this.cachedQuery(
       cacheKey,
       async () => {
-        const { data: alerts, error: alertsError } = await this.supabase
+        let query = this.supabase
           .from('alert_records')
           .select('*')
-          .gte('created_at', options.startDate || '')
-          .lte('created_at', options.endDate || '')
           .order('created_at', { ascending: false });
+
+        // Only add date filters if they are provided
+        if (options.startDate) {
+          query = query.gte('created_at', options.startDate);
+        }
+        if (options.endDate) {
+          query = query.lte('created_at', options.endDate);
+        }
+
+        const { data: alerts, error: alertsError } = await query;
 
         if (alertsError) throw alertsError;
 
