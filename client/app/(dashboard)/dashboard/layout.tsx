@@ -28,8 +28,18 @@ export default function DashboardLayout({
     // Show loading state while checking authentication
     if (loading) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center">
+                {/* Grid pattern */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    <defs>
+                        <pattern id="loading-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+                            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#loading-grid)" />
+                </svg>
+                <div className="relative z-10 animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
         );
     }
@@ -37,8 +47,18 @@ export default function DashboardLayout({
     // Show approval pending screen if user is not approved
     if (!user || !isApproved) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="text-center max-w-md mx-auto p-6">
+            <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center">
+                {/* Grid pattern */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    <defs>
+                        <pattern id="approval-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+                            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#approval-grid)" />
+                </svg>
+                <div className="relative z-10 text-center max-w-md mx-auto p-6">
                     <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -65,7 +85,17 @@ export default function DashboardLayout({
     }
 
     return (
-        <div className="min-h-screen bg-background flex">
+        <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex">
+            {/* Grid pattern */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <defs>
+                    <pattern id="dashboard-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                        <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+                        <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#dashboard-grid)" />
+            </svg>
             <Sidebar
                 collapsed={sidebarCollapsed}
                 onToggle={() => {

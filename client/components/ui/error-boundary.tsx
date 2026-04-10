@@ -46,43 +46,55 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
 function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
-            <AlertTriangle className="h-6 w-6 text-destructive" />
-          </div>
-          <CardTitle className="text-xl">Something went wrong</CardTitle>
-          <CardDescription>
-            We encountered an unexpected error. Please try refreshing the page.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-center">
-          {error && (
-            <details className="mt-4 text-left">
-              <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-                Error details
-              </summary>
-              <pre className="mt-2 text-xs bg-muted p-3 rounded overflow-auto">
-                {error.message}
-                {error.stack && "\n\n" + error.stack}
-              </pre>
-            </details>
-          )}
-        </CardContent>
-        <CardFooter className="flex gap-2">
-          <Button onClick={reset} className="flex-1">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Try Again
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard">
-              <Home className="h-4 w-4 mr-2" />
-              Dashboard
-            </Link>
-          </Button>
-        </CardFooter>
-      </Card>
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+      {/* Grid pattern */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <defs>
+          <pattern id="error-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#error-grid)" />
+      </svg>
+      <div className="relative z-10">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle className="text-xl">Something went wrong</CardTitle>
+            <CardDescription>
+              We encountered an unexpected error. Please try refreshing the page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            {error && (
+              <details className="mt-4 text-left">
+                <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                  Error details
+                </summary>
+                <pre className="mt-2 text-xs bg-muted p-3 rounded overflow-auto">
+                  {error.message}
+                  {error.stack && "\n\n" + error.stack}
+                </pre>
+              </details>
+            )}
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Button onClick={reset} className="flex-1">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Try Again
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard">
+                <Home className="h-4 w-4 mr-2" />
+                Dashboard
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -90,24 +102,36 @@ function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => vo
 // Network error fallback
 export function NetworkErrorFallback({ reset }: { reset: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center mb-4">
-            <AlertTriangle className="h-6 w-6 text-orange-500" />
-          </div>
-          <CardTitle className="text-xl">Connection Error</CardTitle>
-          <CardDescription>
-            Unable to connect to the server. Please check your internet connection.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button onClick={reset} className="w-full">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry Connection
-          </Button>
-        </CardFooter>
-      </Card>
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+      {/* Grid pattern */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <defs>
+          <pattern id="network-error-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#network-error-grid)" />
+      </svg>
+      <div className="relative z-10">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-orange-500" />
+            </div>
+            <CardTitle className="text-xl">Connection Error</CardTitle>
+            <CardDescription>
+              Unable to connect to the server. Please check your internet connection.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button onClick={reset} className="w-full">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Connection
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -115,26 +139,38 @@ export function NetworkErrorFallback({ reset }: { reset: () => void }) {
 // 404 Not Found page
 export function NotFoundPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
-            <span className="text-2xl font-bold text-muted-foreground">404</span>
-          </div>
-          <CardTitle className="text-xl">Page Not Found</CardTitle>
-          <CardDescription>
-            The page you&apos;re looking for doesn&apos;t exist or has been moved.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button asChild className="w-full">
-            <Link href="/dashboard">
-              <Home className="h-4 w-4 mr-2" />
-              Go to Dashboard
-            </Link>
-          </Button>
-        </CardFooter>
-      </Card>
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+      {/* Grid pattern */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <defs>
+          <pattern id="not-found-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#not-found-grid)" />
+      </svg>
+      <div className="relative z-10">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
+              <span className="text-2xl font-bold text-muted-foreground">404</span>
+            </div>
+            <CardTitle className="text-xl">Page Not Found</CardTitle>
+            <CardDescription>
+              The page you&apos;re looking for doesn&apos;t exist or has been moved.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button asChild className="w-full">
+              <Link href="/dashboard">
+                <Home className="h-4 w-4 mr-2" />
+                Go to Dashboard
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -142,30 +178,42 @@ export function NotFoundPage() {
 // Server error page
 export function ServerErrorPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
-            <AlertTriangle className="h-6 w-6 text-red-500" />
-          </div>
-          <CardTitle className="text-xl">Server Error</CardTitle>
-          <CardDescription>
-            Something went wrong on our end. Please try again later.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter className="flex gap-2">
-          <Button onClick={() => window.location.reload()} className="flex-1">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh Page
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard">
-              <Home className="h-4 w-4 mr-2" />
-              Dashboard
-            </Link>
-          </Button>
-        </CardFooter>
-      </Card>
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+      {/* Grid pattern */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <defs>
+          <pattern id="server-error-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#server-error-grid)" />
+      </svg>
+      <div className="relative z-10">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+            </div>
+            <CardTitle className="text-xl">Server Error</CardTitle>
+            <CardDescription>
+              Something went wrong on our end. Please try again later.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex gap-2">
+            <Button onClick={() => window.location.reload()} className="flex-1">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Page
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard">
+                <Home className="h-4 w-4 mr-2" />
+                Dashboard
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

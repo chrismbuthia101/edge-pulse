@@ -25,7 +25,7 @@ const anomalyService = new AnomalyService(anomalyRepository);
 const telemetryService = new TelemetryService();
 
 export default function InsightsPage() {
-    const { isAdmin, loading } = useAuth();
+    const { hasRole, loading } = useAuth();
     const router = useRouter();
     const [selectedFeature, setSelectedFeature] = useState<number | null>(null);
     const [modelStats, setModelStats] = useState<{
@@ -90,10 +90,10 @@ export default function InsightsPage() {
     }, []);
 
     useEffect(() => {
-        if (!loading && !isAdmin) {
+        if (!loading && !hasRole(["ADMINISTRATOR"])) {
             router.push("/dashboard");
         }
-    }, [isAdmin, loading, router]);
+    }, [hasRole, loading, router]);
 
     useEffect(() => {
         const loadInsightsData = async () => {
@@ -186,7 +186,7 @@ export default function InsightsPage() {
         );
     }
 
-    if (!isAdmin) {
+    if (!hasRole(["ADMINISTRATOR"])) {
         return (
             <div className="max-w-[1200px] space-y-6">
                 <div className="flex items-center justify-center h-64">
