@@ -8,24 +8,25 @@ import {
     Download,
     Info,
     CheckCircle2,
+    Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModelPerformance } from "@/components/dashboard/model-performance";
 import { Activity, Cpu, MemoryStick, Zap } from "lucide-react";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
+import { useAuth } from "@/lib/auth/useAuth";
 import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 import { TelemetryService } from "@/lib/services/telemetry-service";
 import type { ShapFeature } from "@/lib/supabase/types";
+import { useRouter } from "next/navigation";
 
 const anomalyService = new AnomalyService(anomalyRepository);
 const telemetryService = new TelemetryService();
 
 export default function InsightsPage() {
-    useEffect(() => {
-        document.title = "ML Insights - EdgePulse";
-    }, []);
-
+    const { isAdmin, loading } = useAuth();
+    const router = useRouter();
     const [selectedFeature, setSelectedFeature] = useState<number | null>(null);
     const [modelStats, setModelStats] = useState<{
         label: string;
@@ -63,15 +64,41 @@ export default function InsightsPage() {
         time: string;
         blocked: boolean;
     }[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loadingData, setLoadingData] = useState(true);
 
     const alerts = useAlertStore((s) => s.alerts);
     const devices = useDeviceStore((s) => s.devices);
 
+    const formatTimeAgo = (dateString: string): string => {
+        const now = new Date();
+        const past = new Date(dateString);
+        const diffMs = now.getTime() - past.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return `${Math.floor(diffHours / 24)}d ago`;
+    };
+
+    const maxImportance = useMemo(() => {
+        return topFeatures.length > 0 ? Math.max(...topFeatures.map((f) => f.importance)) : 1;
+    }, [topFeatures]);
+
+    useEffect(() => {
+        document.title = "ML Insights - EdgePulse";
+    }, []);
+
+    useEffect(() => {
+        if (!loading && !isAdmin) {
+            router.push("/dashboard");
+        }
+    }, [isAdmin, loading, router]);
+
     useEffect(() => {
         const loadInsightsData = async () => {
             try {
-                setLoading(true);
+                setLoadingData(true);
 
                 const highConfidenceAlerts = alerts
                     .filter(a => a.anomaly_score > 0.8)
@@ -103,9 +130,9 @@ export default function InsightsPage() {
                             currentScore: latestScore.score,
                             cpuUsage: telemetry.avgCpu,
                             memoryUsage: telemetry.avgRam,
-                            featureVectorSize: 47, // This would come from the actual feature vector
+                            featureVectorSize: 47,
                             lastInference: formatTimeAgo(latestScore.scored_at),
-                            inferencesPerSecond: 2.4, // This would be calculated from actual data
+                            inferencesPerSecond: 2.4,
                             anomalyThreshold: latestScore.threshold_applied || 0.75
                         });
                     }
@@ -142,31 +169,38 @@ export default function InsightsPage() {
             } catch (error) {
                 console.error('Failed to load insights data:', error);
             } finally {
-                setLoading(false);
+                setLoadingData(false);
             }
         };
 
         loadInsightsData();
     }, [alerts, devices]);
 
-    const maxImportance = useMemo(() => {
-        return topFeatures.length > 0 ? Math.max(...topFeatures.map((f) => f.importance)) : 1;
-    }, [topFeatures]);
-
-    const formatTimeAgo = (dateString: string): string => {
-        const now = new Date();
-        const past = new Date(dateString);
-        const diffMs = now.getTime() - past.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-
-        if (diffMins < 60) return `${diffMins}m ago`;
-        const diffHours = Math.floor(diffMins / 60);
-        if (diffHours < 24) return `${diffHours}h ago`;
-        return `${Math.floor(diffHours / 24)}d ago`;
-    };
-
-
     if (loading) {
+        return (
+            <div className="max-w-[1200px] space-y-6">
+                <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isAdmin) {
+        return (
+            <div className="max-w-[1200px] space-y-6">
+                <div className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                        <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h2 className="text-xl font-semibold text-foreground mb-2">Access Restricted</h2>
+                        <p className="text-sm text-muted-foreground">ML Insights are available to administrators only.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (loadingData) {
         return (
             <div className="max-w-[1200px] space-y-6">
                 <div className="flex items-center justify-center h-64">
@@ -355,9 +389,9 @@ export default function InsightsPage() {
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <span>Feature Vector: {realTimeMetrics.featureVectorSize || 0} dimensions</span>
-                            <span>•</span>
+                            <span>·</span>
                             <span>Model: Isolation Forest</span>
-                            <span>•</span>
+                            <span>·</span>
                             <span>Status: {realTimeMetrics.currentScore && realTimeMetrics.anomalyThreshold && realTimeMetrics.currentScore > realTimeMetrics.anomalyThreshold ? 'ANOMALY DETECTED' : 'Normal Operation'}</span>
                         </div>
                     </div>

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAlertStore } from "@/stores/alert-store";
+import { useAuth } from "@/lib/auth/useAuth";
 import type { AlertStatus } from "@/lib/supabase/types";
 import { toast } from "sonner";
 import {
@@ -143,7 +144,15 @@ export default function AlertsPage() {
         document.title = "Security Alerts - EdgePulse";
     }, []);
 
+    const { user, isAdmin } = useAuth();
     const { alerts, bulkAcknowledge } = useAlertStore();
+
+    useEffect(() => {
+        if (user) {
+            const { refreshAlertsForUser } = useAlertStore.getState();
+            refreshAlertsForUser(user.id, isAdmin);
+        }
+    }, [user, isAdmin]);
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
     const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
@@ -268,15 +277,17 @@ export default function AlertsPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => setRulesOpen(true)}
-                    >
-                        <SlidersHorizontal className="h-3.5 w-3.5" />
-                        Alert Rules
-                    </Button>
+                    {isAdmin && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => setRulesOpen(true)}
+                        >
+                            <SlidersHorizontal className="h-3.5 w-3.5" />
+                            Alert Rules
+                        </Button>
+                    )}
                     <Button
                         size="sm"
                         className="gap-1.5"

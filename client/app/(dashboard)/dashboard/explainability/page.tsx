@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
+import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/utils";
 
 interface ExplanationMethod {
@@ -82,6 +83,7 @@ interface ModelPerformance {
 }
 
 export default function ExplainabilityPage() {
+  const { isAdmin } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState<string>("shap");
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
@@ -91,6 +93,21 @@ export default function ExplainabilityPage() {
 
   const alerts = useAlertStore((s) => s.alerts);
   const devices = useDeviceStore((s) => s.devices);
+
+  const filteredAlerts = useMemo(() => {
+    if (isAdmin) return alerts;
+
+    return alerts.filter(alert => {
+      const assignedDeviceIds = devices.map(device => device.id);
+      return assignedDeviceIds.includes(alert.device_id);
+    });
+  }, [alerts, devices, isAdmin]);
+
+  const filteredDevices = useMemo(() => {
+    if (isAdmin) return devices;
+
+    return devices;
+  }, [devices, isAdmin]);
 
   const explanationMethods: ExplanationMethod[] = useMemo(() => [
     {
@@ -132,9 +149,8 @@ export default function ExplainabilityPage() {
   ], []);
 
   const mockExplanationResults: ExplanationResult[] = useMemo(() => {
-    // Use deterministic mock data based on alert properties
-    return alerts.slice(0, 5).map((alert, index) => {
-      // Create deterministic pseudo-random values based on alert properties
+    return filteredAlerts.slice(0, 5).map((alert, index) => {
+     
       const seed = alert.anomaly_score * 1000 + index;
       const hash = (x: number) => {
         x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -147,18 +163,27 @@ export default function ExplainabilityPage() {
         const seedValue = hash(seed + name.charCodeAt(0) + rank);
         const attributionScore = baseScore + (seedValue - 0.5) * 0.2;
         const contributionType = attributionScore > 0.05 ? "positive" : attributionScore < -0.05 ? "negative" : "neutral";
-        const featureValue = Math.floor(hash(seed + name.charCodeAt(0) + rank * 10) * 1000);
-        const confidence = 0.7 + hash(seed + name.charCodeAt(0) + rank * 20) * 0.3;
+        const confidence = 0.7 + seedValue * 0.3;
+        const importance = rank + 1;
 
         return {
           feature_name: name,
-          attribution_score: attributionScore,
+          attribution_score: parseFloat(attributionScore.toFixed(3)),
           contribution_type: contributionType as "positive" | "negative" | "neutral",
-          feature_value: featureValue,
-          importance_rank: rank,
-          confidence: confidence,
+          feature_value: parseFloat((hash(seed + rank * 10) * 100).toFixed(2)),
+          importance_rank: importance,
+          confidence: parseFloat(confidence.toFixed(3)),
         };
       };
+
+      const features: FeatureExplanation[] = [
+        generateFeature("cpu_usage", 1, alert.anomaly_score * 0.8),
+        generateFeature("memory_usage", 2, alert.anomaly_score * 0.6),
+        generateFeature("network_io", 3, alert.anomaly_score * 0.4),
+        generateFeature("disk_io", 4, alert.anomaly_score * 0.3),
+        generateFeature("process_count", 5, alert.anomaly_score * 0.2),
+        generateFeature("connection_count", 6, alert.anomaly_score * 0.1),
+      ].sort((a, b) => Math.abs(b.attribution_score) - Math.abs(a.attribution_score));
 
       return {
         method: selectedMethod,
@@ -166,21 +191,15 @@ export default function ExplainabilityPage() {
         anomaly_score: alert.anomaly_score,
         detection_threshold: 0.75,
         is_anomaly: alert.anomaly_score > 0.75,
-        features: [
-          generateFeature("cpu_usage", 1, 0.25),
-          generateFeature("memory_usage", 2, -0.15),
-          generateFeature("network_connections", 3, 0.0),
-          generateFeature("process_count", 4, 0.05),
-          generateFeature("disk_io", 5, 0.0),
-        ],
-        confidence_score: 0.7 + hash(seed + 100) * 0.3,
-        processing_time_ms: 20 + Math.floor(hash(seed + 200) * 50),
-        explanation_text: `The ${selectedMethod.toUpperCase()} analysis indicates that high CPU usage and unusual memory patterns are the primary contributors to this anomaly detection.`,
-        top_factors: ["cpu_usage", "memory_usage", "network_connections"],
+        features,
+        confidence_score: 0.85 + hash(seed + 100) * 0.15,
+        processing_time_ms: 45 + Math.floor(hash(seed + 200) * 30),
+        explanation_text: `This anomaly was primarily driven by ${features[0]?.feature_name || "system metrics"} with a contribution score of ${features[0]?.attribution_score.toFixed(3) || "0.000"}.`,
+        top_factors: features.slice(0, 3).map(f => f.feature_name),
         created_at: alert.created_at,
       };
     });
-  }, [alerts, selectedMethod]);
+  }, [filteredAlerts, selectedMethod]);
 
   const modelPerformance: ModelPerformance[] = useMemo(() => [
     {
@@ -364,7 +383,7 @@ export default function ExplainabilityPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Devices</SelectItem>
-                    {devices.map((device) => (
+                    {filteredDevices.map((device) => (
                       <SelectItem key={device.id} value={device.id}>
                         {device.name}
                       </SelectItem>

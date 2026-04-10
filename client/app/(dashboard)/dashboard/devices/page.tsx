@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDeviceStore } from "@/stores/device-store";
+import { useAuth } from "@/lib/auth/useAuth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -172,8 +173,16 @@ export default function DevicesPage() {
         document.title = "Device Fleet - EdgePulse";
     }, []);
 
+    const { user, isAdmin } = useAuth();
     const storeDevices = useDeviceStore((s) => s.devices);
     const router = useRouter();
+
+    useEffect(() => {
+        if (user) {
+            const { refreshDevicesForUser } = useDeviceStore.getState();
+            refreshDevicesForUser(user.id, isAdmin);
+        }
+    }, [user, isAdmin]);
 
     const rawDevices = storeDevices.length > 0
         ? storeDevices.map((d) => ({
@@ -257,8 +266,12 @@ export default function DevicesPage() {
     const handleSync = async () => {
         setSyncing(true);
         try {
-            const { refreshDevices } = useDeviceStore.getState();
-            await refreshDevices();
+            if (!user) {
+                toast.error("User not authenticated");
+                return;
+            }
+            const { refreshDevicesForUser } = useDeviceStore.getState();
+            await refreshDevicesForUser(user.id, isAdmin);
             const { devices } = useDeviceStore.getState();
             toast.success(`Synced ${devices.length} devices`);
         } catch { toast.error("Sync failed"); }
@@ -305,10 +318,12 @@ export default function DevicesPage() {
                         <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
                         {syncing ? "Syncing..." : "Sync"}
                     </Button>
-                    <Button size="sm" className="gap-1.5" onClick={() => setEnrollOpen(true)}>
-                        <Plus className="h-3.5 w-3.5" />
-                        Enroll Device
-                    </Button>
+                    {isAdmin && (
+                        <Button size="sm" className="gap-1.5" onClick={() => setEnrollOpen(true)}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Enroll Device
+                        </Button>
+                    )}
                 </div>
             </motion.div>
 

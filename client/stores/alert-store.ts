@@ -13,6 +13,7 @@ interface AlertStore {
 
   initialize: () => Promise<void>;
   refreshAlerts: () => Promise<void>;
+  refreshAlertsForUser: (userId: string, isAdmin: boolean) => Promise<void>;
   addAlert: (alert: Alert) => void;
   updateAlert: (id: string, updates: Partial<Alert>) => void;
   updateAlertStatus: (id: string, status: AlertStatus, userId?: string) => Promise<void>;
@@ -75,6 +76,17 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   refreshAlerts: async () => {
     try {
       set({ loading: true, error: null });
+      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
+      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
+    } catch (err) {
+      set({ error: errorMessage(err), loading: false });
+    }
+  },
+
+  refreshAlertsForUser: async () => {
+    try {
+      set({ loading: true, error: null });
+
       const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
       set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
     } catch (err) {

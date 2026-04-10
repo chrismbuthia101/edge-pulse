@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import type { ConnStatus } from "@/lib/hooks/use-notifications";
+import { useAuthStore } from "@/stores/auth-store";
 
 function useConnConfig(status: ConnStatus, queuedCount: number, isLoading: boolean, hasError: boolean) {
     const configs = {
@@ -52,6 +53,7 @@ interface TopBarProps {
 
 export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const [searchOpen, setSearchOpen] = useState(false);
+    const userRole = useAuthStore((s) => s.role);
 
     const {
         initials,
@@ -316,7 +318,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                     <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
                         {displayName}
                     </p>
-                    <p className="text-[10px] text-muted-foreground leading-none">Administrator</p>
+                    <p className="text-[10px] text-muted-foreground leading-none">
+                        {userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1).toLowerCase() : 'Analyst'}
+                    </p>
                 </div>
             </div>
         </header>

@@ -86,6 +86,8 @@
   --sidebar-accent-foreground: 215 25% 20%;
   --sidebar-border: 210 20% 88%;
   --sidebar-ring: 194 100% 45%;
+  --grid-light: 215 25% 85%;
+  --grid-dark: 215 35% 25%;
 }
 
 .dark {
@@ -126,6 +128,8 @@
   --sidebar-accent-foreground: 210 20% 80%;
   --sidebar-border: 216 20% 18%;
   --sidebar-ring: 194 100% 50%;
+  --grid-light: 215 35% 25%;
+  --grid-dark: 215 25% 85%;
 }
 
 @layer base {

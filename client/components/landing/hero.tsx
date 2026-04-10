@@ -113,7 +113,7 @@ export function Hero() {
   };
 
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden bg-background pt-20">
+    <section className="relative min-h-screen flex items-center overflow-hidden pt-20">
       {/* Background — theme-aware subtle texture */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Soft radial glow — primary color, works in both modes */}
@@ -121,13 +121,14 @@ export function Hero() {
         <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px]" />
 
         {/* Grid pattern */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.04] dark:opacity-[0.07]">
+        <svg className="absolute inset-0 w-full h-full">
           <defs>
             <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.8" />
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#hero-grid)" className="text-foreground" />
+          <rect width="100%" height="100%" fill="url(#hero-grid)" />
         </svg>
 
         {/* Enhanced floating particles with different types */}

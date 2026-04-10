@@ -46,7 +46,7 @@ const navItems = [
         items: [
             { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "12" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
-            { icon: Brain, label: "ML Insights", href: "/dashboard/insights" },
+            { icon: Brain, label: "ML Insights", href: "/dashboard/insights", roles: ["ADMINISTRATOR"] },
             { icon: Shield, label: "Integrity", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: BarChart3, label: "Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: List, label: "Cases", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },

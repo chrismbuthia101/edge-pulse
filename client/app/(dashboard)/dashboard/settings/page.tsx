@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth/useAuth";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
 
@@ -50,6 +51,8 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
+    const { hasRole } = useAuth();
+
     useEffect(() => {
         document.title = "Settings - EdgePulse";
     }, []);
@@ -58,22 +61,24 @@ export default function SettingsPage() {
     const supabaseRef = useRef(supabase);
     const { setTheme, theme } = useTheme();
 
+    const availableTabs = tabs.filter(tab => {
+        const adminOnlyTabs = ["agents", "enrollment", "topology"];
+        return !adminOnlyTabs.includes(tab.id) || hasRole(["ADMINISTRATOR"]);
+    });
+
     const [activeTab, setActiveTab] = useState<Tab>("profile");
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
-    // Profile fields
     const [fullName, setFullName] = useState("");
     const [jobTitle, setJobTitle] = useState("");
     const [email, setEmail] = useState("");
     const [org, setOrg] = useState("EdgePulse Enterprise");
 
-    // Notification toggles
     const [notifToggles, setNotifToggles] = useState<Record<string, boolean>>(
         Object.fromEntries(notificationSettings.map((n) => [n.id, n.defaultOn]))
     );
 
-    // Security (password change)
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -164,7 +169,7 @@ export default function SettingsPage() {
                     className="w-48 shrink-0"
                 >
                     <nav className="space-y-1">
-                        {tabs.map((tab) => (
+                        {availableTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
@@ -402,7 +407,7 @@ export default function SettingsPage() {
                     )}
 
                     {/* ── Agent Config ── */}
-                    {activeTab === "agents" && (
+                    {activeTab === "agents" && hasRole(["ADMINISTRATOR"]) && (
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-base font-semibold text-foreground mb-1">Agent Configuration</h2>
@@ -451,7 +456,7 @@ export default function SettingsPage() {
                     )}
 
                     {/* ── Device Enrollment ── */}
-                    {activeTab === "enrollment" && (
+                    {activeTab === "enrollment" && hasRole(["ADMINISTRATOR"]) && (
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-base font-semibold text-foreground mb-1">Device Enrollment</h2>
@@ -462,7 +467,7 @@ export default function SettingsPage() {
                     )}
 
                     {/* ── Network Topology ── */}
-                    {activeTab === "topology" && (
+                    {activeTab === "topology" && hasRole(["ADMINISTRATOR"]) && (
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-base font-semibold text-foreground mb-1">Network Topology</h2>

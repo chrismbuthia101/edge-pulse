@@ -11,6 +11,7 @@ import {
   Trash2,
   CheckCircle,
   AlertCircle,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,18 @@ export function DeviceAssignmentManager() {
     if (!hasRole(["ADMINISTRATOR"])) return;
     loadData();
   }, [hasRole, loadData]);
+
+  if (!hasRole(["ADMINISTRATOR"])) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold">Access Denied</h3>
+          <p className="text-muted-foreground">You don&apos;t have permission to access device assignments.</p>
+        </div>
+      </div>
+    );
+  }
 
   const assignDevice = async (deviceId: string, analystId: string) => {
     if (!user) return;
