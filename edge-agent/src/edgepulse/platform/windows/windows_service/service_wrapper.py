@@ -7,10 +7,23 @@ All Windows-specific code is isolated here.
 
 import sys
 import os
-import asyncio
 import json
+import time
+import signal
+import asyncio
+import threading
 from pathlib import Path
 from typing import Optional
+
+from edgepulse.agent_core import AgentCore
+from edgepulse.utils.log_handler import get_logger
+
+
+def get_safe_program_data_path() -> Path:
+    """Get safe ProgramData path without using environment variables"""
+    # Use hardcoded safe path to prevent traversal
+    return Path('C:\\ProgramData').resolve()
+
 
 if sys.platform == "win32":
     import win32serviceutil
@@ -45,9 +58,9 @@ class WindowsServiceWrapper:
         self.agent_core: Optional[AgentCore] = None
         self.service_instance = None
 
-        self.program_data_path = (
-            Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "EdgePulse"
-        )
+        # Use safe ProgramData path to prevent traversal
+        base_path = get_safe_program_data_path()
+        self.program_data_path = base_path / "EdgePulse"
         self.models_path = self.program_data_path / "models"
         self.logs_path = self.program_data_path / "logs"
 

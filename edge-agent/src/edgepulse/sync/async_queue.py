@@ -581,9 +581,7 @@ class AsyncSyncQueue:
                 """,
                 params_list,
             )
-            # Restore items so they're available if initialize() is called again
-            for item in items:
-                await self.queue.put(item)
+            # Don't restore items to queue - they will be loaded by _load_persisted_items() on next startup
 
         logger.debug("queue_persisted", count=len(items))
 

@@ -122,19 +122,28 @@ class FeatureExtractor:
     # History management
     # ------------------------------------------------------------------
 
+    def _safe_parse_timestamp(self, timestamp_str: str) -> float:
+        """Safely parse timestamp string to unix timestamp"""
+        try:
+            return datetime.fromisoformat(timestamp_str).timestamp()
+        except (ValueError, TypeError, AttributeError):
+            logger.warning(f"Invalid timestamp format: {timestamp_str}")
+            # Return current time as fallback to avoid data loss
+            return datetime.utcnow().timestamp()
+
     def _update_history(self, telemetry: Dict) -> None:
         self._history.append(telemetry)
         cutoff_time = datetime.utcnow().timestamp() - (self.history_retention_hours * 3600)
         self._history = [
             entry for entry in self._history
-            if datetime.fromisoformat(entry["timestamp"]).timestamp() > cutoff_time
+            if self._safe_parse_timestamp(entry["timestamp"]) > cutoff_time
         ]
 
     def _get_windowed_data(self, window_seconds: int) -> List[Dict]:
         cutoff_time = datetime.utcnow().timestamp() - window_seconds
         return [
             entry for entry in self._history
-            if datetime.fromisoformat(entry["timestamp"]).timestamp() > cutoff_time
+            if self._safe_parse_timestamp(entry["timestamp"]) > cutoff_time
         ]
 
     # ------------------------------------------------------------------

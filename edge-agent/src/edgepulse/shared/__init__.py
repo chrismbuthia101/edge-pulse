@@ -1,5 +1,7 @@
 # Shared utilities package for EdgePulse components.
 
+from .exceptions import EdgePulseError
+
 from .schemas import (
     SeverityLevel,
     DeviceStatus,
@@ -29,6 +31,9 @@ from .metrics import (
 )
 
 __all__ = [
+    # Exceptions
+    'EdgePulseError',
+    
     # Schemas
     'SeverityLevel',
     'DeviceStatus', 

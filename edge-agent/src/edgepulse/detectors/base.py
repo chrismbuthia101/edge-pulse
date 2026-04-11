@@ -64,8 +64,8 @@ class BaseDetector(ABC):
         start_time = time.perf_counter()
         
         try:
-            # Verify model integrity if not already done
-            if not self._integrity_verified:
+            # Verify model integrity only if metadata exists and not already verified
+            if not self._integrity_verified and self.model_metadata:
                 self._verify_model_integrity()
             
             # Perform detection

@@ -9,10 +9,16 @@ import os
 import json
 import asyncio
 import hashlib
+import base64
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
+
+def get_safe_program_data_path() -> Path:
+    """Get safe ProgramData path without using environment variables"""
+    # Use hardcoded safe path to prevent traversal
+    return Path('C:\\ProgramData').resolve()
 
 try:
     from cryptography.fernet import Fernet
@@ -86,11 +92,15 @@ class ConfigManager:
         """Initialize encrypted local cache"""
         try:
             if os.name == "nt":
-                cache_dir = (
-                    Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "EdgePulse"
-                )
+                base_path = get_safe_program_data_path()
+                cache_dir = base_path / "EdgePulse"
             else:
                 cache_dir = Path.home() / ".edgepulse"
+
+            # Ensure the path is within expected bounds
+            cache_dir = cache_dir.resolve()
+            if os.name == "nt" and not str(cache_dir).startswith(str(base_path)):
+                raise ValueError("Invalid path: traversal detected")
 
             cache_dir.mkdir(parents=True, exist_ok=True)
             self._cache_file = cache_dir / "last_known_config.json.enc"
@@ -109,7 +119,11 @@ class ConfigManager:
         """Generate encryption key from machine-specific data"""
         try:
             if not CRYPTO_AVAILABLE:
-                return b"dummy_key_placeholder_32_bytesXX"
+                # Generate a simple hash-based key when crypto is not available
+                import hashlib
+                import platform
+                machine_data = f"{platform.node()}{platform.machine()}{platform.system()}"
+                return hashlib.sha256(machine_data.encode()).digest()[:32]
 
             import platform
 
@@ -126,7 +140,12 @@ class ConfigManager:
 
         except Exception as e:
             logger.error(f"Error generating encryption key: {e}")
-            return b"fallback_key_placeholder_32_bytX"
+            # Generate emergency key from timestamp and process ID
+            import hashlib
+            import time
+            import os
+            emergency_data = f"{time.time()}{os.getpid()}{platform.node()}"
+            return hashlib.sha256(emergency_data.encode()).digest()[:32]
 
     def _encrypt_data(self, data: str) -> bytes:
         try:

@@ -6,20 +6,24 @@ platform-specific credential managers (keyring on Windows, etc.).
 """
 
 import os
+import sys
+import json
 import platform
-import hashlib
-import secrets
 from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass
-
-try:
-    import keyring
-    KEYRING_AVAILABLE = True
-except ImportError:
-    KEYRING_AVAILABLE = False
+from typing import Optional, Dict, Any
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2hmac import PBKDF2HMAC
+import base64
 
 from edgepulse.utils.log_handler import get_logger
+
+
+def get_safe_program_data_path() -> Path:
+    """Get safe ProgramData path without using environment variables"""
+    # Use hardcoded safe path to prevent traversal
+    return Path('C:\\ProgramData').resolve()
+
 
 logger = get_logger(__name__)
 
@@ -68,11 +72,17 @@ class CredentialManager:
     def _init_fallback_storage(self):
         """Initialize fallback encrypted storage"""
         try:
-            # Use user data directory
+            # Use user data directory with safe path
             if self.platform == "Windows":
-                data_dir = Path(os.environ.get('ProgramData', 'C:\\ProgramData')) / 'EdgePulse'
+                base_path = get_safe_program_data_path()
+                data_dir = base_path / 'EdgePulse'
             else:
                 data_dir = Path.home() / '.edgepulse'
+                
+            # Ensure the path is within expected bounds
+            data_dir = data_dir.resolve()
+            if self.platform == "Windows" and not str(data_dir).startswith(str(base_path)):
+                raise ValueError("Invalid path: traversal detected")
                 
             data_dir.mkdir(parents=True, exist_ok=True)
             self._fallback_storage = data_dir / 'credentials.enc'
@@ -101,8 +111,9 @@ class CredentialManager:
         """Encrypt data for fallback storage"""
         try:
             from cryptography.fernet import Fernet
+            import base64
             key = self._get_fallback_key()
-            fernet_key = hashlib.sha256(key).digest()[:32]
+            fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key).digest()[:32])
             fernet = Fernet(fernet_key)
             return fernet.encrypt(data.encode())
         except ImportError:
@@ -113,8 +124,9 @@ class CredentialManager:
         """Decrypt data from fallback storage"""
         try:
             from cryptography.fernet import Fernet
+            import base64
             key = self._get_fallback_key()
-            fernet_key = hashlib.sha256(key).digest()[:32]
+            fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key).digest()[:32])
             fernet = Fernet(fernet_key)
             return fernet.decrypt(encrypted_data).decode()
         except ImportError:

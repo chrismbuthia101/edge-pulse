@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from edgepulse.utils.device_id import get_default_device_id, validate_device_id
@@ -34,7 +34,7 @@ class SyncConfig(BaseModel):
     """Synchronization configuration (env prefix: SYNC__)"""
     enabled: bool = Field(default=False, description="Enable cloud sync")
     supabase_url: Optional[str] = Field(default=None, description="Supabase URL")
-    supabase_key: Optional[str] = Field(default=None, description="Supabase API key")
+    supabase_key: Optional[SecretStr] = Field(default=None, description="Supabase API key")
     batch_size: int = Field(default=50, ge=1, le=1000, description="Sync batch size")
     retry_max_attempts: int = Field(default=5, ge=1, le=20, description="Max retry attempts")
     offline_queue_max: int = Field(default=10000, ge=100, description="Max offline queue size")

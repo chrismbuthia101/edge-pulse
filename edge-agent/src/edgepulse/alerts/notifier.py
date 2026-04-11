@@ -7,6 +7,14 @@ from datetime import datetime, time
 
 from edgepulse.utils.error_handler import LoggingError
 
+# Try to import notify-py at module level
+try:
+    from notify_py import Notify
+    NOTIFY_AVAILABLE = True
+except ImportError:
+    Notify = None
+    NOTIFY_AVAILABLE = False
+
 logger = get_logger(__name__)
 
 
@@ -26,15 +34,10 @@ class LocalNotifier:
         self.quiet_hours_start = quiet_hours_start
         self.quiet_hours_end = quiet_hours_end
         
-        # Try to import notify-py
-        self.toast_available = False
-        if enable_system_tray:
-            try:
-                from notify_py import Notify
-                self.toast_available = True
-            except ImportError:
-                logger.warning("notify-py not available, system tray notifications disabled")
-                self.toast_available = False
+        # Set toast availability based on module-level import
+        self.toast_available = enable_system_tray and NOTIFY_AVAILABLE
+        if enable_system_tray and not NOTIFY_AVAILABLE:
+            logger.warning("notify-py not available, system tray notifications disabled")
 
     def _is_quiet_hours(self) -> bool:
         if not self.quiet_hours_start or not self.quiet_hours_end:

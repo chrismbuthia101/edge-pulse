@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 from edgepulse.utils.log_handler import get_logger
-from edgepulse.auth.credentials import CredentialManager
+from edgepulse.auth.credentials import CredentialManager, DeviceCredentials
 
 logger = get_logger(__name__)
 
@@ -276,12 +276,18 @@ class DeviceAuthClient:
             new_api_key = response.get('api_key')
             if new_api_key:
                 # Store new API key
-                self.credential_manager.store_device_credentials(
-                    device_id=self.credential_manager.get_device_credentials().device_id,
-                    api_key=new_api_key
-                )
-                logger.info("API key rotated successfully")
-                return new_api_key
+                current_credentials = self.credential_manager.get_device_credentials()
+                if current_credentials:
+                    updated_credentials = DeviceCredentials(
+                        device_id=current_credentials.device_id,
+                        api_key=new_api_key
+                    )
+                    self.credential_manager.store_device_credentials(updated_credentials)
+                    logger.info("API key rotated successfully")
+                    return new_api_key
+                else:
+                    logger.error("No current credentials found for rotation")
+                    return None
             else:
                 logger.error("No API key in rotation response")
                 return None

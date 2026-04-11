@@ -22,6 +22,12 @@ if sys.platform == "win32":
 
 from edgepulse.utils.log_handler import get_logger
 
+
+def get_safe_program_data_path() -> Path:
+    """Get safe ProgramData path without using environment variables"""
+    # Use hardcoded safe path to prevent traversal
+    return Path('C:\\ProgramData').resolve()
+
 logger = get_logger(__name__)
 
 SERVICE_NAME = "EdgePulseAgent"
@@ -37,8 +43,9 @@ class ServiceInstaller:
         self.display_name = SERVICE_DISPLAY_NAME
         self.description = SERVICE_DESCRIPTION
         
-        # Service paths
-        self.service_dir = Path(os.environ.get('ProgramData', 'C:\\ProgramData')) / 'EdgePulse'
+        # Service paths - use safe ProgramData path to prevent traversal
+        base_path = get_safe_program_data_path()
+        self.service_dir = base_path / 'EdgePulse'
         self.config_dir = self.service_dir / 'config'
         self.log_dir = self.service_dir / 'logs'
         self.data_dir = self.service_dir / 'data'
@@ -104,9 +111,7 @@ class ServiceInstaller:
                 self.display_name,
                 description=self.description,
                 startType=win32service.SERVICE_AUTO_START,
-                exeName=service_cmd,
-                displayName=self.display_name,
-                description=self.description
+                exeName=service_cmd
             )
             
             # Set service to run under LocalSystem
