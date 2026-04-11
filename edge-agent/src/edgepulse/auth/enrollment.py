@@ -1,8 +1,5 @@
 """
 Device Enrollment Client for EdgePulse
-
-Handles the device enrollment process including token validation,
-API key generation, and secure credential storage.
 """
 
 import os
@@ -14,7 +11,6 @@ from dataclasses import dataclass
 
 try:
     import httpx
-
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
@@ -27,8 +23,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class EnrollmentResponse:
-    """Response from device enrollment"""
-
+    """Response from the /enroll-device edge function."""
     device_id: str
     api_key: str
     enrollment_token: Optional[str] = None
@@ -37,8 +32,7 @@ class EnrollmentResponse:
 
 @dataclass
 class EnrollmentConfig:
-    """Enrollment configuration"""
-
+    """Parsed content of enroll.cfg / enrollment.json."""
     supabase_url: str
     enrollment_token: str
     device_hostname: Optional[str] = None
@@ -48,7 +42,8 @@ class EnrollmentConfig:
 
 
 class DeviceEnrollmentClient:
-    """Client for device enrollment with EdgePulse backend"""
+    """Handles first-run enrollment and API-key rotation.
+    """
 
     def __init__(self, credential_manager: Optional[CredentialManager] = None):
         self.credential_manager = credential_manager or CredentialManager()
@@ -57,38 +52,38 @@ class DeviceEnrollmentClient:
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx is required for device enrollment")
 
+    # ------------------------------------------------------------------
+    # Config file discovery
+    # ------------------------------------------------------------------
+
+    def _config_search_paths(self) -> list[Path]:
+        paths: list[Path] = []
+        if self.platform == "win32":
+            config_dir = Path("C:\\ProgramData\\EdgePulse")
+        else:
+            config_dir = Path.home() / ".edgepulse"
+
+        paths += [
+            config_dir / "enroll.cfg",
+            config_dir / "enrollment.json",
+            Path("enroll.cfg"),
+            Path("enrollment.json"),
+        ]
+        return paths
+
     def read_enrollment_config(self) -> Optional[EnrollmentConfig]:
-        """Read enrollment configuration from file"""
-        try:
-            config_paths = []
+        """Return the first enrollment config file found, or None."""
+        for path in self._config_search_paths():
+            if path.exists():
+                cfg = self._parse_config_file(path)
+                if cfg:
+                    logger.info("enrollment_config_found", path=str(path))
+                    return cfg
 
-            if self.platform == "win32":
-                config_dir = (
-                    Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "EdgePulse"
-                )
-                config_paths.append(config_dir / "enroll.cfg")
-                config_paths.append(config_dir / "enrollment.json")
-            else:
-                config_dir = Path.home() / ".edgepulse"
-                config_paths.append(config_dir / "enroll.cfg")
-                config_paths.append(config_dir / "enrollment.json")
+        logger.warning("enrollment_config_not_found")
+        return None
 
-            config_paths.append(Path("enroll.cfg"))
-            config_paths.append(Path("enrollment.json"))
-
-            for config_path in config_paths:
-                if config_path.exists():
-                    return self._parse_config_file(config_path)
-
-            logger.warning("No enrollment configuration file found")
-            return None
-
-        except Exception as e:
-            logger.error(f"Error reading enrollment config: {e}")
-            return None
-
-    def _parse_config_file(self, config_path: Path) -> Optional[EnrollmentConfig]:
-        """Parse enrollment configuration file"""
+    def _parse_config_file(self, config_path: Path) -> Optional["EnrollmentConfig"]:
         try:
             content = config_path.read_text().strip()
 
@@ -103,73 +98,54 @@ class DeviceEnrollmentClient:
                     timeout_seconds=data.get("timeout_seconds", 30),
                 )
             else:
-                config_dict = {}
-                for line in content.split("\n"):
+                # Simple KEY=VALUE format
+                cfg: dict = {}
+                for line in content.splitlines():
                     line = line.strip()
                     if line and "=" in line and not line.startswith("#"):
-                        key, value = line.split("=", 1)
-                        config_dict[key.strip()] = value.strip()
+                        key, _, value = line.partition("=")
+                        cfg[key.strip()] = value.strip()
 
                 return EnrollmentConfig(
-                    supabase_url=config_dict["supabase_url"],
-                    enrollment_token=config_dict["enrollment_token"],
-                    device_hostname=config_dict.get("device_hostname"),
-                    device_os=config_dict.get("device_os"),
-                    agent_version=config_dict.get("agent_version"),
-                    timeout_seconds=int(config_dict.get("timeout_seconds", 30)),
+                    supabase_url=cfg["supabase_url"],
+                    enrollment_token=cfg["enrollment_token"],
+                    device_hostname=cfg.get("device_hostname"),
+                    device_os=cfg.get("device_os"),
+                    agent_version=cfg.get("agent_version"),
+                    timeout_seconds=int(cfg.get("timeout_seconds", 30)),
                 )
 
         except Exception as e:
-            logger.error(f"Error parsing config file {config_path}: {e}")
+            logger.error("enrollment_config_parse_error", path=str(config_path), error=str(e))
             return None
 
     def delete_enrollment_config(self) -> bool:
-        """Delete enrollment configuration file after successful enrollment"""
-        try:
-            config_paths = []
-
-            if self.platform == "win32":
-                config_dir = (
-                    Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "EdgePulse"
-                )
-                config_paths.extend(
-                    [config_dir / "enroll.cfg", config_dir / "enrollment.json"]
-                )
-            else:
-                config_dir = Path.home() / ".edgepulse"
-                config_paths.extend(
-                    [config_dir / "enroll.cfg", config_dir / "enrollment.json"]
-                )
-
-            config_paths.extend([Path("enroll.cfg"), Path("enrollment.json")])
-
-            deleted = False
-            for config_path in config_paths:
-                if config_path.exists():
-                    config_path.unlink()
+        """Delete all enrollment config files after successful enrollment."""
+        deleted = False
+        for path in self._config_search_paths():
+            if path.exists():
+                try:
+                    path.unlink()
+                    logger.info("enrollment_config_deleted", path=str(path))
                     deleted = True
-                    logger.info(f"Deleted enrollment config: {config_path}")
+                except Exception as e:
+                    logger.warning("enrollment_config_delete_failed", path=str(path), error=str(e))
+        return deleted
 
-            return deleted
-
-        except Exception as e:
-            logger.error(f"Error deleting enrollment config: {e}")
-            return False
+    # ------------------------------------------------------------------
+    # Enrollment
+    # ------------------------------------------------------------------
 
     async def enroll_device(self, config: EnrollmentConfig) -> Optional[EnrollmentResponse]:
-        """Enroll the device with the EdgePulse backend"""
+        """POST to the Supabase enroll-device function and return credentials."""
         try:
-            logger.info("Starting device enrollment process")
-
-            device_id = self.credential_manager.generate_device_id()
+            logger.info("enrollment_starting")
 
             import platform
 
+            agent_version = config.agent_version or get_agent_version()
             hostname = config.device_hostname or platform.node()
             operating_system = config.device_os or f"{platform.system()} {platform.release()}"
-
-            # Use the canonical helper instead of duplicating inline logic
-            agent_version = config.agent_version or get_agent_version()
 
             enrollment_data = {
                 "token": config.enrollment_token,
@@ -193,80 +169,85 @@ class DeviceEnrollmentClient:
                     },
                 )
 
-                if response.status_code == 200:
-                    result = response.json()
-
-                    enrollment_response = EnrollmentResponse(
-                        device_id=result["device_id"],
-                        api_key=result["api_key"],
-                        enrollment_token=result.get("enrollment_token"),
-                        expires_at=result.get("expires_at"),
-                    )
-
-                    logger.info(
-                        f"Device enrolled successfully: {enrollment_response.device_id}"
-                    )
-                    return enrollment_response
-
-                else:
-                    error_msg = f"Enrollment failed: HTTP {response.status_code}"
-                    try:
-                        error_detail = response.json()
-                        error_msg += f" - {error_detail.get('error', 'Unknown error')}"
-                    except Exception:
-                        if response.text:
-                            error_msg += f" - {response.text}"
-
-                    logger.error(error_msg)
-                    return None
+            if response.status_code == 200:
+                result = response.json()
+                resp = EnrollmentResponse(
+                    device_id=result["device_id"],
+                    api_key=result["api_key"],
+                    enrollment_token=result.get("enrollment_token"),
+                    expires_at=result.get("expires_at"),
+                )
+                logger.info("enrollment_success", device_id=resp.device_id)
+                return resp
+            else:
+                try:
+                    detail = response.json().get("error", "")
+                except Exception:
+                    detail = response.text
+                logger.error(
+                    "enrollment_http_error",
+                    status=response.status_code,
+                    detail=detail,
+                )
+                return None
 
         except httpx.TimeoutException:
-            logger.error("Enrollment request timed out")
+            logger.error("enrollment_timeout")
             return None
         except Exception as e:
-            logger.error(f"Error during device enrollment: {e}")
+            logger.error("enrollment_unexpected_error", error=str(e))
             return None
 
     def complete_enrollment(self, response: EnrollmentResponse) -> bool:
-        """Complete enrollment by storing credentials"""
+        """Persist credentials via CredentialManager (single write path) and clean up."""
         try:
-            logger.info("Completing enrollment - storing credentials")
-
             credentials = DeviceCredentials(
                 device_id=response.device_id,
                 api_key=response.api_key,
                 enrollment_token=response.enrollment_token,
             )
 
-            success = self.credential_manager.store_device_credentials(credentials)
-
-            if success:
-                self.credential_manager.clear_enrollment_token()
-                self.delete_enrollment_config()
-                logger.info("Enrollment completed successfully")
-                return True
-            else:
-                logger.error("Failed to store device credentials")
+            if not self.credential_manager.store_device_credentials(credentials):
+                logger.error("enrollment_credential_store_failed")
                 return False
 
+            # Clear the one-time enrollment token from the store
+            self.credential_manager.clear_enrollment_token()
+
+            # Remove config file so it is not re-processed on next start
+            self.delete_enrollment_config()
+
+            logger.info("enrollment_complete", device_id=response.device_id)
+            return True
+
         except Exception as e:
-            logger.error(f"Error completing enrollment: {e}")
+            logger.error("enrollment_complete_error", error=str(e))
             return False
 
-    async def rotate_api_key(self, supabase_url: str) -> Optional[str]:
-        """Rotate the device API key"""
-        try:
-            logger.info("Starting API key rotation")
+    # ------------------------------------------------------------------
+    # Convenience / compatibility
+    # ------------------------------------------------------------------
 
+    def is_enrolled(self) -> bool:
+        return self.credential_manager.is_enrolled()
+
+    def get_device_credentials(self) -> Optional[DeviceCredentials]:
+        return self.credential_manager.get_device_credentials()
+
+    # ------------------------------------------------------------------
+    # API-key rotation
+    # ------------------------------------------------------------------
+
+    async def rotate_api_key(self, supabase_url: str) -> Optional[str]:
+        """Rotate the device API key via the backend and persist the new key."""
+        try:
             credentials = self.credential_manager.get_device_credentials()
             if not credentials:
-                logger.error("No device credentials found for API key rotation")
+                logger.error("rotate_api_key_no_credentials")
                 return None
 
-            rotate_url = f"{supabase_url}/functions/v1/rotate-api-key"
-
-            # Use the canonical helper
             agent_version = get_agent_version()
+            rotate_url = f"{supabase_url}/functions/v1/rotate-api-key"
 
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
@@ -279,56 +260,41 @@ class DeviceEnrollmentClient:
                     },
                 )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    new_api_key = result["api_key"]
-
-                    success = self.credential_manager.store_credential(
-                        "api_key", new_api_key
-                    )
-
-                    if success:
-                        logger.info("API key rotated successfully")
-                        return new_api_key
-                    else:
-                        logger.error("Failed to store new API key")
-                        return None
+            if response.status_code == 200:
+                new_key = response.json()["api_key"]
+                # Store via CredentialManager — the only write path
+                if self.credential_manager.store_credential("api_key", new_key):
+                    logger.info("api_key_rotated", device_id=credentials.device_id)
+                    return new_key
                 else:
-                    error_msg = f"API key rotation failed: HTTP {response.status_code}"
-                    try:
-                        error_detail = response.json()
-                        error_msg += f" - {error_detail.get('error', 'Unknown error')}"
-                    except Exception:
-                        if response.text:
-                            error_msg += f" - {response.text}"
-
-                    logger.error(error_msg)
+                    logger.error("api_key_rotate_store_failed")
                     return None
+            else:
+                try:
+                    detail = response.json().get("error", "")
+                except Exception:
+                    detail = response.text
+                logger.error(
+                    "api_key_rotate_http_error",
+                    status=response.status_code,
+                    detail=detail,
+                )
+                return None
 
         except Exception as e:
-            logger.error(f"Error during API key rotation: {e}")
+            logger.error("api_key_rotate_unexpected_error", error=str(e))
             return None
 
-    def is_enrolled(self) -> bool:
-        """Check if the device is already enrolled"""
-        return self.credential_manager.is_enrolled()
-
-    def get_device_credentials(self) -> Optional[DeviceCredentials]:
-        """Get current device credentials"""
-        return self.credential_manager.get_device_credentials()
-
     async def verify_enrollment(self, supabase_url: str) -> bool:
-        """Verify that current enrollment is valid"""
+        """Ping the Supabase REST root to confirm the stored credentials work."""
         try:
             credentials = self.credential_manager.get_device_credentials()
             if not credentials:
                 return False
 
-            health_url = f"{supabase_url}/rest/v1/"
-
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(
-                    health_url,
+                    f"{supabase_url}/rest/v1/",
                     headers={
                         "X-EdgePulse-Device-Id": credentials.device_id,
                         "X-EdgePulse-Api-Key": credentials.api_key,
@@ -336,9 +302,9 @@ class DeviceEnrollmentClient:
                         "Authorization": "Bearer dummy",
                     },
                 )
-
-                return response.status_code in [200, 401]
+            # 200 = open, 401 = service alive but auth checked (both mean reachable)
+            return response.status_code in (200, 401)
 
         except Exception as e:
-            logger.error(f"Error verifying enrollment: {e}")
+            logger.error("enrollment_verify_error", error=str(e))
             return False

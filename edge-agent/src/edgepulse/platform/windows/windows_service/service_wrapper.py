@@ -1,28 +1,22 @@
 """
 Windows Service Wrapper for EdgePulse
-
-This wrapper imports and runs the portable AgentCore.
-All Windows-specific code is isolated here.
+=======================================
+Runs the canonical EdgePulseAgent (core/agent.py) as a Windows Service.
 """
 
 import sys
 import os
 import json
-import time
-import signal
 import asyncio
-import threading
 from pathlib import Path
 from typing import Optional
 
-from edgepulse.agent_core import AgentCore
 from edgepulse.utils.log_handler import get_logger
 
 
-def get_safe_program_data_path() -> Path:
-    """Get safe ProgramData path without using environment variables"""
-    # Use hardcoded safe path to prevent traversal
-    return Path('C:\\ProgramData').resolve()
+def _safe_program_data() -> Path:
+    """Return C:\\ProgramData resolved — prevents environment-variable traversal."""
+    return Path("C:\\ProgramData").resolve()
 
 
 if sys.platform == "win32":
@@ -30,6 +24,7 @@ if sys.platform == "win32":
     import win32service
     import win32event
     import servicemanager
+
     from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
     from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
 else:
@@ -39,267 +34,190 @@ else:
     class ServiceInstaller:  # type: ignore[no-redef]
         pass
 
-from edgepulse.utils.log_handler import get_logger
-from edgepulse.agent_core import AgentCore, AgentConfig
-
 logger = get_logger(__name__)
 
 
 class WindowsServiceWrapper:
-    """Windows Service wrapper that manages AgentCore"""
+    """Thin SCM wrapper around EdgePulseAgent."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.service_name = "EdgePulseAgent"
         self.service_display_name = "EdgePulse Monitoring Agent"
         self.service_description = (
             "EdgePulse anomaly detection and monitoring agent for edge devices"
         )
 
-        self.agent_core: Optional[AgentCore] = None
-        self.service_instance = None
+        # The running EdgePulseAgent instance — set in run_agent()
+        self.agent = None
 
-        # Use safe ProgramData path to prevent traversal
-        base_path = get_safe_program_data_path()
-        self.program_data_path = base_path / "EdgePulse"
+        base = _safe_program_data()
+        self.program_data_path = base / "EdgePulse"
         self.models_path = self.program_data_path / "models"
         self.logs_path = self.program_data_path / "logs"
 
         self._create_directories()
 
     def _create_directories(self) -> None:
-        """Create necessary directories"""
-        try:
-            self.program_data_path.mkdir(parents=True, exist_ok=True)
-            self.models_path.mkdir(parents=True, exist_ok=True)
-            self.logs_path.mkdir(parents=True, exist_ok=True)
+        for d in [self.program_data_path, self.models_path, self.logs_path]:
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                logger.warning("directory_creation_failed", path=str(d), error=str(exc))
 
-            if sys.platform == "win32":
-                import win32security
-                import ntsecuritycon
+    # ------------------------------------------------------------------
+    # Settings
+    # ------------------------------------------------------------------
 
-                try:
-                    dacl = win32security.ACL()
-                    system_sid = win32security.ConvertStringSidToSid("S-1-5-18")
-                    dacl.AddAccessAllowedAce(
-                        win32security.ACL_REVISION,
-                        ntsecuritycon.FILE_ALL_ACCESS,
-                        system_sid,
-                    )
-                    win32security.SetNamedSecurityInfo(
-                        str(self.program_data_path),
-                        win32security.SE_FILE_OBJECT,
-                        win32security.DACL_SECURITY_INFORMATION,
-                        None,
-                        None,
-                        dacl,
-                        None,
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not set Windows permissions: {e}")
-
-            logger.info(f"Directories created: {self.program_data_path}")
-
-        except Exception as e:
-            logger.error(f"Error creating directories: {e}")
-
-    def create_agent_config(self) -> AgentConfig:
-        """Create agent configuration with Windows-specific settings"""
-        config = AgentConfig()
-
-        config.model_path = str(self.models_path / "isolation_forest.joblib")
+    def _build_settings(self):
+        """Return AgentSettings, optionally patched from agent_config.json."""
+        from edgepulse.config.settings import AgentSettings
 
         config_file = self.program_data_path / "agent_config.json"
-        if config_file.exists():
-            try:
-                with open(config_file, "r") as f:
-                    config_data = json.load(f)
+        if not config_file.exists():
+            return AgentSettings()
 
-                for key, value in config_data.items():
-                    if hasattr(config, key):
-                        setattr(config, key, value)
+        try:
+            overrides: dict = json.loads(config_file.read_text())
+        except Exception as exc:
+            logger.error("agent_config_parse_failed", error=str(exc))
+            return AgentSettings()
 
-                logger.info(f"Loaded configuration from {config_file}")
+        key_map = {
+            "collection_interval":       "COLLECTION__INTERVAL",
+            "detection_threshold":       "DETECTION__THRESHOLD",
+            "sync_enabled":              "SYNC__ENABLED",
+            "offline_queue_size":        "SYNC__OFFLINE_QUEUE_MAX",
+            "logging_level":             "LOG__LEVEL",
+            "enable_process_monitoring": "COLLECTION__ENABLE_PROCESS_MONITORING",
+            "enable_network_monitoring": "COLLECTION__ENABLE_NETWORK_MONITORING",
+        }
 
-            except Exception as e:
-                logger.error(f"Error loading config file: {e}")
+        original: dict = {}
+        for cfg_key, env_key in key_map.items():
+            if cfg_key in overrides:
+                original[env_key] = os.environ.get(env_key)
+                os.environ[env_key] = str(overrides[cfg_key])
 
-        return config
+        try:
+            settings = AgentSettings()
+        finally:
+            for env_key, orig_v in original.items():
+                if orig_v is None:
+                    os.environ.pop(env_key, None)
+                else:
+                    os.environ[env_key] = orig_v
+
+        logger.info("agent_config_loaded", path=str(config_file))
+        return settings
+
+    # ------------------------------------------------------------------
+    # Main coroutine
+    # ------------------------------------------------------------------
 
     async def run_agent(self) -> None:
-        """Run the portable agent core"""
+        """Create and run EdgePulseAgent — the same class used by the CLI."""
+        from edgepulse.core.agent import EdgePulseAgent
+
         try:
-            logger.info("Starting EdgePulse Agent Core")
-
-            config = self.create_agent_config()
-
-            self.agent_core = AgentCore(config)
-
-            await self.agent_core.run_forever()
-
-        except Exception as e:
-            logger.error(f"Error running agent core: {e}")
+            logger.info("windows_wrapper_starting_agent")
+            settings = self._build_settings()
+            self.agent = EdgePulseAgent(settings=settings)
+            await self.agent.run_forever()
+        except Exception as exc:
+            logger.error("windows_wrapper_agent_error", error=str(exc))
             raise
         finally:
-            logger.info("EdgePulse Agent Core stopped")
+            self.agent = None
+            logger.info("windows_wrapper_agent_stopped")
+
+    # ------------------------------------------------------------------
+    # Service lifecycle helpers
+    # ------------------------------------------------------------------
 
     def install_service(self, python_exe: Optional[str] = None) -> bool:
-        """Install the Windows Service"""
         if sys.platform != "win32":
-            logger.error("Windows Service can only be installed on Windows")
+            logger.error("install_service_windows_only")
             return False
-
-        try:
-            installer = ServiceInstaller()
-            success = installer.install_service(python_exe)
-
-            if success:
-                self._create_service_config()
-                logger.info("Windows Service installed successfully")
-
-            return success
-
-        except Exception as e:
-            logger.error(f"Error installing Windows Service: {e}")
-            return False
+        installer = ServiceInstaller()
+        success = installer.install_service(python_exe)
+        if success:
+            self._write_default_config()
+        return success
 
     def uninstall_service(self) -> bool:
-        """Uninstall the Windows Service"""
         if sys.platform != "win32":
-            logger.error("Windows Service can only be uninstalled on Windows")
             return False
-
-        try:
-            installer = ServiceInstaller()
-            success = installer.uninstall_service()
-
-            if success:
-                logger.info("Windows Service uninstalled successfully")
-
-            return success
-
-        except Exception as e:
-            logger.error(f"Error uninstalling Windows Service: {e}")
-            return False
+        return ServiceInstaller().uninstall_service()
 
     def start_service(self) -> bool:
-        """Start the Windows Service"""
         if sys.platform != "win32":
-            logger.error("Windows Service can only be started on Windows")
             return False
-
-        try:
-            installer = ServiceInstaller()
-            success = installer.start_service()
-
-            if success:
-                logger.info("Windows Service started successfully")
-
-            return success
-
-        except Exception as e:
-            logger.error(f"Error starting Windows Service: {e}")
-            return False
+        return ServiceInstaller().start_service()
 
     def stop_service(self) -> bool:
-        """Stop the Windows Service"""
         if sys.platform != "win32":
-            logger.error("Windows Service can only be stopped on Windows")
             return False
-
-        try:
-            installer = ServiceInstaller()
-            success = installer.stop_service()
-
-            if success:
-                logger.info("Windows Service stopped successfully")
-
-            return success
-
-        except Exception as e:
-            logger.error(f"Error stopping Windows Service: {e}")
-            return False
+        return ServiceInstaller().stop_service()
 
     def get_service_status(self) -> Optional[str]:
-        """Get Windows Service status"""
         if sys.platform != "win32":
             return "Not supported on this platform"
-
-        try:
-            installer = ServiceInstaller()
-            return installer.get_service_status()
-
-        except Exception as e:
-            logger.error(f"Error getting service status: {e}")
-            return None
-
-    def _create_service_config(self) -> None:
-        """Create service configuration file"""
-        try:
-            config_file = self.program_data_path / "agent_config.json"
-
-            default_config = {
-                "collection_interval": 60,
-                "detection_threshold": 0.5,
-                "sync_enabled": True,
-                "offline_queue_size": 10000,
-                "logging_level": "INFO",
-                "enable_process_monitoring": True,
-                "enable_network_monitoring": True,
-                "enable_filesystem_monitoring": True,
-                "model_type": "isolation_forest",
-            }
-
-            if not config_file.exists():
-                with open(config_file, "w") as f:
-                    json.dump(default_config, f, indent=2)
-
-                logger.info(f"Created default config: {config_file}")
-
-        except Exception as e:
-            logger.error(f"Error creating service config: {e}")
+        return ServiceInstaller().get_service_status()
 
     def run_as_service(self) -> None:
-        """Run as Windows Service"""
+        """Entry point when launched by the Windows SCM."""
         if sys.platform != "win32":
-            logger.error("Can only run as service on Windows")
+            logger.error("run_as_service_windows_only")
             return
 
-        try:
-            self.service_instance = EdgePulseWindowsService(
-                service_name=self.service_name,
-                service_display_name=self.service_display_name,
-                service_description=self.service_description,
-                agent_wrapper=self,
-            )
-
-            win32serviceutil.HandleCommandLine(self.service_instance)
-
-        except Exception as e:
-            logger.error(f"Error running as service: {e}")
-            raise
+        service_instance = EdgePulseWindowsService(
+            service_name=self.service_name,
+            service_display_name=self.service_display_name,
+            service_description=self.service_description,
+            agent_wrapper=self,
+        )
+        win32serviceutil.HandleCommandLine(service_instance)
 
     def run_standalone(self) -> None:
-        """Run as standalone process (for development/testing)"""
+        """Entry point for foreground / development runs on Windows."""
         try:
-            logger.info("Running EdgePulse Agent in standalone mode")
-
+            logger.info("windows_wrapper_standalone_mode")
             asyncio.run(self.run_agent())
-
         except KeyboardInterrupt:
-            logger.info("Received interrupt signal, shutting down")
-        except Exception as e:
-            logger.error(f"Error in standalone mode: {e}")
+            logger.info("windows_wrapper_standalone_interrupted")
+        except Exception as exc:
+            logger.error("windows_wrapper_standalone_error", error=str(exc))
             raise
 
+    def _write_default_config(self) -> None:
+        config_file = self.program_data_path / "agent_config.json"
+        if config_file.exists():
+            return
+
+        default: dict = {
+            "collection_interval": 60,
+            "detection_threshold": 0.5,
+            "sync_enabled": False,
+            "offline_queue_size": 10000,
+            "logging_level": "INFO",
+            "enable_process_monitoring": True,
+            "enable_network_monitoring": True,
+        }
+        try:
+            config_file.write_text(json.dumps(default, indent=2))
+            logger.info("default_config_written", path=str(config_file))
+        except Exception as exc:
+            logger.warning("default_config_write_failed", error=str(exc))
+
+
+# ── Entry points ──────────────────────────────────────────────────────────────
 
 def service_main() -> None:
-    """Main entry point for Windows Service"""
     wrapper = WindowsServiceWrapper()
     wrapper.run_as_service()
 
 
 def standalone_main() -> None:
-    """Main entry point for standalone execution"""
     wrapper = WindowsServiceWrapper()
     wrapper.run_standalone()
 

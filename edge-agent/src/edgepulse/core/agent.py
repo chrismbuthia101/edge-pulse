@@ -13,7 +13,7 @@ from edgepulse.utils.log_handler import configure_logging, get_logger
 from edgepulse.storage.database import DatabaseManager
 from edgepulse.storage.chain import HashChain
 from edgepulse.sync.async_queue import AsyncSyncQueue
-from edgepulse.api.api_server import AdaptiveAPIServer
+from edgepulse.api.api_server import AdaptiveAPIServer, register_detector_health_provider
 
 from edgepulse.collectors.system_collector import SystemMetricsCollector
 from edgepulse.collectors.process_collector import ProcessMonitor
@@ -211,34 +211,24 @@ class EdgePulseAgent:
             await asyncio.gather(*self._tasks, return_exceptions=True)
             self._tasks.clear()
 
-            # Stop collectors
             for collector in self._collectors:
                 if hasattr(collector, 'stop'):
                     collector.stop()
                     logger.info("collector_stopped", collector=collector.__class__.__name__)
 
-            # Stop pipeline
             if self._pipeline:
                 await self._pipeline.stop()
 
-            # Stop API server
             if self.api_server:
                 await self.api_server.stop()
 
-            # Stop sync queue
             if self.sync_queue:
                 await self.sync_queue.stop()
 
-            # Close sync client
             if self._sync_client:
                 await self._sync_client.close()
 
-            # Save state before shutting down the bus
             await self._save_state()
-
-            # FIX: Publish stop event BEFORE stopping the event bus.
-            # Previously this was published after event_bus.stop(), making it a
-            # silent no-op because bus._running was already False at that point.
             await self.event_bus.publish(Event(
                 type=EventType.SYSTEM,
                 data={"device_id": self.device_id, "event": "agent_stopped"},
@@ -298,9 +288,6 @@ class EdgePulseAgent:
                 self._shutdown_event.set()
 
         if platform.system() == "Windows":
-            # Windows does not support loop.add_signal_handler().
-            # call_soon_threadsafe schedules request_shutdown() as a callback
-            # on the next event loop iteration, making it safe.
             def _windows_sigint_handler(signum, frame) -> None:
                 loop.call_soon_threadsafe(request_shutdown)
 
@@ -311,7 +298,6 @@ class EdgePulseAgent:
             signal.signal(signal.SIGTERM, _windows_sigterm_handler)
             logger.debug("signal_handlers_registered", platform="windows")
         else:
-            # Unix/macOS: native asyncio signal integration.
             loop.add_signal_handler(signal.SIGINT, request_shutdown)
             loop.add_signal_handler(signal.SIGTERM, request_shutdown)
             logger.debug("signal_handlers_registered", platform="unix")
@@ -424,6 +410,28 @@ class EdgePulseAgent:
 
         if self.settings.alerting.enable_local_notifications:
             self.notifier = LocalNotifier()
+
+        primary_detectors = [d for d in self._detectors if hasattr(d, "get_health")]
+
+        if primary_detectors:
+            primary = primary_detectors[0]
+            register_detector_health_provider(primary.get_health)
+            logger.info(
+                "detector_health_provider_registered",
+                detector=primary.__class__.__name__,
+            )
+        else:
+            def _no_detector_health():
+                return {
+                    "status": "degraded",
+                    "is_trained": False,
+                    "action_required": "Run `python bootstrap_model.py` and restart the agent.",
+                }
+            register_detector_health_provider(_no_detector_health)
+            logger.warning(
+                "no_trained_detector_health_provider_registered",
+                action_required="Run `python bootstrap_model.py` and restart the agent.",
+            )
 
     async def _initialize_sync_client(self) -> None:
         """Initialize Supabase sync client."""
@@ -653,4 +661,5 @@ class EdgePulseAgent:
             "pipeline_running": self._pipeline is not None and self._pipeline._running,
             "api_server_info": self.api_server.get_server_info() if self.api_server else None,
             "sync_queue_stats": self.sync_queue.get_stats() if self.sync_queue else None,
+            "detector_health": _get_detector_health()
         }
