@@ -177,14 +177,14 @@ def build_model(n_samples: int, seed: int = 42) -> IsolationForest:
     return model
 
 
-def save_model(model: IsolationForest, output_dir: Path) -> Path:
+def save_model(model: IsolationForest, output_dir: Path, n_samples: int) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_path = output_dir / "edgepulse_primary_isolation_forest.joblib"
 
     model_data = {
         "model": model,
         "is_trained": True,
-        "training_samples": model.n_samples_,
+        "training_samples": n_samples,
         "n_estimators": model.n_estimators,
         "contamination": model.contamination,
         "feature_names": FEATURE_NAMES,
@@ -208,7 +208,7 @@ def save_model(model: IsolationForest, output_dir: Path) -> Path:
     return model_path
 
 
-def save_metadata(model_path: Path, model: IsolationForest) -> Path:
+def save_metadata(model_path: Path, model: IsolationForest, n_samples: int) -> Path:
     meta_path = model_path.with_suffix(".json")
     meta = {
         "model_file": model_path.name,
@@ -218,7 +218,7 @@ def save_metadata(model_path: Path, model: IsolationForest) -> Path:
         "n_features_named": N_FEATURES,
         "n_estimators": model.n_estimators,
         "contamination": model.contamination,
-        "training_samples": int(model.n_samples_),
+        "training_samples": n_samples,
         "sklearn_params": model.get_params(),
     }
     with open(meta_path, "w") as fh:
@@ -230,8 +230,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Bootstrap EdgePulse Isolation Forest model")
     parser.add_argument(
         "--output-dir",
-        default="models",
-        help="Directory to write model files (default: models/)",
+        default="src/models",
+        help="Directory to write model files (default: src/models/)",
     )
     parser.add_argument(
         "--n-samples",
@@ -278,8 +278,8 @@ def main() -> None:
 
     # 4. Save
     output_dir = Path(args.output_dir)
-    model_path = save_model(model, output_dir)
-    meta_path = save_metadata(model_path, model)
+    model_path = save_model(model, output_dir, args.n_samples)
+    meta_path = save_metadata(model_path, model, args.n_samples)
 
     print(f"\n✓ Model saved  → {model_path}")
     print(f"✓ Metadata     → {meta_path}")

@@ -2,6 +2,8 @@
 
 Edge security monitoring agent: collects system telemetry, extracts behavioral features, and detects anomalies using Isolation Forest (and optionally an Autoencoder). Alerts are generated locally and optionally synced to a Supabase backend.
 
+> **Note**: This project includes a `Makefile` for convenient commands. If you have `make` installed, use `make help` to see all available targets. Make commands are shown first in each section below.
+
 ---
 
 ## Architecture in One Line
@@ -20,6 +22,7 @@ The pipeline runs on a configurable cycle (default 60 s) inside an async event l
 
 - Python 3.9–3.12
 - [Poetry](https://python-poetry.org/docs/#installation)
+- [Make](https://www.gnu.org/software/make/) (optional, for convenience commands)
 
 ### Install
 
@@ -27,6 +30,12 @@ The pipeline runs on a configurable cycle (default 60 s) inside an async event l
 git clone <repo>
 cd edge-agent
 
+# Using make (recommended if available)
+make install                            # core deps + api-full + notifications
+make install-all                        # all optional extras
+make env                                # copy .env.example → .env
+
+# Or using poetry directly
 poetry install                          # core deps only
 poetry install --extras "api-full"      # + FastAPI/uvicorn
 poetry install --extras "all"           # everything
@@ -35,6 +44,10 @@ poetry install --extras "all"           # everything
 ### Configure
 
 ```bash
+# Using make (recommended if available)
+make env                                # copies .env.example → .env
+
+# Or manually
 cp .env.example .env
 # Edit .env — minimum required: nothing (all defaults work out of the box)
 ```
@@ -44,6 +57,10 @@ cp .env.example .env
 The agent needs a trained Isolation Forest before it can detect anomalies.
 
 ```bash
+# Using make (recommended if available)
+make bootstrap
+
+# Or manually
 python bootstrap_model.py
 # Writes:  models/edgepulse_primary_isolation_forest.joblib
 ```
@@ -53,6 +70,11 @@ To train on real security datasets instead of synthetic data, see `src/edgepulse
 ### Run
 
 ```bash
+# Using make (recommended if available)
+make run                                # INFO logging
+make dev                                # debug logging
+
+# Or using poetry directly
 poetry run edge-agent run
 poetry run edge-agent run --verbose     # debug logging
 ```
@@ -97,6 +119,13 @@ edge-agent/
 ### Linux (systemd)
 
 ```bash
+# Using make (recommended if available)
+make service-install
+sudo systemctl start edgepulse-agent
+sudo systemctl status edgepulse-agent
+make service-logs
+
+# Or using poetry directly
 sudo poetry run edge-agent service install
 sudo systemctl start edgepulse-agent
 sudo systemctl status edgepulse-agent
@@ -107,6 +136,13 @@ sudo journalctl -u edgepulse-agent -f
 
 ```powershell
 # Run as Administrator
+
+# Using make (recommended if available)
+make service-install
+make service-start
+make service-status
+
+# Or using poetry directly
 poetry run edge-agent service install
 poetry run edge-agent service start
 poetry run edge-agent service status
@@ -134,14 +170,17 @@ poetry install --extras "api-full cloud notifications"
 ## Development
 
 ```bash
-# Tests
-poetry run pytest
+# Using make (recommended if available)
+make test                               # run test suite
+make lint                               # black (check) + mypy
+make fmt                                # auto-format with black
+make typecheck                          # mypy only
+make clean                              # remove cache files
 
-# Format
-poetry run black src/
-
-# Type-check
-poetry run mypy src/
+# Or using poetry directly
+poetry run pytest                       # Tests
+poetry run black src/                   # Format
+poetry run mypy src/                    # Type-check
 ```
 
 ---
