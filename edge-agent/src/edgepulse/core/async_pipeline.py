@@ -10,8 +10,6 @@ from edgepulse.shared import create_metrics_collector, StandardMetrics
 
 logger = get_logger(__name__)
 
-# Maximum seconds to wait for a single collector before skipping it.
-# Prevents one slow/hung collector from blocking the entire pipeline cycle.
 _COLLECTOR_TIMEOUT_SECONDS = 30.0
 
 

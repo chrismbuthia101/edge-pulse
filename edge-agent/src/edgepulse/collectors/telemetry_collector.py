@@ -252,7 +252,7 @@ class TelemetryCollector(BaseCollector):
         """Get device ID from credentials or generate one"""
         try:
             # Try to get from credential manager
-            from ..auth.credentials import CredentialManager
+            from edgepulse.auth.credentials import CredentialManager
             cred_manager = CredentialManager()
             credentials = cred_manager.get_device_credentials()
             

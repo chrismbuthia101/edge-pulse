@@ -90,7 +90,7 @@ class AgentCore:
         """Initialize credential manager.
         """
         try:
-            from .auth.credentials import CredentialManager
+            from edgepulse.auth.credentials import CredentialManager
 
             self.credential_manager = CredentialManager()
 
@@ -142,10 +142,10 @@ class AgentCore:
                 logger.info("Sync disabled by configuration")
                 return
 
-            from .sync.async_queue import AsyncSyncQueue
-            from .sync.supabase import SupabaseSync
-            from .sync.sync_fsm import SyncFSM
-            from .auth.auth_client import AuthenticatedClient, AuthConfig
+            from edgepulse.sync.async_queue import AsyncSyncQueue
+            from edgepulse.sync.supabase import SupabaseSync
+            from edgepulse.sync.sync_fsm import SyncFSM
+            from edgepulse.auth.auth_client import AuthenticatedClient, AuthConfig
 
             credentials = self.credential_manager.get_device_credentials()
             if not credentials:
@@ -186,7 +186,7 @@ class AgentCore:
     async def _init_config_manager(self) -> None:
         """Initialize configuration manager."""
         try:
-            from .config.manager import ConfigManager
+            from edgepulse.config.manager import ConfigManager
 
             if self.sync_manager:
                 auth_client = self.sync_manager["auth_client"]
@@ -204,7 +204,7 @@ class AgentCore:
     async def _init_telemetry_collector(self) -> None:
         """Initialize telemetry collector"""
         try:
-            from .collectors.telemetry_collector import TelemetryCollector
+            from edgepulse.collectors.telemetry_collector import TelemetryCollector
 
             self.telemetry_collector = TelemetryCollector(
                 agent_version=get_agent_version()
@@ -235,7 +235,7 @@ class AgentCore:
     async def _init_explainable_ai(self) -> None:
         """Initialize explainable AI"""
         try:
-            from .analysis.explainable_ai import ExplainableAIManager
+            from edgepulse.analysis.explainable_ai import ExplainableAIManager
 
             model_id = (
                 self.model_manager.model_id if self.model_manager else "unknown"

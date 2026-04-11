@@ -1,8 +1,7 @@
 # Shared utilities package for EdgePulse components.
 
-from .exceptions import EdgePulseError
-
-from .schemas import (
+from edgepulse.shared.exceptions import EdgePulseError
+from edgepulse.shared.schemas import (
     SeverityLevel,
     DeviceStatus,
     EventType,
@@ -18,7 +17,7 @@ from .schemas import (
     create_standard_response
 )
 
-from .metrics import (
+from edgepulse.shared.metrics import (
     MetricType,
     MetricDefinition,
     MetricCollector,

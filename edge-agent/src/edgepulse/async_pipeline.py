@@ -6,7 +6,6 @@ to maintain backward compatibility while keeping the implementation
 in a single location.
 """
 
-# Re-export async pipeline components
 from edgepulse.core.async_pipeline import AsyncPipeline
 from edgepulse.core.async_pipeline import PipelineStage
 from edgepulse.core.async_pipeline import PipelineConfig

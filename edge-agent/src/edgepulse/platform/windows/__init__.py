@@ -25,8 +25,8 @@ if sys.platform == "win32":
 else:
     WINDOWS_AVAILABLE = False
 
-from .service import EdgePulseWindowsService
-from .installer import ServiceInstaller
+from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
+from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
 
 __all__ = [
     'EdgePulseWindowsService',

@@ -30,8 +30,8 @@ if sys.platform == "win32":
     import win32service
     import win32event
     import servicemanager
-    from .service import EdgePulseWindowsService
-    from .installer import ServiceInstaller
+    from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
+    from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
 else:
     class EdgePulseWindowsService:  # type: ignore[no-redef]
         pass

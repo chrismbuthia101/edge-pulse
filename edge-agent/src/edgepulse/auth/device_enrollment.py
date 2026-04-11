@@ -23,9 +23,9 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
-from ..utils.log_handler import get_logger
-from ..utils.device_id import get_hostname, sanitize_hostname, get_device_fingerprint
-from ..shared.exceptions import EdgePulseError
+from edgepulse.utils.log_handler import get_logger
+from edgepulse.utils.device_id import get_hostname, sanitize_hostname, get_device_fingerprint
+from edgepulse.shared.exceptions import EdgePulseError
 
 logger = get_logger(__name__)
 
