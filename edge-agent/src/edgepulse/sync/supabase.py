@@ -13,7 +13,7 @@ from tenacity import (
 )
 
 from edgepulse.utils.log_handler import get_logger
-from edgepulse.utils.device_id import get_default_device_id
+from edgepulse.utils.device_id import get_default_device_id, get_device_name
 from edgepulse.utils.error_handler import (
     AuthenticationError,
     NetworkError,
@@ -256,13 +256,17 @@ class SupabaseSync:
             # Match device_registry column names from migration 001
             payload = {
                 "id":                target_device_id,
+                "name":               heartbeat_data.get("name") or get_device_name(),
                 "last_seen":         datetime.utcnow().isoformat(),
                 "status":            heartbeat_data.get("status", "online"),
+                "risk":              heartbeat_data.get("risk", "none"),
                 "cpu_percent":       heartbeat_data.get("cpu_usage") or heartbeat_data.get("cpu_percent"),
                 "ram_percent":       heartbeat_data.get("memory_usage") or heartbeat_data.get("ram_percent"),
+                "sync_queue_depth":  heartbeat_data.get("sync_queue_depth", 0),
                 "alerts_count":      heartbeat_data.get("alerts_count", 0),
                 "agent_version":     heartbeat_data.get("version") or heartbeat_data.get("agent_version", "unknown"),
                 "actively_reporting": True,
+                "hash_chain_ok":     heartbeat_data.get("hash_chain_ok", True),
             }
 
             response = await self.client.post(
@@ -359,8 +363,8 @@ class SupabaseSync:
         )
         return {
             "anomaly_score_id":           alert.get("score_id") or alert.get("anomaly_score_id"),
-            "device_id":                  alert.get("device_id"),
-            "device_name":                alert.get("device_name", ""),
+            "device_id":                  alert.get("device_id") or self.device_id,
+            "device_name":                alert.get("device_name") or get_device_name(),
             "telemetry_source":           alert.get("telemetry_source", "PROCESS"),
             "title":                      alert.get("title", "Anomaly Detected"),
             "description":                alert.get("description"),

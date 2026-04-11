@@ -37,9 +37,10 @@ ENV/
 Thumbs.db
 
 # Project specific
-data/logs/
-data/cache/
-data/models/
+/src/data/logs
+/src/data/sync
+/src/data/cache
+/src/models
 *.db
 *.sqlite
 *.sqlite3
@@ -53,5 +54,3 @@ data/models/
 *.tmp
 *.temp
 *.log
-
-/src/data/logs

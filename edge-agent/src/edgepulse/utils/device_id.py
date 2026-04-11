@@ -327,6 +327,21 @@ def get_simple_device_id() -> str:
     return generate_device_id_from_hostname(include_platform=False, hash_suffix=False)
 
 
+def get_device_name() -> str:
+    """
+    Get a clean device name suitable for display (e.g., in alerts).
+    Returns the sanitized hostname without UUID suffix.
+    
+    Returns:
+        str: The device name (sanitized hostname)
+    """
+    try:
+        hostname = get_hostname()
+        return sanitize_hostname(hostname)
+    except Exception:
+        return "unknown-device"
+
+
 def get_unique_device_id() -> str:
     """Get a unique device ID using hostname with hash suffix."""
     return generate_device_id_from_hostname(include_platform=True, hash_suffix=True)
