@@ -40,7 +40,7 @@ Thumbs.db
 /src/data/logs
 /src/data/sync
 /src/data/cache
-/src/models
+# /src/models
 *.db
 *.sqlite
 *.sqlite3

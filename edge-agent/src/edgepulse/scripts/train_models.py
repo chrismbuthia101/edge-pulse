@@ -2,23 +2,56 @@
 """
 EdgePulse Model Training Script
 ================================
-Trains the Isolation Forest anomaly detection model using all five
-downloaded datasets.  Each dataset is mapped to EdgePulse's canonical
-36-feature schema (padded to 50 dimensions) so the saved model is
-immediately loadable by SklearnAnomalyDetector.load_model_with_integrity().
+Trains the primary Isolation Forest anomaly detection model from real security
+datasets and writes the result in the exact format expected by
+IsolationForestDetector.load_model().
+
+Supported datasets (pass any subset via --datasets):
+  unsw      UNSW_NB15         (parquet, network flows, labelled)
+  cic       CSE-CIC-IDS2018   (csv, network flows, labelled)
+  cert      CERT r4.2         (csv, insider-threat behaviour, no attack labels)
+  adfa_ld   ADFA-LD           (txt syscall traces, Linux, labelled)
+  adfa_wd   ADFA-WD-SAA       (Windows Full_Process_Traces, labelled)
+  dapt      DAPT2020          (csv pcap flows, labelled via filename)
+
+Expected directory layout under --datasets-dir:
+  <datasets-dir>/
+  ├── UNSW_NB15/
+  │   ├── UNSW_NB15_training-set.parquet
+  │   └── UNSW_NB15_testing-set.parquet
+  ├── CSE-CIC-IDS2018/
+  │   └── CSE-CIC-IDS2018.csv
+  ├── CERT Insider Threat r4.2/
+  │   ├── logon.csv  email.csv  file.csv  http.csv  device.csv
+  ├── ADFA-LD/
+  │   ├── Training_Data_Master/   (*.txt normal syscall traces)
+  │   └── Attack_Data_Master/     (subdirs, each with *.txt attack traces)
+  ├── ADFA-WD-SAA_Master/         (OR: Full_Process_Traces/ at datasets-dir root)
+  │   └── Full_Process_Traces/
+  │       ├── S1/ S2/ S3/ S4/    (each has S-N-1..S-N-10 subdirs with trace files)
+  ├── Full_Process_Traces/        (alternative root-level location)
+  │   ├── Full_Trace_Attack_Data/ (242 subdirs, .GHC files)
+  │   ├── Full_Trace_Training_Data/  (*.GHC normal traces)
+  │   └── Full_Trace_Validation_Data/ (*.GHC normal traces)
+  └── DAPT2020/
+      └── *.pcap_Flow.csv
 
 Usage
 -----
-  # Full training run (all datasets)
-  python train_models.py --datasets-dir ~/Downloads/Datasets --output-dir edge-agent/models
+  # Smoke test — fast, catches path and format errors
+  python train_models.py \
+      --datasets-dir ~/Datasets \
+      --output-dir edge-agent/src/models \
+      --max-rows 5000 \
+      --datasets unsw cert dapt \
+      --n-estimators 50
 
-  # Pick specific datasets
-  python train_models.py --datasets-dir ~/Downloads/Datasets --output-dir edge-agent/models \
-      --datasets unsw cert adfa_wd dapt cic
-
-  # Quick smoke-test with 10 k rows per dataset
-  python train_models.py --datasets-dir ~/Downloads/Datasets --output-dir edge-agent/models \
-      --max-rows 10000
+  # Full run — all datasets
+  python train_models.py \
+      --datasets-dir ~/Datasets \
+      --output-dir edge-agent/src/models \
+      --datasets unsw cic cert adfa_ld adfa_wd dapt \
+      --n-estimators 200
 
 Requirements
 ------------
@@ -31,7 +64,6 @@ import argparse
 import hashlib
 import logging
 import math
-import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -52,37 +84,40 @@ logging.basicConfig(
 log = logging.getLogger("train")
 
 # ---------------------------------------------------------------------------
-# Canonical feature schema (must match feature_extractor.py)
+# Canonical feature schema — must stay in sync with feature_extractor.py
 # ---------------------------------------------------------------------------
 
 FEATURE_SCHEMA: List[str] = [
-    # CPU — 10 features
+    # CPU 1-min (5)
     "cpu_mean_1min", "cpu_std_1min", "cpu_max_1min",
     "cpu_rate_change_1min", "cpu_core_imbalance_1min",
+    # CPU 5-min (5)
     "cpu_mean_5min", "cpu_std_5min", "cpu_max_5min",
     "cpu_rate_change_5min", "cpu_core_imbalance_5min",
-    # Memory — 7 features
+    # Memory 1-min (4)
     "memory_growth_rate_1min", "memory_variance_1min",
     "memory_spike_1min", "memory_cpu_ratio_1min",
+    # Memory 5-min (3)
     "memory_growth_rate_5min", "memory_variance_5min",
     "memory_cpu_ratio_5min",
-    # Disk — 3 features
+    # Disk 1-min (3)
     "disk_write_burst_1min", "disk_io_spike_1min",
     "disk_write_read_ratio_1min",
-    # Network — 6 features
+    # Network 1-min (6)
     "network_entropy_1min", "network_unusual_ports_1min",
     "network_burst_pattern_1min", "network_error_rate_1min",
     "network_drop_rate_1min", "network_send_recv_ratio_1min",
-    # Process — 7 features
+    # Process 1-min (7)
     "process_spawn_frequency_1min", "process_unique_count_1min",
     "process_rare_executions_1min", "process_cpu_gini_1min",
     "process_admin_ratio_1min", "process_no_exe_path_ratio_1min",
     "process_long_cmdline_ratio_1min",
-    # Temporal — 3 features
+    # Temporal (3)
     "temporal_hour_sin", "temporal_hour_cos", "temporal_is_weekend",
 ]
+
 SCHEMA_LEN = len(FEATURE_SCHEMA)   # 36
-FEATURE_DIM = 50                   # padded dimension expected by the model
+FEATURE_DIM = 50                   # padded dimension IsolationForestDetector expects
 
 PADDED_NAMES: List[str] = FEATURE_SCHEMA + [
     f"padding_{i}" for i in range(FEATURE_DIM - SCHEMA_LEN)
@@ -96,8 +131,15 @@ def _empty_row() -> Dict[str, float]:
     return {f: 0.0 for f in FEATURE_SCHEMA}
 
 
+def _col(df: pd.DataFrame, *names: str, default: float = 0.0) -> pd.Series:
+    """Return first matching column as float, or a constant series."""
+    for n in names:
+        if n in df.columns:
+            return pd.to_numeric(df[n], errors="coerce").fillna(default)
+    return pd.Series(default, index=df.index, dtype=float)
+
+
 def _shannon_entropy(series: pd.Series) -> float:
-    """Shannon entropy in bits for a discrete value series."""
     counts = series.value_counts(normalize=True)
     if len(counts) <= 1:
         return 0.0
@@ -105,30 +147,25 @@ def _shannon_entropy(series: pd.Series) -> float:
 
 
 def _gini(values: np.ndarray) -> float:
-    """Gini coefficient of an array of non-negative values."""
     if len(values) < 2:
         return 0.0
-    v = np.sort(values)
+    v = np.sort(np.abs(values))
     n = len(v)
-    cumsum = np.cumsum(v)
-    total = cumsum[-1]
+    total = v.sum()
     if total == 0:
         return 0.0
-    return float((2 * np.sum((np.arange(1, n + 1)) * v) / (n * total)) - (n + 1) / n)
+    return float((2 * np.dot(np.arange(1, n + 1), v) / (n * total)) - (n + 1) / n)
 
 
-def _temporal(timestamp_series: pd.Series) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return (hour_sin, hour_cos, is_weekend) arrays from a datetime series."""
-    dt = pd.to_datetime(timestamp_series, errors="coerce")
-    hour_rad = (dt.dt.hour.fillna(0) / 24.0) * 2 * math.pi
-    sin_h = np.sin(hour_rad).values.astype(float)
-    cos_h = np.cos(hour_rad).values.astype(float)
-    weekend = (dt.dt.dayofweek >= 5).fillna(False).astype(float).values
-    return sin_h, cos_h, weekend
+def _to_feature_matrix(rows: List[Dict[str, float]]) -> np.ndarray:
+    mat = np.zeros((len(rows), SCHEMA_LEN), dtype=np.float32)
+    for i, row in enumerate(rows):
+        for j, name in enumerate(FEATURE_SCHEMA):
+            mat[i, j] = float(row.get(name, 0.0))
+    return mat
 
 
 def _pad_to_50(arr: np.ndarray) -> np.ndarray:
-    """Zero-pad or truncate to exactly FEATURE_DIM columns."""
     n, c = arr.shape
     if c == FEATURE_DIM:
         return arr
@@ -137,37 +174,22 @@ def _pad_to_50(arr: np.ndarray) -> np.ndarray:
     return arr[:, :FEATURE_DIM]
 
 
-def _to_feature_matrix(rows: List[Dict[str, float]]) -> np.ndarray:
-    """Convert a list of feature dicts to an (N, 36) float32 matrix."""
-    mat = np.zeros((len(rows), SCHEMA_LEN), dtype=np.float32)
-    for i, row in enumerate(rows):
-        for j, name in enumerate(FEATURE_SCHEMA):
-            mat[i, j] = float(row.get(name, 0.0))
-    return mat
+def _clean(arr: np.ndarray) -> np.ndarray:
+    return np.nan_to_num(arr, nan=0.0, posinf=1e6, neginf=-1e6)
 
 
 # ---------------------------------------------------------------------------
-# 1.  UNSW-NB15
+# 1. UNSW-NB15
 # ---------------------------------------------------------------------------
-
-UNSW_NET_COLS = {
-    "sbytes": "sbytes", "dbytes": "dbytes",
-    "sloss":  "sloss",  "dloss":  "dloss",
-    "spkts":  "spkts",  "dpkts":  "dpkts",
-    "sload":  "sload",  "dload":  "dload",
-    "sjit":   "sjit",   "djit":   "djit",
-    "dur":    "dur",
-}
-
-# Columns that may exist in both training and testing parquet
-UNSW_LABEL_COLS = ["label", "Label", "attack_cat"]
-
 
 def load_unsw_nb15(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """Load UNSW-NB15 parquet files → (X, y) where y=0 normal, y=1 attack."""
-    parquets = sorted(data_dir.glob("UNSW_NB15*.parquet"))
+    """
+    Expects: <data_dir>/UNSW_NB15/*.parquet
+    Labels:  column 'label' (0 = normal, 1 = attack) or 'attack_cat' (non-empty = attack)
+    """
+    parquets = sorted(data_dir.glob("UNSW_NB15/*.parquet"))
     if not parquets:
-        raise FileNotFoundError(f"No UNSW-NB15 parquet files in {data_dir}")
+        raise FileNotFoundError(f"No UNSW-NB15 parquet files found under {data_dir}/UNSW_NB15/")
 
     frames = []
     for p in parquets:
@@ -175,339 +197,442 @@ def load_unsw_nb15(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray,
         if max_rows:
             df = df.sample(min(max_rows, len(df)), random_state=42)
         frames.append(df)
-        log.info("  UNSW  %s  rows=%d  cols=%d", p.name, len(df), df.shape[1])
+        log.info("  UNSW  %s  rows=%d", p.name, len(df))
 
     df = pd.concat(frames, ignore_index=True)
     df.columns = df.columns.str.lower().str.strip()
 
-    # --- label ---
+    # Labels
     label_col = next((c for c in ["label", "attack_cat"] if c in df.columns), None)
-    y = (df[label_col].notna() & (df[label_col].astype(str) != "0") & (df[label_col].astype(str).str.lower() != "normal")).astype(int).values if label_col else np.zeros(len(df), dtype=int)
+    if label_col == "attack_cat":
+        y = (df[label_col].notna()
+             & (df[label_col].astype(str).str.strip() != "")
+             & (df[label_col].astype(str).str.lower() != "normal")).astype(int).values
+    elif label_col == "label":
+        y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).values
+    else:
+        y = np.zeros(len(df), dtype=int)
 
-    # --- feature mapping ---
-    def _col(df, *names, default=0.0):
-        for n in names:
-            if n in df.columns:
-                return pd.to_numeric(df[n], errors="coerce").fillna(0.0)
-        return pd.Series(default, index=df.index)
+    sbytes  = _col(df, "sbytes")
+    dbytes  = _col(df, "dbytes")
+    spkts   = _col(df, "spkts")
+    dpkts   = _col(df, "dpkts")
+    sloss   = _col(df, "sloss")
+    dloss   = _col(df, "dloss")
+    dur     = _col(df, "dur").replace(0, 1e-6)
+    sjit    = _col(df, "sjit")
+    sport   = _col(df, "sport", "src_port")
+    dport   = _col(df, "dport", "dsport", "dst_port")
 
-    sbytes = _col(df, "sbytes")
-    dbytes = _col(df, "dbytes")
-    spkts  = _col(df, "spkts")
-    dpkts  = _col(df, "dpkts")
-    sloss  = _col(df, "sloss")
-    dloss  = _col(df, "dloss")
-    dur    = _col(df, "dur").replace(0, 1e-6)
-    sjit   = _col(df, "sjit")
-    djit   = _col(df, "djit")
-    sport  = _col(df, "sport", "src_port")
-    dport  = _col(df, "dport", "dst_port", "dsport")
-
-    total_pkts  = spkts + dpkts + 1e-9
-    total_bytes = sbytes + dbytes + 1e-9
+    unusual = ((sport > 1024) | (dport > 1024)).astype(float)
+    sjit_mean = sjit.mean() if sjit.mean() > 0 else 1.0
 
     rows = []
-    # Compute per-row entropy proxy (jitter variation as diversity signal)
-    # Unusual port heuristic: ports outside well-known range (>1024)
-    unusual_ports = ((sport > 1024) | (dport > 1024)).astype(float)
-
     for i in range(len(df)):
         r = _empty_row()
-        # Network
-        r["network_entropy_1min"]       = float(sjit.iloc[i] / (sjit.mean() + 1e-9))
-        r["network_unusual_ports_1min"] = float(unusual_ports.iloc[i])
-        r["network_burst_pattern_1min"] = float(spkts.iloc[i] / float(dur.iloc[i]))
-        r["network_error_rate_1min"]    = float(sloss.iloc[i] / max(spkts.iloc[i], 1))
-        r["network_drop_rate_1min"]     = float(dloss.iloc[i] / max(dpkts.iloc[i], 1))
-        r["network_send_recv_ratio_1min"] = float(sbytes.iloc[i] / max(dbytes.iloc[i], 1))
-        # Temporal approximation: assume uniform distribution (no timestamp)
-        r["temporal_hour_sin"] = 0.0
-        r["temporal_hour_cos"] = 1.0
-        r["temporal_is_weekend"] = 0.0
+        r["network_entropy_1min"]         = float(sjit.iloc[i] / sjit_mean)
+        r["network_unusual_ports_1min"]   = float(unusual.iloc[i])
+        r["network_burst_pattern_1min"]   = float(spkts.iloc[i] / float(dur.iloc[i]))
+        r["network_error_rate_1min"]      = float(sloss.iloc[i] / max(spkts.iloc[i], 1))
+        r["network_drop_rate_1min"]       = float(dloss.iloc[i] / max(dpkts.iloc[i], 1))
+        r["network_send_recv_ratio_1min"] = float((sbytes.iloc[i] + 1) / (dbytes.iloc[i] + 1))
         rows.append(r)
 
-    X = _pad_to_50(_to_feature_matrix(rows))
+    X = _pad_to_50(_clean(_to_feature_matrix(rows)))
     log.info("  UNSW  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
     return X, y
 
 
 # ---------------------------------------------------------------------------
-# 2.  CSE-CIC-IDS2018
+# 2. CSE-CIC-IDS2018
 # ---------------------------------------------------------------------------
 
-def load_cic_ids2018(csv_path: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """Load the single merged CSV → (X, y)."""
-    log.info("  CIC-IDS2018  reading %s …", csv_path.name)
+def load_cic_ids2018(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Expects: <data_dir>/CSE-CIC-IDS2018/CSE-CIC-IDS2018.csv
+    Labels:  column 'label' or 'class', value 'Benign' = normal
+    """
+    # Support both possible locations
+    candidates = [
+        data_dir / "CSE-CIC-IDS2018" / "CSE-CIC-IDS2018.csv",
+        data_dir / "CSE-CIC-IDS2018.csv",
+    ]
+    csv_path = next((p for p in candidates if p.exists()), None)
+    if csv_path is None:
+        raise FileNotFoundError(
+            f"CSE-CIC-IDS2018.csv not found. Tried:\n" +
+            "\n".join(f"  {p}" for p in candidates)
+        )
+
+    log.info("  CIC  reading %s ...", csv_path)
     df = pd.read_csv(csv_path, low_memory=False, nrows=max_rows)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-    log.info("  CIC-IDS2018  rows=%d  cols=%d", len(df), df.shape[1])
+    log.info("  CIC  rows=%d  cols=%d", len(df), df.shape[1])
 
     label_col = next((c for c in ["label", "class"] if c in df.columns), None)
-    if label_col:
-        y = (df[label_col].astype(str).str.lower() != "benign").astype(int).values
-    else:
-        y = np.zeros(len(df), dtype=int)
+    y = (df[label_col].astype(str).str.strip().str.lower() != "benign").astype(int).values \
+        if label_col else np.zeros(len(df), dtype=int)
 
-    def _col(df, *names, default=0.0):
-        for n in names:
-            if n in df.columns:
-                return pd.to_numeric(df[n], errors="coerce").fillna(0.0)
-        return pd.Series(default, index=df.index)
+    fwd_pkts   = _col(df, "total_fwd_packets", "fwd_packets", "fwd_packet_length_total")
+    bwd_pkts   = _col(df, "total_backward_packets", "bwd_packets")
+    fwd_bytes  = _col(df, "total_length_of_fwd_packets", "fwd_bytes")
+    bwd_bytes  = _col(df, "total_length_of_bwd_packets", "bwd_bytes")
+    duration   = _col(df, "flow_duration", "duration").replace(0, 1e-6)
+    src_port   = _col(df, "source_port", "src_port")
+    dst_port   = _col(df, "destination_port", "dst_port")
+    pkt_std    = _col(df, "packet_length_std", "fwd_packet_length_std")
+    fwd_iat    = _col(df, "fwd_iat_mean", "fwd_iat_total", "flow_iat_mean")
+    bwd_iat    = _col(df, "bwd_iat_mean", "bwd_iat_total")
 
-    fwd_pkts  = _col(df, "total_fwd_packets", "fwd_packets")
-    bwd_pkts  = _col(df, "total_backward_packets", "bwd_packets")
-    fwd_bytes = _col(df, "total_length_of_fwd_packets", "fwd_bytes")
-    bwd_bytes = _col(df, "total_length_of_bwd_packets", "bwd_bytes")
-    duration  = _col(df, "flow_duration", "duration").replace(0, 1e-6)
-    fwd_iat   = _col(df, "fwd_iat_mean", "fwd_iat_total")
-    bwd_iat   = _col(df, "bwd_iat_mean", "bwd_iat_total")
-    src_port  = _col(df, "source_port", "src_port")
-    dst_port  = _col(df, "destination_port", "dst_port")
-    pkt_len_std = _col(df, "packet_length_std", "fwd_packet_length_std")
-
+    pkt_std_mean = pkt_std.mean() if pkt_std.mean() > 0 else 1.0
+    fwd_iat_mean = fwd_iat.mean() if fwd_iat.mean() > 0 else 1.0
+    bwd_iat_mean = bwd_iat.mean() if bwd_iat.mean() > 0 else 1.0
     unusual = ((src_port > 1024) | (dst_port > 1024)).astype(float)
+    total_p = fwd_pkts + bwd_pkts + 1e-9
 
     rows = []
     for i in range(len(df)):
         r = _empty_row()
-        total_p = fwd_pkts.iloc[i] + bwd_pkts.iloc[i] + 1e-9
-        r["network_entropy_1min"]         = float(pkt_len_std.iloc[i] / (pkt_len_std.mean() + 1e-9))
+        r["network_entropy_1min"]         = float(pkt_std.iloc[i] / pkt_std_mean)
         r["network_unusual_ports_1min"]   = float(unusual.iloc[i])
-        r["network_burst_pattern_1min"]   = float(total_p / float(duration.iloc[i]))
-        r["network_error_rate_1min"]      = float(fwd_iat.iloc[i] / (fwd_iat.mean() + 1e-9))
-        r["network_drop_rate_1min"]       = float(bwd_iat.iloc[i] / (bwd_iat.mean() + 1e-9))
+        r["network_burst_pattern_1min"]   = float(total_p.iloc[i] / float(duration.iloc[i]))
+        r["network_error_rate_1min"]      = float(fwd_iat.iloc[i] / fwd_iat_mean)
+        r["network_drop_rate_1min"]       = float(bwd_iat.iloc[i] / bwd_iat_mean)
         r["network_send_recv_ratio_1min"] = float((fwd_bytes.iloc[i] + 1) / (bwd_bytes.iloc[i] + 1))
         rows.append(r)
 
-    X = _pad_to_50(_to_feature_matrix(rows))
-    log.info("  CIC-IDS2018  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
+    X = _pad_to_50(_clean(_to_feature_matrix(rows)))
+    log.info("  CIC  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
     return X, y
 
 
 # ---------------------------------------------------------------------------
-# 3.  CERT Insider Threat r4.2
+# 3. CERT Insider Threat r4.2
 # ---------------------------------------------------------------------------
 
 def load_cert(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """Load CERT r4.2 CSVs and aggregate per user-day into feature rows."""
-    log.info("  CERT  loading from %s …", data_dir)
+    """
+    Expects: <data_dir>/CERT Insider Threat r4.2/*.csv
+    Labels:  none exposed — all treated as normal behaviour.
+    """
+    cert_dir = data_dir / "CERT Insider Threat r4.2"
+    if not cert_dir.exists():
+        raise FileNotFoundError(f"CERT directory not found: {cert_dir}")
 
     def _read(fname: str) -> Optional[pd.DataFrame]:
-        p = data_dir / fname
+        p = cert_dir / fname
         if not p.exists():
-            log.warning("    CERT  %s not found, skipping", fname)
+            log.warning("  CERT  %s not found, skipping", fname)
             return None
-        df = pd.read_csv(p, low_memory=False, nrows=max_rows)
+        nrows = max_rows if max_rows else None
+        df = pd.read_csv(p, low_memory=False, nrows=nrows)
         df.columns = df.columns.str.strip().str.lower()
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        log.info("  CERT  %s  rows=%d", fname, len(df))
         return df
 
     logon  = _read("logon.csv")
     file_  = _read("file.csv")
     http   = _read("http.csv")
-    device = _read("device.csv")
     email  = _read("email.csv")
 
-    records = []
+    records: List[Dict[str, float]] = []
 
-    # Aggregate logon events per (user, day)
     if logon is not None and "user" in logon.columns and "date" in logon.columns:
         logon["day"] = logon["date"].dt.date
-        grp = logon.groupby(["user", "day"])
-        for (user, day), g in grp:
+        for (_, day), g in logon.groupby(["user", "day"]):
             r = _empty_row()
-            # logon = proxy for process spawn
-            r["process_spawn_frequency_1min"] = len(g) / 1440.0  # events per minute of day
-            # After-hours heuristic: logons outside 08–18 = admin-like behaviour
+            r["process_spawn_frequency_1min"] = len(g) / 1440.0
             if "date" in g.columns:
                 hours = g["date"].dt.hour
-                r["process_admin_ratio_1min"] = float((hours < 8).sum() + (hours > 18).sum()) / max(len(g), 1)
-            # Temporal
+                r["process_admin_ratio_1min"] = float(
+                    ((hours < 8).sum() + (hours > 18).sum()) / max(len(g), 1)
+                )
             dt = pd.Timestamp(str(day))
-            hr = 12.0  # unknown hour, use midday
+            hr = dt.hour if hasattr(dt, "hour") else 12.0
             r["temporal_hour_sin"] = math.sin(hr / 24.0 * 2 * math.pi)
             r["temporal_hour_cos"] = math.cos(hr / 24.0 * 2 * math.pi)
             r["temporal_is_weekend"] = float(dt.dayofweek >= 5)
             records.append(r)
 
-    # File events → disk features
     if file_ is not None and "user" in file_.columns and "date" in file_.columns:
         file_["day"] = file_["date"].dt.date
-        grp = file_.groupby(["user", "day"])
-        for idx, ((user, day), g) in enumerate(grp):
+        for (_, day), g in file_.groupby(["user", "day"]):
             r = _empty_row()
-            # Use unique filename count as a proxy for disk activity rate
             unique_files = g["filename"].nunique() if "filename" in g.columns else len(g)
             r["disk_write_burst_1min"] = unique_files / 1440.0
-            r["disk_io_spike_1min"]    = float(len(g)) / max(1.0, unique_files)
-            # .exe/.dll accesses = suspicious → long cmdline proxy
+            r["disk_io_spike_1min"] = float(len(g)) / max(1.0, unique_files)
             if "filename" in g.columns:
-                exe_ratio = g["filename"].str.lower().str.endswith((".exe", ".bat", ".ps1")).mean()
-                r["process_long_cmdline_ratio_1min"] = float(exe_ratio)
+                r["process_long_cmdline_ratio_1min"] = float(
+                    g["filename"].str.lower().str.endswith((".exe", ".bat", ".ps1")).mean()
+                )
             records.append(r)
 
-    # HTTP events → network features
     if http is not None and "user" in http.columns and "date" in http.columns:
         http["day"] = http["date"].dt.date
-        grp = http.groupby(["user", "day"])
-        for (user, day), g in grp:
+        for (_, day), g in http.groupby(["user", "day"]):
             r = _empty_row()
             if "url" in g.columns:
                 domains = g["url"].str.extract(r"(?:https?://)?([^/]+)", expand=False)
-                r["network_entropy_1min"]       = _shannon_entropy(domains.fillna("unknown"))
-                unique_domains = domains.nunique()
-                r["network_unusual_ports_1min"] = float(min(unique_domains, 100)) / 100.0
+                r["network_entropy_1min"] = _shannon_entropy(domains.fillna("unknown"))
+                r["network_unusual_ports_1min"] = float(min(domains.nunique(), 100)) / 100.0
             r["network_burst_pattern_1min"] = len(g) / 1440.0
             records.append(r)
 
-    # Email events → exfil proxy
     if email is not None and "user" in email.columns and "date" in email.columns:
         email["day"] = email["date"].dt.date
-        grp = email.groupby(["user", "day"])
-        for (user, day), g in grp:
+        for (_, day), g in email.groupby(["user", "day"]):
             r = _empty_row()
             if "size" in g.columns:
                 sizes = pd.to_numeric(g["size"], errors="coerce").fillna(0)
-                r["network_send_recv_ratio_1min"] = float(sizes.sum()) / 1e6  # MB
-                r["disk_write_read_ratio_1min"]   = float((sizes > 1e5).mean())  # large attachments
+                r["network_send_recv_ratio_1min"] = float(sizes.sum()) / 1e6
+                r["disk_write_read_ratio_1min"] = float((sizes > 1e5).mean())
             records.append(r)
 
     if not records:
         raise ValueError("CERT: no records produced — check CSV paths")
 
-    X = _pad_to_50(_to_feature_matrix(records))
-    # CERT r4.2 has no ground-truth labels exposed; treat as all-normal
+    X = _pad_to_50(_clean(_to_feature_matrix(records)))
     y = np.zeros(len(X), dtype=int)
     log.info("  CERT  final X=%s  (all treated as normal)", X.shape)
     return X, y
 
 
 # ---------------------------------------------------------------------------
-# 4.  ADFA-WD (Windows syscall traces)
+# 4. ADFA-LD  (Linux syscall traces — .txt files)
 # ---------------------------------------------------------------------------
 
-# Windows NT syscall IDs associated with privilege escalation / suspicious behaviour
-ADFA_SUSPICIOUS_SYSCALLS = {
-    # CreateProcess family
-    0x0078, 0x0079, 0x007A,
-    # Token manipulation
-    0x0029, 0x002A, 0x002B,
-    # Registry writes
-    0x0014, 0x0015,
-    # File creation / write
-    0x0055, 0x0008,
-    # Network
-    0x0082, 0x0083, 0x0084,
+# Suspicious Linux syscall numbers (common in privilege escalation / shellcode)
+ADFA_LD_SUSPICIOUS = {
+    11,   # execve
+    2,    # fork
+    190,  # vfork
+    120,  # clone
+    3,    # read (used in shellcode loops)
+    5,    # open
+    197,  # fstat64
+    175,  # sigprocmask (common in exploits)
 }
 
-ADFA_PROCESS_SYSCALLS = {0x0078, 0x0079, 0x007A, 0x0070, 0x0071}
+ADFA_LD_PROCESS = {11, 2, 190, 120}
 
 
-def _parse_adfa_trace(path: Path) -> Optional[np.ndarray]:
-    """Read one ADFA trace file → numpy array of integer syscall IDs."""
+def _parse_syscall_trace(path: Path) -> Optional[np.ndarray]:
+    """Read one syscall trace file — space-separated integers, one per line or all on one line."""
     try:
         text = path.read_text(errors="replace").strip()
-        ids = np.array([int(x) for x in text.split() if x.strip().isdigit()], dtype=np.int32)
+        ids = np.array(
+            [int(x) for x in text.split() if x.strip().lstrip("-").isdigit()],
+            dtype=np.int32,
+        )
         return ids if len(ids) > 0 else None
     except Exception:
         return None
 
 
-def _adfa_trace_to_features(syscalls: np.ndarray) -> Dict[str, float]:
-    """Convert a syscall sequence to an EdgePulse feature row."""
+def _syscall_trace_to_features(syscalls: np.ndarray, suspicious: set, process: set) -> Dict[str, float]:
     r = _empty_row()
     if len(syscalls) == 0:
         return r
 
     n = len(syscalls)
     counts = Counter(syscalls.tolist())
-    unique  = len(counts)
-    total   = n
+    unique = len(counts)
+    total = n
 
-    # Process features
-    proc_calls = sum(counts[s] for s in ADFA_PROCESS_SYSCALLS if s in counts)
-    susp_calls = sum(counts[s] for s in ADFA_SUSPICIOUS_SYSCALLS if s in counts)
+    proc_calls = sum(counts.get(s, 0) for s in process)
+    susp_calls = sum(counts.get(s, 0) for s in suspicious)
 
-    r["process_spawn_frequency_1min"] = proc_calls / total
-    r["process_unique_count_1min"]    = unique
-    r["process_rare_executions_1min"] = sum(1 for c in counts.values() if c == 1) / max(unique, 1)
-    r["process_admin_ratio_1min"]     = susp_calls / total
-    r["process_no_exe_path_ratio_1min"] = susp_calls / total  # privilege-elevation proxy
+    r["process_spawn_frequency_1min"]   = proc_calls / total
+    r["process_unique_count_1min"]      = float(unique)
+    r["process_rare_executions_1min"]   = sum(1 for c in counts.values() if c == 1) / max(unique, 1)
+    r["process_admin_ratio_1min"]       = susp_calls / total
+    r["process_no_exe_path_ratio_1min"] = susp_calls / total
 
-    # Gini on syscall frequencies
     freq_arr = np.array(list(counts.values()), dtype=float)
     r["process_cpu_gini_1min"] = _gini(freq_arr)
 
-    # Entropy of syscall distribution → network entropy proxy
     probs = freq_arr / total
     r["network_entropy_1min"] = float(-(probs * np.log2(probs + 1e-12)).sum())
 
-    # Burst pattern proxy: transition rate between distinct syscalls
-    transitions = np.sum(syscalls[1:] != syscalls[:-1])
+    transitions = int(np.sum(syscalls[1:] != syscalls[:-1]))
     r["network_burst_pattern_1min"] = transitions / max(n, 1)
-
     return r
 
 
-def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """Load ADFA-WD-SAA_Master syscall traces → (X, y)."""
-    # Try multiple possible sub-paths
-    candidates = [
-        data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces",
-        data_dir / "Full_Process_Traces",
-        data_dir / "ADFA-LD",           # fallback to Linux version
-    ]
-    base = next((p for p in candidates if p.exists()), None)
-    if base is None:
-        raise FileNotFoundError(f"ADFA trace directory not found under {data_dir}")
+def load_adfa_ld(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Expects: <data_dir>/ADFA-LD/
+      Training_Data_Master/   — normal .txt traces
+      Attack_Data_Master/     — subdirs containing attack .txt traces
+    """
+    base = data_dir / "ADFA-LD"
+    if not base.exists():
+        raise FileNotFoundError(f"ADFA-LD directory not found: {base}")
 
-    # Normal traces
-    train_dirs = list(base.glob("*raining*")) + list(base.glob("*ormal*"))
-    attack_dirs = list(base.glob("*ttack*")) + list(base.glob("*tack*"))
+    train_dir  = base / "Training_Data_Master"
+    attack_dir = base / "Attack_Data_Master"
+
+    if not train_dir.exists():
+        raise FileNotFoundError(f"ADFA-LD Training_Data_Master not found: {train_dir}")
+
+    limit = max_rows or 50_000
 
     rows_normal: List[Dict[str, float]] = []
     rows_attack: List[Dict[str, float]] = []
 
-    limit_normal = max_rows or 50_000
-    limit_attack = max_rows or 50_000
+    # Normal traces
+    for f in sorted(train_dir.glob("*.txt")):
+        if len(rows_normal) >= limit:
+            break
+        sc = _parse_syscall_trace(f)
+        if sc is not None:
+            rows_normal.append(_syscall_trace_to_features(sc, ADFA_LD_SUSPICIOUS, ADFA_LD_PROCESS))
 
-    for td in train_dirs:
-        for f in list(td.rglob("*.txt")) + list(td.rglob("*.trace")):
-            if len(rows_normal) >= limit_normal:
+    # Attack traces — recurse into subdirs
+    if attack_dir.exists():
+        for f in sorted(attack_dir.rglob("*.txt")):
+            if len(rows_attack) >= limit:
                 break
-            sc = _parse_adfa_trace(f)
+            sc = _parse_syscall_trace(f)
             if sc is not None:
-                rows_normal.append(_adfa_trace_to_features(sc))
+                rows_attack.append(_syscall_trace_to_features(sc, ADFA_LD_SUSPICIOUS, ADFA_LD_PROCESS))
 
-    for ad in attack_dirs:
-        for f in list(ad.rglob("*.txt")) + list(ad.rglob("*.trace")):
-            if len(rows_attack) >= limit_attack:
+    log.info("  ADFA-LD  normal=%d  attack=%d", len(rows_normal), len(rows_attack))
+
+    if not rows_normal:
+        raise ValueError("ADFA-LD: no normal trace files found")
+
+    all_rows = rows_normal + rows_attack
+    y = np.array([0] * len(rows_normal) + [1] * len(rows_attack), dtype=int)
+    X = _pad_to_50(_clean(_to_feature_matrix(all_rows)))
+    log.info("  ADFA-LD  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
+    return X, y
+
+
+# ---------------------------------------------------------------------------
+# 5. ADFA-WD-SAA / Full_Process_Traces (Windows, .GHC files)
+# ---------------------------------------------------------------------------
+
+# Suspicious Windows NT syscall IDs
+ADFA_WD_SUSPICIOUS = {
+    0x0078, 0x0079, 0x007A,  # CreateProcess family
+    0x0029, 0x002A, 0x002B,  # Token manipulation
+    0x0014, 0x0015,           # Registry writes
+    0x0055, 0x0008,           # File create/write
+    0x0082, 0x0083, 0x0084,  # Network
+}
+
+ADFA_WD_PROCESS = {0x0078, 0x0079, 0x007A, 0x0070, 0x0071}
+
+
+def _parse_ghc_trace(path: Path) -> Optional[np.ndarray]:
+    """Read one .GHC trace file — same format as .txt (space-separated ints)."""
+    return _parse_syscall_trace(path)  # same parser works
+
+
+def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Supports two layouts:
+      Layout A — ADFA-WD-SAA_Master/Full_Process_Traces/S1-S4/S-N-1..10/ (no files at S level,
+                 files are in the numbered subdirs or may be absent — this is the S1-S4 scaffold)
+      Layout B — Full_Process_Traces/ at datasets-dir root (Full_Trace_Training_Data/*.GHC, etc.)
+
+    Both layouts are tried in order.
+    """
+    limit = max_rows or 50_000
+    rows_normal: List[Dict[str, float]] = []
+    rows_attack: List[Dict[str, float]] = []
+
+    # ── Layout B: root-level Full_Process_Traces (your primary data) ─────────
+    root_fpt = data_dir / "Full_Process_Traces"
+    if root_fpt.exists():
+        log.info("  ADFA-WD  using root-level Full_Process_Traces/")
+
+        train_dir = root_fpt / "Full_Trace_Training_Data"
+        valid_dir = root_fpt / "Full_Trace_Validation_Data"
+        attack_dir = root_fpt / "Full_Trace_Attack_Data"
+
+        for d in [train_dir, valid_dir]:
+            if d.exists():
+                for f in sorted(d.rglob("*.GHC")):
+                    if len(rows_normal) >= limit:
+                        break
+                    sc = _parse_ghc_trace(f)
+                    if sc is not None:
+                        rows_normal.append(
+                            _syscall_trace_to_features(sc, ADFA_WD_SUSPICIOUS, ADFA_WD_PROCESS)
+                        )
+
+        if attack_dir.exists():
+            for subdir in sorted(attack_dir.iterdir()):
+                if not subdir.is_dir() or len(rows_attack) >= limit:
+                    break
+                for f in sorted(subdir.rglob("*.GHC")):
+                    if len(rows_attack) >= limit:
+                        break
+                    sc = _parse_ghc_trace(f)
+                    if sc is not None:
+                        rows_attack.append(
+                            _syscall_trace_to_features(sc, ADFA_WD_SUSPICIOUS, ADFA_WD_PROCESS)
+                        )
+
+    # ── Layout A: ADFA-WD-SAA_Master scaffold (S1-S4/S-N-1..10) ─────────────
+    if not rows_normal:
+        saa_fpt_candidates = [
+            data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces",
+            data_dir / "Full_Process_Traces",
+        ]
+        for base in saa_fpt_candidates:
+            if not base.exists():
+                continue
+            log.info("  ADFA-WD  trying scaffold layout under %s", base)
+            # The S1-S4 dirs contain S1-1..S1-10 subdirs.  Treat everything
+            # without an "Attack" or "attack" in the path as normal.
+            for f in sorted(base.rglob("*.GHC")):
+                if len(rows_normal) + len(rows_attack) >= limit * 2:
+                    break
+                sc = _parse_ghc_trace(f)
+                if sc is None:
+                    continue
+                feat = _syscall_trace_to_features(sc, ADFA_WD_SUSPICIOUS, ADFA_WD_PROCESS)
+                if "attack" in str(f).lower() or "Attack" in str(f):
+                    rows_attack.append(feat)
+                else:
+                    rows_normal.append(feat)
+            if rows_normal:
                 break
-            sc = _parse_adfa_trace(f)
-            if sc is not None:
-                rows_attack.append(_adfa_trace_to_features(sc))
 
     log.info("  ADFA-WD  normal=%d  attack=%d", len(rows_normal), len(rows_attack))
 
     if not rows_normal and not rows_attack:
-        raise ValueError("ADFA: no trace files found")
+        raise ValueError(
+            "ADFA-WD: no trace files found. Checked:\n"
+            f"  {data_dir}/Full_Process_Traces/Full_Trace_Training_Data/*.GHC\n"
+            f"  {data_dir}/ADFA-WD-SAA_Master/Full_Process_Traces/**/*.GHC"
+        )
 
     all_rows = rows_normal + rows_attack
-    y_list   = [0] * len(rows_normal) + [1] * len(rows_attack)
-
-    X = _pad_to_50(_to_feature_matrix(all_rows))
-    y = np.array(y_list, dtype=int)
+    y = np.array([0] * len(rows_normal) + [1] * len(rows_attack), dtype=int)
+    X = _pad_to_50(_clean(_to_feature_matrix(all_rows)))
     log.info("  ADFA-WD  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
     return X, y
 
 
 # ---------------------------------------------------------------------------
-# 5.  DAPT2020 (APT network flows)
+# 6. DAPT2020
 # ---------------------------------------------------------------------------
 
 def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """Load DAPT2020 CIC-Flow CSV files → (X, y)."""
+    """
+    Expects: <data_dir>/DAPT2020/*.pcap_Flow.csv
+    Labels:  filenames containing 'pvt' = attack (APT C2 traffic).
+             Files: enp0s3-monday.pcap_Flow.csv (normal)
+                    enp0s3-monday-pvt.pcap_Flow.csv (attack)
+                    enp0s3-pvt-tuesday.pcap_Flow.csv (attack)
+                    enp0s3-tcpdump-pvt-friday.pcap_Flow.csv (attack)
+    """
     dapt_dir = data_dir / "DAPT2020"
     if not dapt_dir.exists():
         raise FileNotFoundError(f"DAPT2020 directory not found: {dapt_dir}")
@@ -517,9 +642,9 @@ def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, 
         raise FileNotFoundError(f"No CSV files in {dapt_dir}")
 
     frames = []
+    per_file_limit = (max_rows // len(csvs) + 1) if max_rows else None
     for csv_path in csvs:
-        rows_left = (max_rows // len(csvs)) if max_rows else None
-        df = pd.read_csv(csv_path, low_memory=False, nrows=rows_left)
+        df = pd.read_csv(csv_path, low_memory=False, nrows=per_file_limit)
         df["_source_file"] = csv_path.stem
         frames.append(df)
         log.info("  DAPT  %s  rows=%d", csv_path.name, len(df))
@@ -527,45 +652,37 @@ def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, 
     df = pd.concat(frames, ignore_index=True)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # DAPT label heuristic: 'pvt' files contain private-network C2 traffic (attack)
-    y = df["_source_file"].str.contains("-pvt-", case=False).astype(int).values
+    # Label: file stem contains 'pvt' anywhere (handles -pvt-, pvt-, -pvt.)
+    y = df["_source_file"].str.contains("pvt", case=False).astype(int).values
 
-    def _col(df, *names, default=0.0):
-        for n in names:
-            if n in df.columns:
-                return pd.to_numeric(df[n], errors="coerce").fillna(0.0)
-        return pd.Series(default, index=df.index)
-
-    fwd_pkts   = _col(df, "total_fwd_packets", "fwd_packets")
-    bwd_pkts   = _col(df, "total_backward_packets", "bwd_packets")
-    fwd_bytes  = _col(df, "total_length_of_fwd_packets", "fwd_bytes")
-    bwd_bytes  = _col(df, "total_length_of_bwd_packets", "bwd_bytes")
-    duration   = _col(df, "flow_duration", "duration").replace(0, 1e-6)
-    dst_port   = _col(df, "destination_port", "dst_port")
-    src_port   = _col(df, "source_port", "src_port")
-    pkt_size   = _col(df, "average_packet_size", "packet_length_mean")
+    fwd_pkts  = _col(df, "total_fwd_packets", "fwd_packets")
+    bwd_pkts  = _col(df, "total_backward_packets", "bwd_packets")
+    fwd_bytes = _col(df, "total_length_of_fwd_packets", "fwd_bytes")
+    bwd_bytes = _col(df, "total_length_of_bwd_packets", "bwd_bytes")
+    duration  = _col(df, "flow_duration", "duration").replace(0, 1e-6)
+    dst_port  = _col(df, "destination_port", "dst_port")
+    src_port  = _col(df, "source_port", "src_port")
+    pkt_size  = _col(df, "average_packet_size", "packet_length_mean")
     fwd_iat_std = _col(df, "fwd_iat_std", "flow_iat_std")
 
     unusual = ((src_port > 1024) | (dst_port > 1024)).astype(float)
-
-    # APT characteristic: low-and-slow = very low packet rate
     total_pkts = fwd_pkts + bwd_pkts + 1e-9
+    fwd_iat_std_mean = fwd_iat_std.mean() if fwd_iat_std.mean() > 0 else 1.0
 
     rows = []
     for i in range(len(df)):
         r = _empty_row()
-        r["network_entropy_1min"]         = float(fwd_iat_std.iloc[i] / (fwd_iat_std.mean() + 1e-9))
+        r["network_entropy_1min"]         = float(fwd_iat_std.iloc[i] / fwd_iat_std_mean)
         r["network_unusual_ports_1min"]   = float(unusual.iloc[i])
         r["network_burst_pattern_1min"]   = float(total_pkts.iloc[i] / float(duration.iloc[i]))
         r["network_error_rate_1min"]      = float(fwd_pkts.iloc[i] / max(total_pkts.iloc[i], 1))
         r["network_drop_rate_1min"]       = float(bwd_pkts.iloc[i] / max(total_pkts.iloc[i], 1))
         r["network_send_recv_ratio_1min"] = float((fwd_bytes.iloc[i] + 1) / (bwd_bytes.iloc[i] + 1))
-        # APT lateral movement proxy: small packets over long duration
         r["process_rare_executions_1min"] = float(pkt_size.iloc[i] < 200)
         rows.append(r)
 
-    X = _pad_to_50(_to_feature_matrix(rows))
-    log.info("  DAPT2020  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
+    X = _pad_to_50(_clean(_to_feature_matrix(rows)))
+    log.info("  DAPT  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
     return X, y
 
 
@@ -575,17 +692,16 @@ def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, 
 
 def train_isolation_forest(
     X_train: np.ndarray,
-    feature_names: List[str],
     n_estimators: int = 200,
-    contamination: str = "auto",
+    contamination: str | float = "auto",
     random_state: int = 42,
 ) -> Tuple[IsolationForest, StandardScaler]:
-    """Fit IsolationForest on scaled normal data."""
-    log.info("Scaling %d training samples …", len(X_train))
+    log.info("Scaling %d training samples ...", len(X_train))
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_train)
 
-    log.info("Training Isolation Forest  n_estimators=%d …", n_estimators)
+    log.info("Training Isolation Forest  n_estimators=%d  contamination=%s ...",
+             n_estimators, contamination)
     model = IsolationForest(
         n_estimators=n_estimators,
         contamination=contamination,
@@ -604,23 +720,21 @@ def evaluate(
     y_test: np.ndarray,
     dataset_name: str,
 ) -> None:
-    """Log ROC-AUC and AP on the test set."""
     if y_test.sum() == 0:
-        log.info("  %s  (no attack labels — skipping evaluation)", dataset_name)
+        log.info("  %-15s  (no attack labels — skipping evaluation)", dataset_name)
         return
     X_s = scaler.transform(X_test)
-    # score_samples: lower = more anomalous → negate for ROC
     scores = -model.score_samples(X_s)
     try:
         roc = roc_auc_score(y_test, scores)
         ap  = average_precision_score(y_test, scores)
         log.info("  %-15s  ROC-AUC=%.3f  AP=%.3f", dataset_name, roc, ap)
     except Exception as exc:
-        log.warning("  %s  evaluation error: %s", dataset_name, exc)
+        log.warning("  %-15s  evaluation error: %s", dataset_name, exc)
 
 
 # ---------------------------------------------------------------------------
-# Save in SklearnAnomalyDetector format
+# Save — in IsolationForestDetector format
 # ---------------------------------------------------------------------------
 
 def save_model(
@@ -632,101 +746,91 @@ def save_model(
     output_path: Path,
 ) -> None:
     """
-    Save in the exact format expected by
-    SklearnAnomalyDetector.load_model_with_integrity():
-
-        {
-            "model":            IsolationForest,
-            "scaler":           StandardScaler,
-            "feature_names":    [50 names],
-            "hash":             sha256_of_file,
-            "version":          "1.0",
-            "training_samples": int,
-            "background_data":  np.ndarray | None,
-        }
+    Save in the format read by IsolationForestDetector.load_model():
+      {model, is_trained, training_samples, n_estimators, contamination, hash, ...}
+    Extra keys (scaler, feature_names, background_data) are silently ignored by the loader
+    but are useful for downstream SklearnAnomalyDetector usage.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # First pass — save with hash=None (needed to compute the real hash)
     model_data = {
+        # Keys required by IsolationForestDetector
         "model":            model,
+        "is_trained":       True,
+        "training_samples": training_samples,
+        "n_estimators":     model.n_estimators,
+        "contamination":    model.contamination,
+        # Extra keys (used by SklearnAnomalyDetector, ignored elsewhere)
         "scaler":           scaler,
         "feature_names":    feature_names,
-        "hash":             None,
-        "version":          "1.0",
-        "training_samples": training_samples,
+        "feature_dimension": FEATURE_DIM,
+        "feature_schema_version": "1.1",
         "background_data":  background_data,
+        "hash":             None,  # filled after first write
     }
+
     joblib.dump(model_data, output_path)
 
-    # Second pass — embed the real SHA-256 of the file
+    # Compute SHA-256 and embed it (IsolationForestDetector stores it too)
     digest = hashlib.sha256()
     with open(output_path, "rb") as fh:
         for chunk in iter(lambda: fh.read(65536), b""):
             digest.update(chunk)
     file_hash = digest.hexdigest()
-
     model_data["hash"] = file_hash
     joblib.dump(model_data, output_path)
 
-    log.info("Saved  %s  hash=%s…", output_path, file_hash[:16])
+    log.info("Saved  %s  (SHA-256: %s...)", output_path, file_hash[:16])
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
-DATASET_CHOICES = ["unsw", "cic", "cert", "adfa_wd", "dapt"]
+DATASET_CHOICES = ["unsw", "cic", "cert", "adfa_ld", "adfa_wd", "dapt"]
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Train EdgePulse Isolation Forest")
-    p.add_argument(
-        "--datasets-dir",
-        type=Path,
-        default=Path.home() / "Downloads" / "Datasets",
-        help="Root directory containing all downloaded dataset folders",
+    p = argparse.ArgumentParser(
+        description="Train EdgePulse Isolation Forest from real security datasets",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
     )
     p.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("edge-agent/models"),
-        help="Directory to write the trained model file",
+        "--datasets-dir", type=Path, required=True,
+        help="Root directory containing all dataset folders",
     )
     p.add_argument(
-        "--model-id",
-        default="edgepulse_primary",
+        "--output-dir", type=Path, default=Path("edge-agent/src/models"),
+        help="Directory to write the trained model (default: edge-agent/src/models/)",
+    )
+    p.add_argument(
+        "--model-id", default="edgepulse_primary",
         help="Model ID prefix (default: edgepulse_primary)",
     )
     p.add_argument(
-        "--datasets",
-        nargs="+",
-        choices=DATASET_CHOICES,
-        default=DATASET_CHOICES,
-        help="Which datasets to include",
+        "--datasets", nargs="+", choices=DATASET_CHOICES, default=DATASET_CHOICES,
+        help="Which datasets to include (default: all)",
     )
     p.add_argument(
-        "--max-rows",
-        type=int,
-        default=None,
-        help="Cap rows per dataset for quick runs (e.g. --max-rows 50000)",
+        "--max-rows", type=int, default=None,
+        help="Cap rows per dataset (useful for smoke tests, e.g. --max-rows 5000)",
     )
     p.add_argument(
-        "--n-estimators",
-        type=int,
-        default=200,
-        help="IsolationForest n_estimators (default 200)",
+        "--n-estimators", type=int, default=200,
+        help="IsolationForest n_estimators (default: 200)",
     )
     p.add_argument(
-        "--contamination",
-        default="auto",
-        help="IsolationForest contamination (default 'auto')",
+        "--contamination", default="auto",
+        help="IsolationForest contamination parameter (default: auto)",
     )
     p.add_argument(
-        "--shap-background-size",
-        type=int,
-        default=200,
-        help="Rows to store as SHAP background (default 200)",
+        "--shap-background-size", type=int, default=200,
+        help="Rows stored as SHAP background in the model file (default: 200)",
+    )
+    p.add_argument(
+        "--seed", type=int, default=42,
+        help="Random seed (default: 42)",
     )
     return p.parse_args()
 
@@ -734,31 +838,32 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    datasets_dir = args.datasets_dir
+    datasets_dir = args.datasets_dir.expanduser().resolve()
     if not datasets_dir.exists():
         log.error("Datasets directory not found: %s", datasets_dir)
         sys.exit(1)
 
-    log.info("=== EdgePulse Model Training ===")
-    log.info("Datasets dir : %s", datasets_dir)
-    log.info("Output dir   : %s", args.output_dir)
-    log.info("Datasets     : %s", args.datasets)
-
-    # ── Load each dataset ──────────────────────────────────────────────────
-    X_train_parts: List[np.ndarray] = []   # normal rows only
-    X_eval_parts:  List[Tuple[np.ndarray, np.ndarray, str]] = []  # (X, y, name)
+    log.info("=" * 60)
+    log.info("EdgePulse Model Training")
+    log.info("  datasets-dir : %s", datasets_dir)
+    log.info("  output-dir   : %s", args.output_dir)
+    log.info("  datasets     : %s", args.datasets)
+    log.info("  max-rows     : %s", args.max_rows or "unlimited")
+    log.info("=" * 60)
 
     loaders = {
-        "unsw":    lambda: load_unsw_nb15(datasets_dir / "UNSW_NB15", args.max_rows),
-        "cic":     lambda: load_cic_ids2018(datasets_dir / "CSE-CIC-IDS2018.csv", args.max_rows),
-        "cert":    lambda: load_cert(datasets_dir / "CERT Insider Threat r4.2", args.max_rows),
+        "unsw":    lambda: load_unsw_nb15(datasets_dir, args.max_rows),
+        "cic":     lambda: load_cic_ids2018(datasets_dir, args.max_rows),
+        "cert":    lambda: load_cert(datasets_dir, args.max_rows),
+        "adfa_ld": lambda: load_adfa_ld(datasets_dir, args.max_rows),
         "adfa_wd": lambda: load_adfa_wd(datasets_dir, args.max_rows),
         "dapt":    lambda: load_dapt2020(datasets_dir, args.max_rows),
     }
 
+    X_train_parts: List[np.ndarray] = []
+    eval_sets: List[Tuple[np.ndarray, np.ndarray, str]] = []
+
     for name in args.datasets:
-        if name not in loaders:
-            continue
         log.info("Loading dataset: %s", name)
         try:
             X, y = loaders[name]()
@@ -766,59 +871,56 @@ def main() -> None:
             log.warning("  Skipping %s: %s", name, exc)
             continue
 
-        # Normal rows go into training; keep a held-out eval set (last 20%)
+        # Split normal rows 80/20; keep all attack rows in eval only
         normal_mask = y == 0
-        n_normal    = normal_mask.sum()
-        split_idx   = int(n_normal * 0.8)
+        X_normal = X[normal_mask].copy()
+        rng = np.random.default_rng(args.seed)
+        rng.shuffle(X_normal)
 
-        X_normal = X[normal_mask]
-        np.random.shuffle(X_normal)          # in-place shuffle
+        n_normal = len(X_normal)
+        split = int(n_normal * 0.8)
+        X_train_parts.append(X_normal[:split])
 
-        X_train_parts.append(X_normal[:split_idx])
-        # Eval set: last 20% normal + ALL attack rows
-        X_eval  = np.vstack([X_normal[split_idx:], X[~normal_mask]])
-        y_eval  = np.hstack([
-            np.zeros(n_normal - split_idx, dtype=int),
+        X_eval = np.vstack([X_normal[split:], X[~normal_mask]]) if (~normal_mask).any() \
+            else X_normal[split:]
+        y_eval = np.hstack([
+            np.zeros(n_normal - split, dtype=int),
             y[~normal_mask],
-        ])
-        X_eval_parts.append((X_eval, y_eval, name))
+        ]) if (~normal_mask).any() else np.zeros(n_normal - split, dtype=int)
+        eval_sets.append((X_eval, y_eval, name))
 
     if not X_train_parts:
-        log.error("No training data could be loaded. Exiting.")
+        log.error("No training data could be loaded. Check your --datasets-dir path.")
         sys.exit(1)
 
-    # ── Combine training data ──────────────────────────────────────────────
+    # Combine and shuffle
     X_train = np.vstack(X_train_parts)
-    np.random.seed(42)
-    idx = np.random.permutation(len(X_train))
-    X_train = X_train[idx]
+    rng = np.random.default_rng(args.seed)
+    X_train = X_train[rng.permutation(len(X_train))]
+    X_train = _clean(X_train)
+    log.info("Combined training set: %s (normal rows only)", X_train.shape)
 
-    log.info("Combined training set: %s  (normal rows only)", X_train.shape)
-
-    # ── Replace NaN / Inf ─────────────────────────────────────────────────
-    X_train = np.nan_to_num(X_train, nan=0.0, posinf=1e6, neginf=-1e6)
-
-    # ── Train ─────────────────────────────────────────────────────────────
-    contamination = args.contamination
+    # Train
+    contamination: str | float = args.contamination
     if contamination != "auto":
         contamination = float(contamination)
 
     model, scaler = train_isolation_forest(
         X_train,
-        feature_names=PADDED_NAMES,
         n_estimators=args.n_estimators,
         contamination=contamination,
+        random_state=args.seed,
     )
 
-    # ── Evaluate on held-out attack data ──────────────────────────────────
+    # Evaluate
     log.info("--- Evaluation ---")
-    for X_e, y_e, ds_name in X_eval_parts:
-        X_e = np.nan_to_num(X_e, nan=0.0, posinf=1e6, neginf=-1e6)
+    for X_e, y_e, ds_name in eval_sets:
+        X_e = _clean(X_e)
         evaluate(model, scaler, X_e, y_e, ds_name)
 
-    # ── Save ──────────────────────────────────────────────────────────────
-    background_size = min(args.shap_background_size, len(X_train))
-    background_data = scaler.transform(X_train[:background_size])
+    # Save
+    bg_size = min(args.shap_background_size, len(X_train))
+    background_data = scaler.transform(X_train[:bg_size])
 
     output_path = args.output_dir / f"{args.model_id}_isolation_forest.joblib"
     save_model(
@@ -830,12 +932,10 @@ def main() -> None:
         output_path=output_path,
     )
 
-    log.info("=== Done. Model saved to %s ===", output_path)
-    log.info(
-        "Load with: SklearnAnomalyDetector('%s').load_model_with_integrity('%s')",
-        args.model_id,
-        output_path,
-    )
+    log.info("=" * 60)
+    log.info("Done. Model written to: %s", output_path)
+    log.info("The agent will load this automatically on next start.")
+    log.info("=" * 60)
 
 
 if __name__ == "__main__":
