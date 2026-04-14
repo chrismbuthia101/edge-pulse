@@ -58,6 +58,14 @@ def main():
     run_parser.add_argument("--daemon", action="store_true", help="Run as daemon")
     run_parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
+    # ── bootstrap subcommand ─────────────────────────────────────────────────
+    try:
+        from packaging.scripts.bootstrap_cli import add_bootstrap_subcommand, run_bootstrap
+        add_bootstrap_subcommand(subparsers)
+        _bootstrap_available = True
+    except ImportError:
+        _bootstrap_available = False
+
     # ── Windows service ───────────────────────────────────────────────────────
     if WINDOWS_SERVICE_AVAILABLE:
         service_parser = subparsers.add_parser("service", help="Manage Windows Service")
@@ -214,6 +222,10 @@ def main():
             sys.exit(1)
 
         return
+
+    # ── Dispatch: bootstrap ──────────────────────────────────────────────────
+    if args.command == "bootstrap" and _bootstrap_available:
+        sys.exit(run_bootstrap(args))
 
     # ── Default: run the agent ────────────────────────────────────────────────
     if args.command is None or args.command == "run":
