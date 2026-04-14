@@ -87,12 +87,28 @@ mkdir -p \
 # Install Python packages with pip --target
 # ---------------------------------------------------------------------------
 echo "[2/7] Installing Python packages via pip --target..."
-python3 -m pip install --quiet --upgrade pip wheel
+python3 -m pip install --quiet --upgrade pip wheel setuptools cython meson meson-python ninja
 
 python3 -m pip install --quiet \
     --target "${STAGING_DIR}${SITE_PACKAGES}" \
     --no-compile \
-    "${REPO_ROOT}[api-full,notifications]"
+    psutil \
+    "numpy>=1.24.0" \
+    pandas \
+    "pyarrow>=15.0.0" \
+    "scikit-learn>=1.4.0" \
+    pydantic \
+    pydantic-settings \
+    pyyaml \
+    cryptography \
+    structlog \
+    aiosqlite \
+    httpx \
+    tenacity \
+    joblib \
+    fastapi \
+    uvicorn \
+    notify-py
 
 # Remove pip/wheel/setuptools metadata to keep the package lean
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \

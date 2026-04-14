@@ -70,11 +70,12 @@ mkdir -p \
 # Install Python packages via pip --target
 # ---------------------------------------------------------------------------
 echo "[2/4] Installing Python packages via pip --target..."
-python3 -m pip install --quiet --upgrade pip wheel
+python3 -m pip install --quiet --upgrade pip wheel setuptools
 
 python3 -m pip install --quiet \
     --target "${STAGING_DIR}${SITE_PACKAGES}" \
     --no-compile \
+    --no-build-isolation \
     "${REPO_ROOT}[api-full,notifications]"
 
 # Remove unnecessary metadata to keep the RPM lean
