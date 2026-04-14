@@ -117,7 +117,7 @@ if (-not $SkipBootstrap) {
     } else {
         Push-Location $RepoRoot
         try {
-            python bootstrap_model.py --output-dir src\models\ --n-samples 2000
+            python src\edgepulse\scripts\bootstrap_model.py --output-dir src\models\ --n-samples 2000
             if ($LASTEXITCODE -ne 0) { throw "bootstrap_model.py exited with code $LASTEXITCODE" }
             Write-OK "Model bootstrapped successfully"
         } finally {

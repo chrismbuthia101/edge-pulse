@@ -42,7 +42,7 @@ def _get_detector_health() -> Dict[str, Any]:
     return {
         "status": "unknown",
         "detail": "No detector health provider registered",
-        "action_required": "Run `python bootstrap_model.py` if the model has not been bootstrapped.",
+        "action_required": "Run `python src/edgepulse/scripts/bootstrap_model.py` if the model has not been bootstrapped.",
     }
 
 

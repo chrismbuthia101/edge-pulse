@@ -122,10 +122,10 @@ class IsolationForestDetector(BaseDetector):
         logger.warning(
             "no_model_file_found",
             attempted_path=str(attempted_path),
-            bootstrap_command="python bootstrap_model.py",
+            bootstrap_command="python src/edgepulse/scripts/bootstrap_model.py",
             detection_status="DISABLED",
             action_required=(
-                "Run `python bootstrap_model.py` then restart the agent "
+                "Run `python src/edgepulse/scripts/bootstrap_model.py` then restart the agent "
                 "to enable anomaly detection."
             ),
         )
@@ -142,7 +142,7 @@ class IsolationForestDetector(BaseDetector):
             "action_required": (
                 None
                 if self.is_trained
-                else "Run `python bootstrap_model.py` and restart the agent."
+                else "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent."
             ),
         }
 

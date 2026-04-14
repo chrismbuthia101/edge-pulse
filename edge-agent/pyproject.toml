@@ -52,4 +52,4 @@ windows = ["pywin32", "keyring", "watchdog"]
 all = ["tflite-runtime", "shap", "fastapi", "uvicorn", "notify-py", "pywin32", "keyring", "watchdog"]
 
 [tool.poetry.scripts]
-edge-agent = "src.edgepulse.__main__:main"
+edge-agent = "edgepulse.__main__:main"

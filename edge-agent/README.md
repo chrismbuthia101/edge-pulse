@@ -61,7 +61,7 @@ The agent needs a trained Isolation Forest before it can detect anomalies.
 make bootstrap
 
 # Or manually
-python bootstrap_model.py
+python src/edgepulse/scripts/bootstrap_model.py
 # Writes:  models/edgepulse_primary_isolation_forest.joblib
 ```
 
@@ -87,9 +87,10 @@ The REST API is available at `http://localhost:8080` (auto-selected based on sys
 
 ```
 edge-agent/
-├── bootstrap_model.py          # One-shot model bootstrapper
 ├── models/                     # Trained model files (git-ignored)
 ├── src/edgepulse/
+│   ├── scripts/
+│   │   └── bootstrap_model.py # One-shot model bootstrapper
 │   ├── core/
 │   │   ├── agent.py            # Main orchestrator (EdgePulseAgent)
 │   │   ├── async_pipeline.py   # Collect → Extract → Detect → Alert loop

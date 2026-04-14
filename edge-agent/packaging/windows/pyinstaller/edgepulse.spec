@@ -27,7 +27,7 @@ datas = [
     # Include the schema SQL so the DB manager can read it
     (os.path.join(SRC_ROOT, 'data', 'schema.sql'), 'data'),
     # Include the bootstrap script so post-install can call it
-    (os.path.join(REPO_ROOT, 'bootstrap_model.py'), '.'),
+    (os.path.join(REPO_ROOT, 'src', 'edgepulse', 'scripts', 'bootstrap_model.py'), 'scripts'),
     # Default config (empty placeholder; real config goes in ProgramData)
     (os.path.join(REPO_ROOT, '.env.example'), '.'),
 ]
@@ -38,7 +38,7 @@ if os.path.exists(model_path):
     datas.append((os.path.join(SRC_ROOT, 'models'), 'models'))
     print(f"[spec] Including bootstrapped model from {model_path}")
 else:
-    print("[spec] WARNING: No model file found — run bootstrap_model.py before packaging")
+    print("[spec] WARNING: No model file found — run src/edgepulse/scripts/bootstrap_model.py before packaging")
 
 # ---------------------------------------------------------------------------
 # Hidden imports

@@ -43,6 +43,11 @@ if sys.platform.startswith("linux"):
 else:
     LINUX_SERVICE_AVAILABLE = False
 
+try:
+    from edgepulse.bootstrap_cli import add_bootstrap_subcommand, run_bootstrap
+    _BOOTSTRAP_AVAILABLE = True
+except ImportError:
+    _BOOTSTRAP_AVAILABLE = False
 
 def main():
     """Main CLI entry point"""
@@ -59,12 +64,8 @@ def main():
     run_parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     # ── bootstrap subcommand ─────────────────────────────────────────────────
-    try:
-        from packaging.scripts.bootstrap_cli import add_bootstrap_subcommand, run_bootstrap
+    if _BOOTSTRAP_AVAILABLE:
         add_bootstrap_subcommand(subparsers)
-        _bootstrap_available = True
-    except ImportError:
-        _bootstrap_available = False
 
     # ── Windows service ───────────────────────────────────────────────────────
     if WINDOWS_SERVICE_AVAILABLE:
@@ -178,7 +179,6 @@ def main():
 
     # ── Dispatch: Linux service ───────────────────────────────────────────────
     if args.command == "service" and LINUX_SERVICE_AVAILABLE:
-        user_mode = getattr(args, "user", False)
         installer = LinuxServiceInstaller()
 
         if args.service_action == "install":
@@ -224,7 +224,10 @@ def main():
         return
 
     # ── Dispatch: bootstrap ──────────────────────────────────────────────────
-    if args.command == "bootstrap" and _bootstrap_available:
+    if args.command == "bootstrap":
+        if not _BOOTSTRAP_AVAILABLE:
+            print("Bootstrap command not available (edgepulse.bootstrap_cli not found)")
+            sys.exit(1)
         sys.exit(run_bootstrap(args))
 
     # ── Default: run the agent ────────────────────────────────────────────────

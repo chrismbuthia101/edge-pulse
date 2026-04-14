@@ -4,7 +4,8 @@
 
 .DEFAULT_GOAL := help
 .PHONY: help install install-all bootstrap dev run test lint fmt typecheck clean \
-        service-install service-start service-stop service-status service-logs
+        service-install service-start service-stop service-status service-logs \
+        wheel deb rpm windows
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 CYAN  := \033[0;36m
@@ -37,6 +38,12 @@ help:
 	@echo "    make service-status   Show service status"
 	@echo "    make service-logs     Tail service logs (last 80 lines)"
 	@echo ""
+	@echo "  Packaging"
+	@echo "    make wheel            Build PyPI wheel"
+	@echo "    make deb              Build Debian .deb"
+	@echo "    make rpm              Build RPM .rpm"
+	@echo "    make windows          Build Windows installer"
+	@echo ""
 	@echo "  Misc"
 	@echo "    make clean            Remove __pycache__, .mypy_cache, .pytest_cache"
 	@echo ""
@@ -50,7 +57,7 @@ install-all:
 
 bootstrap:
 	@echo "$(CYAN)Bootstrapping Isolation Forest model…$(RESET)"
-	poetry run python bootstrap_model.py
+	poetry run python src/edgepulse/scripts/bootstrap_model.py
 	@echo "$(CYAN)Done. Model written to models/$(RESET)"
 
 env:
@@ -104,3 +111,25 @@ clean:
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null; true
 	find . -name "*.pyc" -delete 2>/dev/null; true
 	@echo "$(CYAN)Clean done$(RESET)"
+
+# ── Packaging ─────────────────────────────────────────────────────────────────
+wheel:
+	@echo "$(CYAN)Building PyPI wheel…$(RESET)"
+	pip install build twine -q
+	python -m build
+	@echo "$(CYAN)Wheel written to dist/$(RESET)"
+
+deb:
+	@echo "$(CYAN)Building Debian package…$(RESET)"
+	bash packaging/linux/build_deb.sh
+	@echo "$(CYAN)Debian package written to packaging/dist/$(RESET)"
+
+rpm:
+	@echo "$(CYAN)Building RPM package…$(RESET)"
+	bash packaging/linux/build_rpm.sh
+	@echo "$(CYAN)RPM package written to packaging/dist/$(RESET)"
+
+windows:
+	@echo "$(CYAN)Building Windows installer…$(RESET)"
+	powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
+	@echo "$(CYAN)Windows installer written to packaging/dist/$(RESET)"

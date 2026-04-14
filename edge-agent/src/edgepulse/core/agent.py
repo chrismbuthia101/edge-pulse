@@ -425,12 +425,12 @@ class EdgePulseAgent:
                 return {
                     "status": "degraded",
                     "is_trained": False,
-                    "action_required": "Run `python bootstrap_model.py` and restart the agent.",
+                    "action_required": "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent.",
                 }
             register_detector_health_provider(_no_detector_health)
             logger.warning(
                 "no_trained_detector_health_provider_registered",
-                action_required="Run `python bootstrap_model.py` and restart the agent.",
+                action_required="Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent.",
             )
 
     async def _initialize_sync_client(self) -> None:

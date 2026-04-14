@@ -4,7 +4,10 @@
 ;  Usage (from edge-agent/ directory, after running PyInstaller):
 ;      makensis packaging\windows\nsis\installer.nsi
 ;
-;  Output: packaging\dist\EdgePulse-Agent-Setup-0.1.0.exe
+;  Or with an explicit version override (as called by build_windows.ps1):
+;      makensis /DPRODUCT_VERSION=1.2.3 packaging\windows\nsis\installer.nsi
+;
+;  Output: packaging\dist\EdgePulse-Agent-Setup-<version>.exe
 ;
 ;  Prerequisites:
 ;      - NSIS 3.x installed and on PATH
@@ -20,12 +23,13 @@
 !include "WinVer.nsh"
 !include "x64.nsh"
 !include "FileFunc.nsh"
+!include "WordFunc.nsh"
 
-; ---------------------------------------------------------------------------
-; Version — must be updated each release
-; ---------------------------------------------------------------------------
+!ifndef PRODUCT_VERSION
+  !define PRODUCT_VERSION "0.1.0"
+!endif
+
 !define PRODUCT_NAME        "EdgePulse Agent"
-!define PRODUCT_VERSION     "0.1.0"
 !define PRODUCT_PUBLISHER   "EdgePulse"
 !define PRODUCT_URL         "https://edgepulse.io"
 !define PRODUCT_UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
@@ -49,10 +53,10 @@ OutFile "${DIST_DIR}\EdgePulse-Agent-Setup-${PRODUCT_VERSION}.exe"
 Name                "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 InstallDir          "${INSTALL_DIR}"
 InstallDirRegKey    HKLM "${PRODUCT_DIR_REGKEY}" ""
-RequestExecutionLevel admin        ; require admin — needed for service install
+RequestExecutionLevel admin
 ShowInstDetails     show
 ShowUnInstDetails   show
-SetCompressor       /SOLID lzma    ; best compression
+SetCompressor       /SOLID lzma
 
 ; ---------------------------------------------------------------------------
 ; MUI Interface settings
@@ -67,13 +71,15 @@ SetCompressor       /SOLID lzma    ; best compression
 !define MUI_FINISHPAGE_RUN           "$INSTDIR\${EXE_NAME}"
 !define MUI_FINISHPAGE_RUN_TEXT      "Start EdgePulse Agent now"
 !define MUI_FINISHPAGE_RUN_PARAMETERS "run"
-!define MUI_FINISHPAGE_SHOWREADME    ""
 !define MUI_FINISHPAGE_LINK          "Open EdgePulse documentation"
 !define MUI_FINISHPAGE_LINK_LOCATION "https://docs.edgepulse.io"
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "..\..\..\..\LICENSE"   ; adjust path to your LICENSE file
+; NOTE: If you have a LICENSE file, set the correct relative path here.
+;       The path below assumes a LICENSE file at the repository root
+;       (one level above edge-agent\).  If absent, comment out this line.
+;!insertmacro MUI_PAGE_LICENSE "..\..\..\..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -110,7 +116,7 @@ Section "EdgePulse Agent" SecMain
 
     ; ---- Stop existing service before overwriting files ----
     ExecWait 'sc stop "${SERVICE_NAME}"' $0
-    Sleep 2000  ; give the service time to stop
+    Sleep 2000
 
     ; ---- Install files ----
     SetOutPath "$INSTDIR"
@@ -141,7 +147,6 @@ Section "EdgePulse Agent" SecMain
         DetailPrint "Bootstrapping anomaly detection model (may take ~10 seconds)..."
         ExecWait '"$INSTDIR\${EXE_NAME}" bootstrap --output-dir "${DATA_DIR}\models"' $0
         ${If} $0 != 0
-            ; Non-fatal: agent will show the bootstrap warning on first run
             DetailPrint "Model bootstrap returned $0 — agent will prompt on first run."
         ${EndIf}
     ${EndIf}

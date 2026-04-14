@@ -27,7 +27,9 @@ ARCH="x86_64"
 DIST_DIR="${REPO_ROOT}/packaging/dist"
 OUTPUT="${DIST_DIR}/${PACKAGE_NAME}-${VERSION}-1.${ARCH}.rpm"
 STAGING_DIR="/tmp/edgepulse-rpm-staging"
-VENV_DIR="/tmp/edgepulse-build-venv"
+
+INSTALL_PREFIX="/opt/edgepulse"
+SITE_PACKAGES="${INSTALL_PREFIX}/lib/site-packages"
 
 echo "============================================================"
 echo "  Building EdgePulse Agent .rpm"
@@ -47,42 +49,50 @@ MODEL_PATH="${REPO_ROOT}/src/models/edgepulse_primary_isolation_forest.joblib"
 if [[ ! -f "${MODEL_PATH}" ]]; then
     echo "Bootstrapping model (no model found)..."
     cd "${REPO_ROOT}"
-    python3 bootstrap_model.py --output-dir src/models/
+    python3 src/edgepulse/scripts/bootstrap_model.py --output-dir src/models/
 fi
 
 # ---------------------------------------------------------------------------
-# Stage files (re-use the same layout as the .deb build)
+# Stage files
 # ---------------------------------------------------------------------------
 echo "[1/4] Staging files..."
 rm -rf "${STAGING_DIR}"
 mkdir -p \
-    "${STAGING_DIR}/opt/edgepulse/bin" \
-    "${STAGING_DIR}/opt/edgepulse/lib" \
-    "${STAGING_DIR}/opt/edgepulse/share/edgepulse" \
+    "${STAGING_DIR}${INSTALL_PREFIX}/bin" \
+    "${STAGING_DIR}${INSTALL_PREFIX}/lib" \
+    "${STAGING_DIR}${INSTALL_PREFIX}/share/edgepulse" \
     "${STAGING_DIR}/etc/systemd/system" \
     "${STAGING_DIR}/etc/edgepulse" \
     "${STAGING_DIR}/var/lib/edgepulse/models" \
     "${DIST_DIR}"
 
-# Build venv
-echo "[2/4] Building venv..."
-rm -rf "${VENV_DIR}"
-python3 -m venv "${VENV_DIR}"
-source "${VENV_DIR}/bin/activate"
-pip install --quiet --upgrade pip
-pip install --quiet "${REPO_ROOT}[api-full,notifications]"
-deactivate
+# ---------------------------------------------------------------------------
+# Install Python packages via pip --target
+# ---------------------------------------------------------------------------
+echo "[2/4] Installing Python packages via pip --target..."
+python3 -m pip install --quiet --upgrade pip wheel
 
-cp -r "${VENV_DIR}/lib" "${STAGING_DIR}/opt/edgepulse/"
-cp "${VENV_DIR}/bin/python3" "${STAGING_DIR}/opt/edgepulse/bin/python3"
-cp "${REPO_ROOT}/bootstrap_model.py" "${STAGING_DIR}/opt/edgepulse/share/edgepulse/"
+python3 -m pip install --quiet \
+    --target "${STAGING_DIR}${SITE_PACKAGES}" \
+    --no-compile \
+    "${REPO_ROOT}[api-full,notifications]"
 
-# Entry point wrapper
-cat > "${STAGING_DIR}/opt/edgepulse/bin/edge-agent" <<'WRAPPER'
+# Remove unnecessary metadata to keep the RPM lean
+rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \
+       "${STAGING_DIR}${SITE_PACKAGES}"/wheel \
+       "${STAGING_DIR}${SITE_PACKAGES}"/setuptools \
+       "${STAGING_DIR}${SITE_PACKAGES}"/*.dist-info/RECORD || true
+
+# Entry-point launcher — uses system python3 declared as a dependency
+cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'
 #!/bin/bash
-exec /opt/edgepulse/bin/python3 -m edgepulse "$@"
+# EdgePulse Agent launcher
+export PYTHONPATH=/opt/edgepulse/lib/site-packages${PYTHONPATH:+:${PYTHONPATH}}
+exec python3 -m edgepulse "$@"
 WRAPPER
-chmod 755 "${STAGING_DIR}/opt/edgepulse/bin/edge-agent"
+chmod 755 "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent"
+
+cp "${REPO_ROOT}/src/edgepulse/scripts/bootstrap_model.py" "${STAGING_DIR}${INSTALL_PREFIX}/share/edgepulse/"
 
 # Model
 cp "${MODEL_PATH}" "${STAGING_DIR}/var/lib/edgepulse/models/"
@@ -130,8 +140,12 @@ cat > "${STAGING_DIR}/etc/edgepulse/agent_config.json" <<'CONF'
 }
 CONF
 
-# Maintainer scripts
-POSTINST="${SCRIPT_DIR}/rpm_postinst.sh"
+# ---------------------------------------------------------------------------
+# Maintainer scripts (written to a temp dir, cleaned up after fpm)
+# ---------------------------------------------------------------------------
+SCRIPTS_TMP="$(mktemp -d)"
+
+POSTINST="${SCRIPTS_TMP}/rpm_postinst.sh"
 cat > "${POSTINST}" <<'POSTINST_RPM'
 #!/bin/bash
 set -e
@@ -145,7 +159,8 @@ if [[ "$1" -eq 1 ]]; then
     MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
     if [[ ! -f "$MODEL" ]]; then
         echo "EdgePulse: Bootstrapping ML model..."
-        /opt/edgepulse/bin/python3 /opt/edgepulse/share/edgepulse/bootstrap_model.py \
+        PYTHONPATH=/opt/edgepulse/lib/site-packages \
+        python3 /opt/edgepulse/share/edgepulse/bootstrap_model.py \
             --output-dir /var/lib/edgepulse/models/ --n-samples 2000 2>&1 | sed 's/^/  /'
     fi
     systemctl daemon-reload 2>/dev/null || true
@@ -155,7 +170,7 @@ fi
 POSTINST_RPM
 chmod 755 "${POSTINST}"
 
-PREUN="${SCRIPT_DIR}/rpm_preun.sh"
+PREUN="${SCRIPTS_TMP}/rpm_preun.sh"
 cat > "${PREUN}" <<'PREUN_RPM'
 #!/bin/bash
 # $1 = 0 on uninstall, 1 on upgrade
@@ -193,6 +208,9 @@ fpm \
     --chdir "${STAGING_DIR}" \
     --prefix "/" \
     .
+
+echo "[4/4] Cleaning up..."
+rm -rf "${SCRIPTS_TMP}"
 
 echo ""
 echo "============================================================"

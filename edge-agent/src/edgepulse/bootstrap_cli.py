@@ -76,6 +76,7 @@ def run_bootstrap(args: argparse.Namespace) -> int:
         # Locations to search for bootstrap_model.py
         candidates = [
             Path(sys.executable).parent / "bootstrap_model.py",
+            Path(__file__).parent / "scripts" / "bootstrap_model.py",
             Path(__file__).parent.parent.parent / "bootstrap_model.py",
             Path("/opt/edgepulse/share/edgepulse/bootstrap_model.py"),
         ]
