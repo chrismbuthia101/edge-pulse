@@ -6,7 +6,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
@@ -40,7 +40,7 @@ yarn-error.log*
 .next/
 out/
 build/
-dist/
+/dist/
 
 # Environment variables
 .env

@@ -12,8 +12,9 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
+  # ─── Tests ──────────────────────────────────────────────────────────────────
   test:
-    name: Test (${{ matrix.os }})
+    name: Test (${{ matrix.os }} / py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,9 +31,9 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Install Poetry
-        run: pip install poetry==1.8.2
+        run: pip install "poetry==1.8.2"
 
-      - name: Install dependencies
+      - name: Install core dependencies
         working-directory: edge-agent
         run: poetry install --extras "api-full notifications"
 
@@ -44,6 +45,7 @@ jobs:
         working-directory: edge-agent
         run: poetry run mypy src/ --ignore-missing-imports --no-error-summary
 
+  # ─── PyPI wheel ─────────────────────────────────────────────────────────────
   build-wheel:
     name: Build PyPI wheel
     needs: test
@@ -59,19 +61,21 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install build tools
-        run: pip install poetry==1.8.2 build twine
+        run: pip install "poetry==1.8.2" build twine
 
       - name: Bootstrap ML model
         working-directory: edge-agent
         run: |
-          pip install scikit-learn numpy joblib
-          python bootstrap_model.py --output-dir src/models/ --n-samples 2000
+          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
+          python src/edgepulse/scripts/bootstrap_model.py \
+            --output-dir src/models/ \
+            --n-samples 2000
 
-      - name: Build wheel
+      - name: Build wheel + sdist
         working-directory: edge-agent
         run: poetry build
 
-      - name: Verify wheel
+      - name: Verify distribution
         working-directory: edge-agent
         run: twine check dist/*
 
@@ -82,6 +86,7 @@ jobs:
           path: edge-agent/dist/
           retention-days: 7
 
+  # ─── Debian package ─────────────────────────────────────────────────────────
   build-deb:
     name: Build .deb
     needs: test
@@ -105,8 +110,10 @@ jobs:
       - name: Bootstrap ML model
         working-directory: edge-agent
         run: |
-          pip install scikit-learn numpy joblib
-          python bootstrap_model.py --output-dir src/models/ --n-samples 2000
+          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
+          python src/edgepulse/scripts/bootstrap_model.py \
+            --output-dir src/models/ \
+            --n-samples 2000
 
       - name: Build .deb
         working-directory: edge-agent
@@ -119,6 +126,7 @@ jobs:
           path: edge-agent/packaging/dist/*.deb
           retention-days: 30
 
+  # ─── RPM package ────────────────────────────────────────────────────────────
   build-rpm:
     name: Build .rpm
     needs: test
@@ -142,8 +150,10 @@ jobs:
       - name: Bootstrap ML model
         working-directory: edge-agent
         run: |
-          pip install scikit-learn numpy joblib
-          python bootstrap_model.py --output-dir src/models/ --n-samples 2000
+          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
+          python src/edgepulse/scripts/bootstrap_model.py \
+            --output-dir src/models/ \
+            --n-samples 2000
 
       - name: Build .rpm
         working-directory: edge-agent
@@ -156,6 +166,7 @@ jobs:
           path: edge-agent/packaging/dist/*.rpm
           retention-days: 30
 
+  # ─── Windows installer ──────────────────────────────────────────────────────
   build-windows:
     name: Build Windows installer
     needs: test
@@ -179,11 +190,10 @@ jobs:
       - name: Install Python dependencies
         working-directory: edge-agent
         run: |
-          pip install pyinstaller poetry==1.8.2
+          pip install "pyinstaller>=6.0,<7.0" "poetry==1.8.2"
           poetry install --extras "api-full notifications"
 
       - name: Build Windows installer
-        working-directory: edge-agent
         run: |
           .\packaging\windows\build_windows.ps1 -SkipBootstrap:$false
 
@@ -194,6 +204,7 @@ jobs:
           path: edge-agent/packaging/dist/*.exe
           retention-days: 30
 
+  # ─── Publish release ────────────────────────────────────────────────────────
   release:
     name: Publish release
     needs: [build-wheel, build-deb, build-rpm, build-windows]
@@ -229,7 +240,8 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           if [[ -f CHANGELOG.md ]]; then
-            awk "/^## \[$VERSION\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md > release_notes.md
+            awk "/^## \[$VERSION\]/{found=1; next} /^## \[/{if(found) exit} found{print}" \
+              CHANGELOG.md > release_notes.md
           fi
           if [[ ! -s release_notes.md ]]; then
             echo "EdgePulse Agent $VERSION" > release_notes.md
