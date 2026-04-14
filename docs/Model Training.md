@@ -95,7 +95,7 @@ This processes only 5 000 rows per dataset and uses 50 trees,
 completing in under two minutes:
 
 ```bash
-python train_models.py \
+poetry run python src/edgepulse/scripts/train_models.py \
     --datasets-dir /path/to/your/Datasets \
     --output-dir   edge-agent/src/models \
     --max-rows     5000 \
@@ -117,9 +117,10 @@ If the smoke test passes, proceed. If a dataset fails, use
 ## Step 3 — Full training run
 
 ```bash
-python train_models.py \
+poetry run python src/edgepulse/scripts/train_models.py \
     --datasets-dir /path/to/your/Datasets \
     --output-dir   edge-agent/src/models \
+    --max-rows     200000 \
     --datasets     unsw cic cert adfa_ld adfa_wd dapt \
     --n-estimators 200 \
     --shap-background-size 200
@@ -143,7 +144,7 @@ CERT will show "no attack labels — skipping evaluation" — that is expected.
 
 ```bash
 cd edge-agent
-poetry run edge-agent run
+make dev
 ```
 
 In the logs, look for:

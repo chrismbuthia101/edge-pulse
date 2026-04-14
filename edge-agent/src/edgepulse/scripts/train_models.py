@@ -23,25 +23,40 @@ Expected directory layout under --datasets-dir:
   │   └── CSE-CIC-IDS2018.csv
   ├── CERT Insider Threat r4.2/
   │   ├── logon.csv  email.csv  file.csv  http.csv  device.csv
+  │   └── LDAP/                     (monthly LDAP dumps)
   ├── ADFA-LD/
-  │   ├── Training_Data_Master/   (*.txt normal syscall traces)
-  │   └── Attack_Data_Master/     (subdirs, each with *.txt attack traces)
-  ├── ADFA-WD-SAA_Master/         (OR: Full_Process_Traces/ at datasets-dir root)
+  │   ├── Training_Data_Master/   (833 *.txt normal traces)
+  │   ├── Attack_Data_Master/     (60 subdirs with attack traces)
+  │   └── Validation_Data_Master/ (4372 *.txt traces)
+  ├── ADFA-WD-SAA_Master/
   │   └── Full_Process_Traces/
-  │       ├── S1/ S2/ S3/ S4/    (each has S-N-1..S-N-10 subdirs with trace files)
-  ├── Full_Process_Traces/        (alternative root-level location)
-  │   ├── Full_Trace_Attack_Data/ (242 subdirs, .GHC files)
-  │   ├── Full_Trace_Training_Data/  (*.GHC normal traces)
-  │   └── Full_Trace_Validation_Data/ (*.GHC normal traces)
+  │       └── Full_Process_Traces/
+  │           ├── Full_Trace_Training_Data/  (355 *.GHC normal traces)
+  │           ├── Full_Trace_Attack_Data/    (240 subdirs with *.GHC attack traces)
+  │           └── Full_Trace_Validation_Data/ (*.GHC traces)
   └── DAPT2020/
-      └── *.pcap_Flow.csv
+      └── *.pcap_Flow.csv                         (10 files)
+
+  Training Split Guidelines:
+  ─────────────────────────────────────────────────────────────────────
+  Dataset      Train  Test  Justification
+  ─────────────────────────────────────────────────────────────────────
+  UNSW-NB15   80%    20%   Pre-split provided (train parquet + test parquet)
+  CIC-IDS2018 80%    20%   Large dataset (~2M rows), stratified
+  CERT        70%    30%   No attack labels - treat all as normal
+  DAPT2020    80%    20%   Combine 10 files
+  ADFA-LD     80%    20%   Training_Data_Master normal only
+  ADFA-WD     80%    20%   Full_Trace_Training_Data normal only
+  ─────────────────────────────────────────────────────────────────────
+  Note: For Isolation Forest training, use NORMAL samples only.
+  Attack samples are for evaluation only.
 
 Usage
 -----
   # Smoke test — fast, catches path and format errors
   python train_models.py \
       --datasets-dir ~/Datasets \
-      --output-dir edge-agent/src/models \
+      --output-dir src/models \
       --max-rows 5000 \
       --datasets unsw cert dapt \
       --n-estimators 50
@@ -49,7 +64,7 @@ Usage
   # Full run — all datasets
   python train_models.py \
       --datasets-dir ~/Datasets \
-      --output-dir edge-agent/src/models \
+      --output-dir src/models \
       --datasets unsw cic cert adfa_ld adfa_wd dapt \
       --n-estimators 200
 
@@ -535,8 +550,8 @@ def _parse_ghc_trace(path: Path) -> Optional[np.ndarray]:
 def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
     """
     Supports two layouts:
-      Layout A — ADFA-WD-SAA_Master/Full_Process_Traces/S1-S4/S-N-1..10/ (no files at S level,
-                 files are in the numbered subdirs or may be absent — this is the S1-S4 scaffold)
+      Layout A — ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces/Full_Trace_Training_Data/*.GHC
+                 (the current correct location)
       Layout B — Full_Process_Traces/ at datasets-dir root (Full_Trace_Training_Data/*.GHC, etc.)
 
     Both layouts are tried in order.
@@ -545,18 +560,18 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
     rows_normal: List[Dict[str, float]] = []
     rows_attack: List[Dict[str, float]] = []
 
-    # ── Layout B: root-level Full_Process_Traces (your primary data) ─────────
-    root_fpt = data_dir / "Full_Process_Traces"
-    if root_fpt.exists():
-        log.info("  ADFA-WD  using root-level Full_Process_Traces/")
+    # ── Layout A: ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces (primary data) ───
+    saa_base = data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces" / "Full_Process_Traces"
+    if saa_base.exists():
+        log.info("  ADFA-WD  using ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces/")
 
-        train_dir = root_fpt / "Full_Trace_Training_Data"
-        valid_dir = root_fpt / "Full_Trace_Validation_Data"
-        attack_dir = root_fpt / "Full_Trace_Attack_Data"
+        train_dir = saa_base / "Full_Trace_Training_Data"
+        valid_dir = saa_base / "Full_Trace_Validation_Data"
+        attack_dir = saa_base / "Full_Trace_Attack_Data"
 
         for d in [train_dir, valid_dir]:
             if d.exists():
-                for f in sorted(d.rglob("*.GHC")):
+                for f in sorted(d.glob("*.GHC")):
                     if len(rows_normal) >= limit:
                         break
                     sc = _parse_ghc_trace(f)
@@ -569,7 +584,7 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
             for subdir in sorted(attack_dir.iterdir()):
                 if not subdir.is_dir() or len(rows_attack) >= limit:
                     break
-                for f in sorted(subdir.rglob("*.GHC")):
+                for f in sorted(subdir.glob("*.GHC")):
                     if len(rows_attack) >= limit:
                         break
                     sc = _parse_ghc_trace(f)
@@ -578,7 +593,7 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
                             _syscall_trace_to_features(sc, ADFA_WD_SUSPICIOUS, ADFA_WD_PROCESS)
                         )
 
-    # ── Layout A: ADFA-WD-SAA_Master scaffold (S1-S4/S-N-1..10) ─────────────
+    # ── Layout B: Legacy scaffold layout (S1-S4/S-N-1..10 with .GHC files) ────────
     if not rows_normal:
         saa_fpt_candidates = [
             data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces",
@@ -587,9 +602,7 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
         for base in saa_fpt_candidates:
             if not base.exists():
                 continue
-            log.info("  ADFA-WD  trying scaffold layout under %s", base)
-            # The S1-S4 dirs contain S1-1..S1-10 subdirs.  Treat everything
-            # without an "Attack" or "attack" in the path as normal.
+            log.info("  ADFA-WD  trying legacy scaffold layout under %s", base)
             for f in sorted(base.rglob("*.GHC")):
                 if len(rows_normal) + len(rows_attack) >= limit * 2:
                     break
@@ -609,8 +622,8 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
     if not rows_normal and not rows_attack:
         raise ValueError(
             "ADFA-WD: no trace files found. Checked:\n"
-            f"  {data_dir}/Full_Process_Traces/Full_Trace_Training_Data/*.GHC\n"
-            f"  {data_dir}/ADFA-WD-SAA_Master/Full_Process_Traces/**/*.GHC"
+            f"  {data_dir}/ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces/Full_Trace_Training_Data/*.GHC\n"
+            f"  {data_dir}/Full_Process_Traces/Full_Trace_Training_Data/*.GHC"
         )
 
     all_rows = rows_normal + rows_attack
