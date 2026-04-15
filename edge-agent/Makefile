@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help install install-all bootstrap dev run test lint fmt typecheck clean \
         service-install service-start service-stop service-status service-logs \
-        wheel deb rpm windows
+        wheel deb rpm windows enroll
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 CYAN  := \033[0;36m
@@ -16,7 +16,8 @@ help:
 	@echo "  $(CYAN)EdgePulse Agent — available targets$(RESET)"
 	@echo ""
 	@echo "  Setup"
-	@echo "    make install          Install core dependencies"
+	@echo "    make install          Install core dependencies (inference only)"
+	@echo "    make install-full     Install with TensorFlow training support"
 	@echo "    make install-all      Install all optional extras"
 	@echo "    make bootstrap        Generate the baseline ML model (required first run)"
 	@echo "    make env              Copy .env.example → .env (skips if .env exists)"
@@ -38,6 +39,9 @@ help:
 	@echo "    make service-status   Show service status"
 	@echo "    make service-logs     Tail service logs (last 80 lines)"
 	@echo ""
+	@echo "  Enrollment"
+	@echo "    make enroll           Enroll device with EdgePulse backend"
+	@echo ""
 	@echo "  Packaging"
 	@echo "    make wheel            Build PyPI wheel"
 	@echo "    make deb              Build Debian .deb"
@@ -50,7 +54,10 @@ help:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
-	poetry install --extras "api-full notifications"
+	poetry install --extras "api-full notifications ml-inference"
+
+install-full:
+	poetry install --extras "api-full notifications ml-full"
 
 install-all:
 	poetry install --extras "all"
@@ -133,3 +140,9 @@ windows:
 	@echo "$(CYAN)Building Windows installer…$(RESET)"
 	powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
 	@echo "$(CYAN)Windows installer written to packaging/dist/$(RESET)"
+
+# ── Enrollment ───────────────────────────────────────────────────────────────
+enroll:
+	@echo "$(CYAN)Enrolling device with EdgePulse backend…$(RESET)"
+	poetry run edge-agent enroll
+	@echo "$(CYAN)Done$(RESET)"

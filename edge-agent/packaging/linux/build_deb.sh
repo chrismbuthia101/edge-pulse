@@ -231,7 +231,7 @@ fi
 
 # Install the agent wheel with all dependencies
 echo "  Installing EdgePulse Agent and dependencies..."
-"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications]"
+"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference]"
 
 # Bootstrap the ML model if not present
 MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
@@ -241,6 +241,40 @@ if [[ ! -f "$MODEL" ]]; then
         --output-dir /var/lib/edgepulse/models/ \
         --n-samples 2000 \
         2>&1 | sed 's/^/    /'
+fi
+
+# Create default enrollment config template
+if [[ ! -f /etc/edgepulse/enrollment.json ]]; then
+    cat > /etc/edgepulse/enrollment.json <<'ENROLL_CONFIG'
+{
+  "supabase_url": "https://YOUR_PROJECT.supabase.co",
+  "enrollment_token": "YOUR_ENROLLMENT_TOKEN",
+  "device_hostname": null,
+  "device_os": null,
+  "agent_version": null,
+  "timeout_seconds": 30
+}
+ENROLL_CONFIG
+    chmod 640 /etc/edgepulse/enrollment.json
+fi
+
+# Attempt automatic enrollment if config exists
+ENROLLMENT_CONFIG=""
+if [[ -f /etc/edgepulse/enrollment.json ]]; then
+    if grep -q "YOUR_PROJECT\|YOUR_ENROLLMENT_TOKEN" /etc/edgepulse/enrollment.json 2>/dev/null; then
+        echo ""
+        echo "  NOTE: Enrollment config found but not configured."
+        echo "        Edit /etc/edgepulse/enrollment.json and run:"
+        echo "          sudo /opt/edgepulse/venv/bin/edge-agent enroll"
+    else
+        echo "  Attempting device enrollment..."
+        if "${VENV_DIR}/bin/edge-agent" enroll; then
+            echo "  Device enrolled successfully!"
+        else
+            echo "  Enrollment not completed. You can enroll later with:"
+            echo "    sudo /opt/edgepulse/venv/bin/edge-agent enroll"
+        fi
+    fi
 fi
 
 # Ensure bin directory exists and is linked
@@ -258,6 +292,11 @@ echo "┌───────────────────────�
 echo "│  EdgePulse Agent installed successfully!                 │"
 echo "│                                                         │"
 echo "│  Python environment: /opt/edgepulse/venv               │"
+echo "│                                                         │"
+echo "│  Enroll device:                                         │"
+echo "│    sudo /opt/edgepulse/venv/bin/edge-agent enroll       │"
+echo "│                                                         │"
+echo "│  Or edit /etc/edgepulse/enrollment.json first           │"
 echo "│                                                         │"
 echo "│  Start the service:                                     │"
 echo "│    sudo systemctl start edgepulse-agent                │"

@@ -132,7 +132,7 @@ if (-not $SkipBootstrap) {
 Write-Step "Installing Python dependencies..."
 Push-Location $RepoRoot
 try {
-    pip install -e ".[api-full,notifications]" --quiet
+    pip install -e ".[api-full,notifications,ml-inference]" --quiet
     if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     pip install pyinstaller --quiet
     Write-OK "Dependencies installed"

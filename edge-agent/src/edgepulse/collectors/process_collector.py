@@ -64,7 +64,7 @@ class ProcessMonitor(BaseCollector):
                 create_time = None
 
             try:
-                cpu_percent = process.cpu_percent(interval=0.1)
+                cpu_percent = process.cpu_percent(interval=0.01)
                 memory_info = process.memory_info()
                 memory_percent = process.memory_percent()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
@@ -174,11 +174,19 @@ class ProcessMonitor(BaseCollector):
         return any(pattern in username_lower for pattern in all_patterns)
 
     def get_running_processes(self) -> List[Dict[str, Any]]:
+        import time
+        start_time = time.time()
+        max_collection_time = 20.0  # Max 20 seconds for process collection
+        
         processes: List[Dict[str, Any]] = []
         current_pids: set[int] = set()
         
         try:
             for proc in psutil.process_iter(['pid', 'name', 'ppid', 'create_time']):
+                # Check if we're approaching timeout
+                if time.time() - start_time > max_collection_time:
+                    logger.warning("Process collection approaching timeout, stopping early")
+                    break
                 try:
                     pid = proc.info['pid']
                     current_pids.add(pid)

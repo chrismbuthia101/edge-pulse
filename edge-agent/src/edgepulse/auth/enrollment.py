@@ -148,13 +148,10 @@ class DeviceEnrollmentClient:
             operating_system = config.device_os or f"{platform.system()} {platform.release()}"
 
             enrollment_data = {
-                "token": config.enrollment_token,
-                "device_info": {
-                    "hostname": hostname,
-                    "operating_system": operating_system,
-                    "agent_version": agent_version,
-                    "platform": platform.platform(),
-                },
+                "enrollment_token": config.enrollment_token,
+                "hostname": hostname,
+                "operating_system": operating_system,
+                "agent_version": agent_version,
             }
 
             enrollment_url = f"{config.supabase_url}/functions/v1/enroll-device"

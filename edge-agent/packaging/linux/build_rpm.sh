@@ -76,7 +76,7 @@ python3 -m pip install --quiet \
     --target "${STAGING_DIR}${SITE_PACKAGES}" \
     --no-compile \
     --no-build-isolation \
-    "${REPO_ROOT}[api-full,notifications]"
+    "${REPO_ROOT}[api-full,notifications,ml-inference]"
 
 # Remove unnecessary metadata to keep the RPM lean
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \

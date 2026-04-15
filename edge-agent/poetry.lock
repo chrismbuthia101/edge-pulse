@@ -119,7 +119,7 @@ description = "An AST unparser for Python"
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "astunparse-1.6.3-py2.py3-none-any.whl", hash = "sha256:c2652417f2c8b5bb325c885ae329bdf3f86424075c4fd1a128674bc6fba4b8e8"},
     {file = "astunparse-1.6.3.tar.gz", hash = "sha256:5ad93a8456f0d084c3456d059fd9a92cce667963232cbf763eac3bc5b7940872"},
@@ -136,7 +136,7 @@ description = "Backport of CPython tarfile module"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"windows\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"windows\" or extra == \"all\")"
 files = [
     {file = "backports.tarfile-1.2.0-py3-none-any.whl", hash = "sha256:77e284d754527b01fb1e6fa8a1afe577858ebe4e9dad8919e34c862cb399bc34"},
     {file = "backports_tarfile-1.2.0.tar.gz", hash = "sha256:d75e02c268746e1b8144c278978b6e98e85de6ad16f8e4b0844a154557eca991"},
@@ -310,7 +310,7 @@ description = "The Real First Universal Charset Detector. Open, modern and activ
 optional = true
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "charset_normalizer-3.4.7-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:cdd68a1fb318e290a2077696b7eb7a21a49163c455979c639bf5a5dcdc46617d"},
     {file = "charset_normalizer-3.4.7-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e17b8d5d6a8c47c85e68ca8379def1303fd360c3e22093a807cd34a71cd082b8"},
@@ -730,7 +730,7 @@ description = "The FlatBuffers serialization format for Python"
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "flatbuffers-25.12.19-py2.py3-none-any.whl", hash = "sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"},
 ]
@@ -742,7 +742,7 @@ description = "Python AST that abstracts the underlying Python version"
 optional = true
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "gast-0.7.0-py3-none-any.whl", hash = "sha256:99cbf1365633a74099f69c59bd650476b96baa5ef196fec88032b00b31ba36f7"},
     {file = "gast-0.7.0.tar.gz", hash = "sha256:0bb14cd1b806722e91ddbab6fb86bba148c22b40e7ff11e248974e04c8adfdae"},
@@ -755,7 +755,7 @@ description = "Google Authentication Library"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "google_auth-2.49.2-py3-none-any.whl", hash = "sha256:c2720924dfc82dedb962c9f52cabb2ab16714fd0a6a707e40561d217574ed6d5"},
     {file = "google_auth-2.49.2.tar.gz", hash = "sha256:c1ae38500e73065dcae57355adb6278cf8b5c8e391994ae9cbadbcb9631ab409"},
@@ -784,7 +784,7 @@ description = "Google Authentication Library"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "google_auth_oauthlib-1.3.1-py3-none-any.whl", hash = "sha256:1a139ef23f1318756805b0e95f655c238bffd29655329a2978218248da4ee7f8"},
     {file = "google_auth_oauthlib-1.3.1.tar.gz", hash = "sha256:14c22c7b3dd3d06dbe44264144409039465effdd1eef94f7ce3710e486cc4bfa"},
@@ -804,7 +804,7 @@ description = "pasta is an AST-based Python refactoring library"
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "google-pasta-0.2.0.tar.gz", hash = "sha256:c9f2c8dfc8f96d0d5808299920721be30c9eec37f2389f28904f454565c8a16e"},
     {file = "google_pasta-0.2.0-py2-none-any.whl", hash = "sha256:4612951da876b1a10fe3960d7226f0c7682cf901e16ac06e473b267a5afa8954"},
@@ -821,7 +821,7 @@ description = "HTTP/2-based RPC framework"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "grpcio-1.80.0-cp310-cp310-linux_armv7l.whl", hash = "sha256:886457a7768e408cdce226ad1ca67d2958917d306523a0e21e1a2fdaa75c9c9c"},
     {file = "grpcio-1.80.0-cp310-cp310-macosx_11_0_universal2.whl", hash = "sha256:7b641fc3f1dc647bfd80bd713addc68f6d145956f64677e56d9ebafc0bd72388"},
@@ -1345,7 +1345,7 @@ description = "Deep learning for humans."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "keras-2.15.0-py3-none-any.whl", hash = "sha256:2dcc6d2e30cf9c951064b63c1f4c404b966c59caf09e01f3549138ec8ee0dd1f"},
     {file = "keras-2.15.0.tar.gz", hash = "sha256:81871d298c064dc4ac6b58440fdae67bfcf47c8d7ad28580fab401834c06a575"},
@@ -1389,7 +1389,7 @@ description = "Clang Python Bindings, mirrored from the official LLVM repo: http
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "libclang-18.1.1-1-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:0b2e143f0fac830156feb56f9231ff8338c20aecfe72b4ffe96f19e5a1dbb69a"},
     {file = "libclang-18.1.1-py2.py3-none-macosx_10_9_x86_64.whl", hash = "sha256:6f14c3f194704e5d09769108f03185fce7acaf1d1ae4bbb2f30a72c2400cb7c5"},
@@ -1543,7 +1543,7 @@ description = "lightweight wrapper around basic LLVM functionality"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version == \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version >= \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "llvmlite-0.45.1-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:1b1af0c910af0978aa55fa4f60bbb3e9f39b41e97c2a6d94d199897be62ba07a"},
     {file = "llvmlite-0.45.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:02a164db2d79088bbd6e0d9633b4fe4021d6379d7e4ac7cc85ed5f44b06a30c5"},
@@ -1719,7 +1719,7 @@ description = "Safely add untrusted strings to HTML/XML markup."
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "(python_version < \"3.12\" or extra == \"api-full\" or extra == \"all\") and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\" or extra == \"api-full\")"
+markers = "(python_version <= \"3.11\" or extra == \"api-full\" or extra == \"all\") and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\" or extra == \"api-full\")"
 files = [
     {file = "markupsafe-3.0.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:2f981d352f04553a7171b8e44369f2af4055f888dfb147d55e42d29e29e74559"},
     {file = "markupsafe-3.0.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:e1c1493fb6e50ab01d20a22826e57520f1284df32f2d8601fdd90b6304601419"},
@@ -1844,7 +1844,7 @@ description = ""
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "ml_dtypes-0.3.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:7afde548890a92b41c0fed3a6c525f1200a5727205f73dc21181a2726571bb53"},
     {file = "ml_dtypes-0.3.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d1a746fe5fb9cd974a91070174258f0be129c592b93f9ce7df6cc336416c3fbd"},
@@ -1867,8 +1867,8 @@ files = [
 
 [package.dependencies]
 numpy = [
-    {version = ">1.20"},
     {version = ">=1.21.2", markers = "python_version >= \"3.10\""},
+    {version = ">1.20", markers = "python_version < \"3.10\""},
     {version = ">=1.23.3", markers = "python_version >= \"3.11\""},
 ]
 
@@ -2106,7 +2106,7 @@ description = "compiling Python code using LLVM"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version == \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version >= \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "numba-0.62.1-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:a323df9d36a0da1ca9c592a6baaddd0176d9f417ef49a65bb81951dce69d941a"},
     {file = "numba-0.62.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:e1e1f4781d3f9f7c23f16eb04e76ca10b5a3516e959634bd226fc48d5d8e7a0a"},
@@ -2182,7 +2182,7 @@ description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.9"
 groups = ["main", "dev"]
-markers = "python_version < \"3.12\""
+markers = "python_version <= \"3.11\""
 files = [
     {file = "numpy-1.26.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9ff0f4f29c51e2803569d7a51c2304de5554655a60c5d776e35b4a41413830d0"},
     {file = "numpy-1.26.4-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2e4ee3380d6de9c9ec04745830fd9e2eccb3e6cf790d39d7b98ffd19b0dd754a"},
@@ -2229,7 +2229,7 @@ description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.11"
 groups = ["main", "dev"]
-markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version == \"3.12\""
+markers = "sys_platform == \"darwin\" and platform_machine == \"x86_64\" and python_version >= \"3.12\""
 files = [
     {file = "numpy-2.3.5-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:de5672f4a7b200c15a4127042170a694d4df43c992948f5e1af57f0174beed10"},
     {file = "numpy-2.3.5-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:acfd89508504a19ed06ef963ad544ec6664518c863436306153e13e94605c218"},
@@ -2314,7 +2314,7 @@ description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.11"
 groups = ["main", "dev"]
-markers = "(sys_platform != \"darwin\" or platform_machine != \"x86_64\") and python_version == \"3.12\""
+markers = "(sys_platform != \"darwin\" or platform_machine != \"x86_64\") and python_version >= \"3.12\""
 files = [
     {file = "numpy-2.4.4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:f983334aea213c99992053ede6168500e5f086ce74fbc4acc3f2b00f5762e9db"},
     {file = "numpy-2.4.4-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:72944b19f2324114e9dc86a159787333b77874143efcf89a5167ef83cfee8af0"},
@@ -2397,7 +2397,7 @@ description = "A generic, spec-compliant, thorough implementation of the OAuth r
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1"},
     {file = "oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9"},
@@ -2415,7 +2415,7 @@ description = "Path optimization of einsum functions."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "opt_einsum-3.4.0-py3-none-any.whl", hash = "sha256:69bb92469f86a1565195ece4ac0323943e83477171b91d24c35afe028a90d7cd"},
     {file = "opt_einsum-3.4.0.tar.gz", hash = "sha256:96ca72f1b886d148241348783498194c577fa30a8faac108586b14f1ba4473ac"},
@@ -2432,7 +2432,7 @@ files = [
     {file = "packaging-26.1-py3-none-any.whl", hash = "sha256:5d9c0669c6285e491e0ced2eee587eaf67b670d94a19e94e3984a481aba6802f"},
     {file = "packaging-26.1.tar.gz", hash = "sha256:f042152b681c4bfac5cae2742a55e103d27ab2ec0f3d88037136b6bfe7c9c5de"},
 ]
-markers = {main = "(python_version < \"3.12\" or extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\") and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\" or extra == \"ml-explain\" or extra == \"ml-inference\")"}
+markers = {main = "(python_version <= \"3.11\" or extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\") and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\" or extra == \"ml-explain\" or extra == \"ml-inference\")"}
 
 [[package]]
 name = "pandas"
@@ -2606,7 +2606,7 @@ description = ""
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "protobuf-4.25.9-cp310-abi3-win32.whl", hash = "sha256:bde396f568b0b46fc8fbfe9f02facf25b6755b2578a3b8ac61e74b9d69499e03"},
     {file = "protobuf-4.25.9-cp310-abi3-win_amd64.whl", hash = "sha256:3683c05154252206f7cb2d371626514b3708199d9bcf683b503dabf3a2e38e06"},
@@ -2775,7 +2775,7 @@ description = "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs 
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "pyasn1-0.6.3-py3-none-any.whl", hash = "sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde"},
     {file = "pyasn1-0.6.3.tar.gz", hash = "sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf"},
@@ -2788,7 +2788,7 @@ description = "A collection of ASN.1-based protocols modules"
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "pyasn1_modules-0.4.2-py3-none-any.whl", hash = "sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a"},
     {file = "pyasn1_modules-0.4.2.tar.gz", hash = "sha256:677091de870a80aae844b1ca6134f54652fa2c8c5a52aa396440ac3106e941e6"},
@@ -3350,7 +3350,7 @@ description = "OAuthlib authentication support for Requests."
 optional = true
 python-versions = ">=3.4"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "requests-oauthlib-2.0.0.tar.gz", hash = "sha256:b3dffaebd884d8cd778494369603a9e7b58d29111bf6b41bdc2dcd87203af4e9"},
     {file = "requests_oauthlib-2.0.0-py2.py3-none-any.whl", hash = "sha256:7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36"},
@@ -3807,7 +3807,7 @@ description = "Most extensible Python build backend with support for C/C++ exten
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "setuptools-82.0.1-py3-none-any.whl", hash = "sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb"},
     {file = "setuptools-82.0.1.tar.gz", hash = "sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9"},
@@ -3829,7 +3829,7 @@ description = "A unified approach to explain the output of any machine learning 
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "shap-0.49.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:40140ec5d306719f89daee1df27805a71bcc1ac39630832455d316d0306d1283"},
     {file = "shap-0.49.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:6e9977f1e0b6bba57967de600e8e6047b3e4643d06a4671f2dba1a97c1b5ab3e"},
@@ -3893,7 +3893,7 @@ description = "A unified approach to explain the output of any machine learning 
 optional = true
 python-versions = ">=3.11"
 groups = ["main"]
-markers = "python_version == \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version >= \"3.12\" and (extra == \"ml-explain\" or extra == \"ml-training\" or extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "shap-0.51.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:4b4b81d7401bc821490148a694a9f149f8ef488fa973b49fdc8a7916a572750f"},
     {file = "shap-0.51.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:9b92f7371644c4a19660f734e0b0fe299d0eff273102230c9cf191e310576619"},
@@ -4057,7 +4057,7 @@ description = "TensorBoard lets you watch Tensors Flow"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tensorboard-2.15.2-py3-none-any.whl", hash = "sha256:a6f6443728064d962caea6d34653e220e34ef8df764cb06a8212c17e1a8f0622"},
 ]
@@ -4083,7 +4083,7 @@ description = "Fast data loading for TensorBoard"
 optional = true
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tensorboard_data_server-0.7.2-py3-none-any.whl", hash = "sha256:7e0610d205889588983836ec05dc098e80f97b7e7bbff7e994ebb78f578d0ddb"},
     {file = "tensorboard_data_server-0.7.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:9fe5d24221b29625dbc7328b0436ca7fc1c23de4acf4d272f1180856e32f9f60"},
@@ -4097,7 +4097,7 @@ description = "TensorFlow is an open source machine learning framework for every
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tensorflow-2.15.1-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:91b51a507007d63a70b65be307d701088d15042a6399c0e2312b53072226e909"},
     {file = "tensorflow-2.15.1-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:10132acc072d59696c71ce7221d2d8e0e3ff1e6bc8688dbac6d7aed8e675b710"},
@@ -4152,7 +4152,7 @@ description = "TensorFlow is an open source machine learning framework for every
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "(platform_machine == \"arm64\" or platform_machine == \"aarch64\") and python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\") and platform_system == \"Linux\""
+markers = "(platform_machine == \"arm64\" or platform_machine == \"aarch64\") and python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\") and platform_system == \"Linux\""
 files = [
     {file = "tensorflow_cpu_aws-2.15.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c781d95cb8c58d47cb012b7b4e77b2f3e8d4d47b45926bc54976506fa0c037cc"},
     {file = "tensorflow_cpu_aws-2.15.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d4c3a3a9363bf42999adedbbd514e3a133be2d62f61fee9cfa46aaefb087c09e"},
@@ -4193,7 +4193,7 @@ description = "TensorFlow Estimator."
 optional = true
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tensorflow_estimator-2.15.0-py2.py3-none-any.whl", hash = "sha256:aedf21eec7fb2dc91150fc91a1ce12bc44dbb72278a08b58e79ff87c9e28f153"},
 ]
@@ -4205,7 +4205,7 @@ description = "TensorFlow is an open source machine learning framework for every
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\") and platform_system == \"Windows\""
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\") and platform_system == \"Windows\""
 files = [
     {file = "tensorflow_intel-2.15.1-cp310-cp310-win_amd64.whl", hash = "sha256:9f305142b3c5e239c82c463429b1f88726dd27d9f23523871f825493a9ffc5f4"},
     {file = "tensorflow_intel-2.15.1-cp311-cp311-win_amd64.whl", hash = "sha256:4f05059493f8203285ac5cea3b1955887a7903c1ca6f7a29e4b6ef912b1f934b"},
@@ -4246,7 +4246,7 @@ description = "TensorFlow IO"
 optional = true
 python-versions = "<3.13,>=3.7"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tensorflow_io_gcs_filesystem-0.37.1-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:249c12b830165841411ba71e08215d0e94277a49c551e6dd5d72aab54fe5491b"},
     {file = "tensorflow_io_gcs_filesystem-0.37.1-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:257aab23470a0796978efc9c2bcf8b0bc80f22e6298612a4c0a50d3f4e88060c"},
@@ -4312,7 +4312,7 @@ description = "TensorFlow Lite is for mobile and embedded devices."
 optional = true
 python-versions = "*"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-inference\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "tflite_runtime-2.14.0-cp310-cp310-manylinux2014_x86_64.whl", hash = "sha256:bb11df4283e281cd609c621ac9470ad0cb5674408593272d7593a2c6bde8a808"},
     {file = "tflite_runtime-2.14.0-cp310-cp310-manylinux_2_34_aarch64.whl", hash = "sha256:d38c6885f5e9673c11a61ccec5cad7c032ab97340718d26b17794137f398b780"},
@@ -4508,7 +4508,7 @@ description = "HTTP library with thread-safe connection pooling, file post, and 
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4"},
     {file = "urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed"},
@@ -4944,7 +4944,7 @@ description = "The comprehensive WSGI web application library."
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "werkzeug-3.1.8-py3-none-any.whl", hash = "sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50"},
     {file = "werkzeug-3.1.8.tar.gz", hash = "sha256:9bad61a4268dac112f1c5cd4630a56ede601b6ed420300677a869083d70a4c44"},
@@ -4963,7 +4963,7 @@ description = "Command line tool for manipulating wheel files"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "wheel-0.46.3-py3-none-any.whl", hash = "sha256:4b399d56c9d9338230118d705d9737a2a468ccca63d5e813e2a4fc7815d8bc4d"},
     {file = "wheel-0.46.3.tar.gz", hash = "sha256:e3e79874b07d776c40bd6033f8ddf76a7dad46a7b8aa1b2787a83083519a1803"},
@@ -4998,7 +4998,7 @@ description = "Module for decorators, wrappers and monkey patching."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version < \"3.12\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
+markers = "python_version <= \"3.11\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\")"
 files = [
     {file = "wrapt-1.14.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:734de7e0182d15f03eb4f4fce0ff7f07a072119a19cdcc97c40aee96d10fe851"},
     {file = "wrapt-1.14.2-cp310-cp310-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:851ded3662733bab093297a0adb844c71e7754b8c144f76bb569ac6544a7c27a"},
@@ -5039,7 +5039,7 @@ description = "Backport of pathlib-compatible object wrapper for zip files"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version == \"3.9\" and (extra == \"ml-training\" or extra == \"ml-full\" or extra == \"all\" or extra == \"windows\") or python_version < \"3.12\" and (extra == \"windows\" or extra == \"all\")"
+markers = "python_version == \"3.9\" and (extra == \"windows\" or extra == \"all\" or extra == \"ml-training\" or extra == \"ml-full\") or python_version <= \"3.11\" and (extra == \"windows\" or extra == \"all\")"
 files = [
     {file = "zipp-3.23.1-py3-none-any.whl", hash = "sha256:0b3596c50a5c700c9cb40ba8d86d9f2cc4807e9bedb06bcdf7fac85633e444dc"},
     {file = "zipp-3.23.1.tar.gz", hash = "sha256:32120e378d32cd9714ad503c1d024619063ec28aad2248dc6672ad13edfa5110"},
@@ -5065,5 +5065,5 @@ windows = ["keyring", "pywin32", "watchdog"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.9,<3.13"
-content-hash = "126040ca6c62edd0914b1d0590c25c8c278fea4ac0189b00834dceecae482d86"
+python-versions = ">=3.9,<3.14"
+content-hash = "e1536d710729a78efad55537044c604bdcfad4a80239886b5e520f175cee3c14"

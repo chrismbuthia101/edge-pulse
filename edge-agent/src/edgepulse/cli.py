@@ -49,6 +49,12 @@ try:
 except ImportError:
     _BOOTSTRAP_AVAILABLE = False
 
+try:
+    from edgepulse.auth.enrollment import DeviceEnrollmentClient
+    _ENROLLMENT_AVAILABLE = True
+except ImportError:
+    _ENROLLMENT_AVAILABLE = False
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -66,6 +72,29 @@ def main():
     # ── bootstrap subcommand ─────────────────────────────────────────────────
     if _BOOTSTRAP_AVAILABLE:
         add_bootstrap_subcommand(subparsers)
+
+    # ── enroll subcommand ─────────────────────────────────────────────────────
+    if _ENROLLMENT_AVAILABLE:
+        enroll_parser = subparsers.add_parser(
+            "enroll",
+            help="Enroll this device with the EdgePulse backend",
+            description="Register this device with the EdgePulse cloud backend using an enrollment token.",
+        )
+        enroll_parser.add_argument(
+            "--config",
+            type=str,
+            help="Path to enrollment configuration file (enroll.cfg or enrollment.json)",
+        )
+        enroll_parser.add_argument(
+            "--token",
+            type=str,
+            help="Enrollment token (can also be provided via config file)",
+        )
+        enroll_parser.add_argument(
+            "--supabase-url",
+            type=str,
+            help="Supabase URL (can also be provided via config file)",
+        )
 
     # ── Windows service ───────────────────────────────────────────────────────
     if WINDOWS_SERVICE_AVAILABLE:
@@ -229,6 +258,56 @@ def main():
             print("Bootstrap command not available (edgepulse.bootstrap_cli not found)")
             sys.exit(1)
         sys.exit(run_bootstrap(args))
+
+    # ── Dispatch: enroll ───────────────────────────────────────────────────────
+    if args.command == "enroll":
+        if not _ENROLLMENT_AVAILABLE:
+            print("Enrollment command not available")
+            sys.exit(1)
+
+        from edgepulse.auth.credentials import CredentialManager
+
+        credential_manager = CredentialManager()
+        enrollment_client = DeviceEnrollmentClient(credential_manager)
+
+        if hasattr(args, "config") and args.config:
+            config = enrollment_client.read_enrollment_config()
+        else:
+            config = enrollment_client.read_enrollment_config()
+
+        if not config and (hasattr(args, "token") and args.token and hasattr(args, "supabase_url") and args.supabase_url):
+            from edgepulse.auth.enrollment import EnrollmentConfig
+            config = EnrollmentConfig(
+                supabase_url=args.supabase_url,
+                enrollment_token=args.token,
+            )
+
+        if not config:
+            print("Error: No enrollment configuration found.")
+            print("Please provide either:")
+            print("  1. A config file (enroll.cfg or enrollment.json) in ~/.edgepulse/")
+            print("  2. Both --token and --supabase-url arguments")
+            print("")
+            print("Example enrollment.json:")
+            print('  {"supabase_url": "https://your-project.supabase.co", "enrollment_token": "your-token"}')
+            sys.exit(1)
+
+        async def do_enrollment():
+            result = await enrollment_client.enroll_device(config)
+            if result:
+                if enrollment_client.complete_enrollment(result):
+                    print(f"Device enrolled successfully!")
+                    print(f"  Device ID: {result.device_id}")
+                    print(f"  API Key: {result.api_key[:10]}...")
+                    return 0
+                else:
+                    print("Failed to store credentials")
+                    return 1
+            else:
+                print("Enrollment failed. Check logs for details.")
+                return 1
+
+        sys.exit(asyncio.run(do_enrollment()))
 
     # ── Default: run the agent ────────────────────────────────────────────────
     if args.command is None or args.command == "run":

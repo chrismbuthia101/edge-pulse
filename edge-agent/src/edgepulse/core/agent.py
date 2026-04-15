@@ -399,12 +399,9 @@ class EdgePulseAgent:
         else:
             logger.info("No baseline file found - normalizer will learn from data")
 
-        if self._detectors:
-            primary_detector = self._detectors[0]
-            if hasattr(primary_detector, 'model') and primary_detector.model:
-                self.shap_explainer = SHAPExplainer(
-                    model_id=f"{self.device_id}_primary"
-                )
+        # Initialize SHAP explainer after all components are ready
+        self.shap_explainer = None
+        self._shap_init_attempted = False
 
         self.report_generator = ReportGenerator(device_id=self.device_id)
 
@@ -490,12 +487,21 @@ class EdgePulseAgent:
 
             explanation: Dict[str, Any] = {}
             try:
+                # Lazy initialization of SHAP explainer - only when needed
+                if (
+                    not self._shap_init_attempted 
+                    and self._detectors 
+                    and features is not None
+                ):
+                    self._initialize_shap_explainer()
+                
                 if (
                     hasattr(self, "shap_explainer")
                     and getattr(self, "shap_explainer", None)
                     and features is not None
                 ):
-                    explanation = self.shap_explainer.explain_prediction(features)
+                    anomaly_score = detection.get("anomaly_score", 0.0)
+                    explanation = self.shap_explainer.explain_prediction(features, anomaly_score)
             except Exception as e:
                 logger.error("shap_explanation_error", error=str(e))
                 explanation = {}
@@ -633,6 +639,50 @@ class EdgePulseAgent:
                 break
             except Exception as e:
                 logger.error("data_cleanup_error", error=str(e))
+
+    def _initialize_shap_explainer(self) -> None:
+        """Initialize SHAP explainer with real detector model and features"""
+        if self._shap_init_attempted:
+            return
+            
+        self._shap_init_attempted = True
+        
+        try:
+            if not self._detectors:
+                logger.warning("No detectors available for SHAP initialization")
+                return
+                
+            primary_detector = self._detectors[0]
+            if not hasattr(primary_detector, 'model') or not primary_detector.model:
+                logger.warning("Primary detector has no model for SHAP initialization")
+                return
+                
+            # Create SHAP explainer
+            self.shap_explainer = SHAPExplainer(model_id=f"{self.device_id}_primary")
+            
+            # Get feature names and create appropriate training data
+            feature_names = self._feature_extractor.get_feature_names()
+            
+            # Create synthetic training data matching the feature schema
+            import numpy as np
+            synthetic_data = np.random.normal(0, 1, size=(50, len(feature_names)))
+            
+            # Initialize the explainer
+            success = self.shap_explainer.initialize(
+                model=primary_detector.model,
+                training_data=synthetic_data,
+                feature_names=feature_names
+            )
+            
+            if success:
+                logger.info("SHAP explainer initialized successfully on first use")
+            else:
+                logger.warning("SHAP explainer initialization failed")
+                self.shap_explainer = None
+                
+        except Exception as e:
+            logger.error("SHAP explainer initialization error: %s", e)
+            self.shap_explainer = None
 
     async def _save_state(self) -> None:
         try:
