@@ -346,6 +346,10 @@ def main():
 
         except ConfigurationError as exc:
             print(f"Configuration Error: {exc}")
+     
+            msg = str(exc).lower()
+            if "supabase" in msg or "sync" in msg or "enrolled" in msg or "credential" in msg:
+                sys.exit(0)
             sys.exit(1)
         except EdgePulseError as exc:
             print(f"EdgePulse Error: {exc}")

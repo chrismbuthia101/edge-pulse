@@ -158,6 +158,7 @@ ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run --config /etc/edgepul
 WorkingDirectory=/var/lib/edgepulse
 Restart=on-failure
 RestartSec=10
+RestartPreventExitStatus=0
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=edgepulse-agent

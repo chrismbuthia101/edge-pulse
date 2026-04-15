@@ -32,8 +32,8 @@ class APIConfig(BaseModel):
 
 class SyncConfig(BaseModel):
     """Synchronization configuration (env prefix: SYNC__)"""
-    supabase_url: str = Field(description="Supabase URL (required)")
-    supabase_key: SecretStr = Field(description="Supabase API key (required)")
+    supabase_url: str = Field(default="", description="Supabase URL")
+    supabase_key: SecretStr = Field(default=SecretStr(""), description="Supabase API key")
     batch_size: int = Field(default=50, ge=1, le=1000, description="Sync batch size")
     retry_max_attempts: int = Field(default=5, ge=1, le=20, description="Max retry attempts")
     offline_queue_max: int = Field(default=10000, ge=100, description="Max offline queue size")
@@ -312,7 +312,13 @@ class AgentSettings(BaseSettings):
         return self.api.enabled
 
     def should_enable_sync(self) -> bool:
-        return bool(self.sync.supabase_url and self.sync.supabase_key)
+        url = self.sync.supabase_url
+        key = self.sync.supabase_key.get_secret_value() if self.sync.supabase_key else ""
+        return bool(
+            url and key
+            and "YOUR_PROJECT" not in url
+            and "YOUR_SUPABASE" not in key
+        )
 
     def should_enable_ml(self) -> bool:
         return self.enable_ml_features
