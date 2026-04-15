@@ -6,18 +6,25 @@ import { AuthRepository } from '@/lib/repositories/auth-repository';
 import type { EnrollmentToken } from '@/lib/supabase/types';
 import { toast } from 'sonner';
 
+interface TokenSecret {
+  tokenId: string;
+  secret: string;
+}
+
 interface DeviceEnrollmentStore {
   tokens: EnrollmentToken[];
+  tokenSecrets: Map<string, string>; // token_id -> secret token (only for newly created)
   loading: boolean;
   creating: boolean;
   error: string | null;
 
   initialize: () => Promise<void>;
   refreshTokens: () => Promise<void>;
-  createToken: (name: string, maxUses: number) => Promise<string | null>;
+  createToken: (name: string, maxUses: number) => Promise<TokenSecret | null>;
   deleteToken: (tokenId: string) => Promise<void>;
   setTokens: (tokens: EnrollmentToken[]) => void;
   clearError: () => void;
+  getTokenSecret: (tokenId: string) => string | undefined;
 }
 
 const deviceEnrollmentRepository = new DeviceEnrollmentRepository();
@@ -30,6 +37,7 @@ const deviceEnrollmentService = new DeviceEnrollmentService(deviceEnrollmentRepo
 export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get) => ({
   // ── Initial state ──────────────────────────────────────────────────────────
   tokens: [],
+  tokenSecrets: new Map(),
   loading: false,
   creating: false,
   error: null,
@@ -71,11 +79,18 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get)
     try {
       const result = await deviceEnrollmentService.createToken({ name, maxUses });
 
+      // Store the secret so it can be shown/copied later
+      set((state) => {
+        const newSecrets = new Map(state.tokenSecrets);
+        newSecrets.set(result.enrollmentToken.token_id, result.token);
+        return { tokenSecrets: newSecrets };
+      });
+
       // Refresh tokens after creation
       await get().refreshTokens();
 
-      toast.success(`Token "${name}" created. Copied to clipboard.`);
-      return result.token;
+      toast.success(`Token "${name}" created. Secret token copied to clipboard.`);
+      return { tokenId: result.enrollmentToken.token_id, secret: result.token };
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Failed to create enrollment token';
       set({ error });
@@ -92,9 +107,14 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get)
       await deviceEnrollmentService.deleteToken(tokenId);
 
       // Update local state optimistically
-      set((state) => ({
-        tokens: state.tokens.filter((t) => t.token_id !== tokenId)
-      }));
+      set((state) => {
+        const newSecrets = new Map(state.tokenSecrets);
+        newSecrets.delete(tokenId);
+        return {
+          tokens: state.tokens.filter((t) => t.token_id !== tokenId),
+          tokenSecrets: newSecrets
+        };
+      });
 
       toast.success('Enrollment token deleted');
     } catch (err) {
@@ -106,6 +126,7 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>((set, get)
 
   setTokens: (tokens) => set({ tokens }),
   clearError: () => set({ error: null }),
+  getTokenSecret: (tokenId: string) => get().tokenSecrets.get(tokenId),
 }));
 
 export { deviceEnrollmentService, deviceEnrollmentRepository };

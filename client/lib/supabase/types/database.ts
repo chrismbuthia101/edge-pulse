@@ -97,6 +97,7 @@ export interface CaseNote {
 export interface EnrollmentToken {
   token_id: string;
   token_hash: string;
+  name: string | null;
   created_by: string;
   expires_at: string;
   max_uses: number;
@@ -179,7 +180,7 @@ export interface Database {
       };
       device_enrollment_tokens: {
         Row: EnrollmentToken;
-        Insert: Pick<EnrollmentToken, 'token_hash' | 'created_by' | 'expires_at' | 'max_uses'>;
+        Insert: Pick<EnrollmentToken, 'token_hash' | 'name' | 'created_by' | 'expires_at' | 'max_uses'>;
         Update: Pick<EnrollmentToken, 'current_uses' | 'is_used' | 'used_at' | 'used_by_device_id'>;
       };
       incident_cases: {

@@ -94,6 +94,7 @@ CREATE INDEX idx_aak_is_active ON agent_api_keys(is_active);
 CREATE TABLE device_enrollment_tokens (
     token_id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     token_hash          TEXT        NOT NULL UNIQUE,
+    name                TEXT,
     created_by          UUID        NOT NULL REFERENCES analyst_users(user_id),
     expires_at          TIMESTAMPTZ NOT NULL,
     max_uses            INTEGER     NOT NULL DEFAULT 1 CHECK (max_uses > 0),

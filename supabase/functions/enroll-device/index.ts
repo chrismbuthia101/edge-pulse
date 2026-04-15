@@ -129,14 +129,17 @@ serve(async (req) => {
       )
     }
 
-    // Update token usage
+    // Update token usage - only mark as fully used when max_uses is reached
+    const newCurrentUses = tokenData.current_uses + 1;
+    const isFullyUsed = newCurrentUses >= tokenData.max_uses;
+
     await supabase
       .from('device_enrollment_tokens')
       .update({
-        current_uses: tokenData.current_uses + 1,
-        is_used: true,
+        current_uses: newCurrentUses,
+        is_used: isFullyUsed,
         used_at: new Date().toISOString(),
-        used_by_device_id: deviceId,
+        used_by_device_id: isFullyUsed ? deviceId : null,
       })
       .eq('token_id', tokenData.token_id)
 

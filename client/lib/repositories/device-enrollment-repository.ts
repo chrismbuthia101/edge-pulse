@@ -184,19 +184,20 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> 
 
   async validateToken(tokenHash: string): Promise<EnrollmentToken | null> {
     try {
+      // First get the token by hash, then check usage manually
       const { data, error } = await this.supabase
         .from(this.tableName)
         .select('*')
         .eq('token_hash', tokenHash)
         .gt('expires_at', new Date().toISOString())
         .eq('is_used', false)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code === 'PGRST116') return null;
         throw this.handleError(error);
       }
 
+      // Check if max uses has been reached
       if (data && data.current_uses >= data.max_uses) {
         return null;
       }
