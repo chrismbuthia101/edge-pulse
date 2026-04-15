@@ -54,7 +54,7 @@ help:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
-	poetry install --extras "api-full notifications ml-inference"
+	poetry install --extras "api-full notifications ml-inference linux"
 
 install-full:
 	poetry install --extras "api-full notifications ml-full"

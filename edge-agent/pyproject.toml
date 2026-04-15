@@ -47,6 +47,9 @@ pywin32           = {version = "^306", optional = true, markers = "sys_platform 
 keyring           = {version = "^25.0.0", optional = true} 
 watchdog          = {version = "^4.0.0", optional = true}
 
+# Optional: Linux credential storage
+secretstorage     = {version = "^3.2.0", optional = true, markers = "sys_platform == 'linux'"}
+
 [tool.poetry.group.dev.dependencies]
 pytest     = "^7.4.0"
 black      = "^24.0.0"
@@ -64,6 +67,7 @@ ml-full     = ["tensorflow", "tflite-runtime", "shap"]
 api-full    = ["fastapi", "uvicorn"]
 notifications = ["notify-py"]
 windows     = ["pywin32", "keyring", "watchdog"]
+linux       = ["keyring", "secretstorage"]
 
 # Everything (note: TF extras only install on Python < 3.12)
 all = [
@@ -76,6 +80,7 @@ all = [
     "pywin32",
     "keyring",
     "watchdog",
+    "secretstorage",
 ]
 
 [tool.poetry.scripts]

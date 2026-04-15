@@ -69,6 +69,11 @@ class DeviceEnrollmentClient:
             Path("enroll.cfg"),
             Path("enrollment.json"),
         ]
+
+        if self.platform != "win32":
+            paths.append(Path("/etc/edgepulse/enrollment.json"))
+            paths.append(Path("/etc/edgepulse/enroll.cfg"))
+        
         return paths
 
     def read_enrollment_config(self) -> Optional[EnrollmentConfig]:

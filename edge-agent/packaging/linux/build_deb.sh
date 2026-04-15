@@ -231,7 +231,7 @@ fi
 
 # Install the agent wheel with all dependencies
 echo "  Installing EdgePulse Agent and dependencies..."
-"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference]"
+"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
 
 # Bootstrap the ML model if not present
 MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
@@ -366,6 +366,7 @@ fpm \
     --deb-priority "optional" \
     --depends "python3 (>= 3.9), python3 (<< 3.14)" \
     --depends "adduser" \
+    --depends "libsecret-1-0" \
     --after-install "${POSTINST}" \
     --before-remove "${PRERM}" \
     --after-remove "${POSTRM}" \
