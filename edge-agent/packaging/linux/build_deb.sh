@@ -72,7 +72,7 @@ fi
 # ---------------------------------------------------------------------------
 # Clean staging area
 # ---------------------------------------------------------------------------
-echo "[1/7] Cleaning staging directory..."
+echo "[1/8] Cleaning staging directory..."
 rm -rf "${STAGING_DIR}"
 mkdir -p \
     "${STAGING_DIR}${INSTALL_PREFIX}/bin" \
@@ -84,31 +84,24 @@ mkdir -p \
     "${DIST_DIR}"
 
 # ---------------------------------------------------------------------------
-# Install Python packages with pip --target
+# Install system build dependencies for compiled packages
 # ---------------------------------------------------------------------------
-echo "[2/7] Installing Python packages via pip --target..."
-python3 -m pip install --quiet --upgrade pip wheel setuptools cython meson meson-python ninja
+echo "[2/8] Installing system build dependencies..."
+if command -v apt-get &>/dev/null; then
+    apt-get update && apt-get install -y python3-dev build-essential || true
+fi
+
+# ---------------------------------------------------------------------------
+# Install Python packages via pip --target
+# ---------------------------------------------------------------------------
+echo "[3/8] Installing Python packages via pip --target..."
+python3 -m pip install --quiet --upgrade pip wheel setuptools cython meson meson-python ninja poetry-core
 
 python3 -m pip install --quiet \
     --target "${STAGING_DIR}${SITE_PACKAGES}" \
-    --no-compile \
-    psutil \
-    "numpy>=1.24.0" \
-    pandas \
-    "pyarrow>=15.0.0" \
-    "scikit-learn>=1.4.0" \
-    pydantic \
-    pydantic-settings \
-    pyyaml \
-    cryptography \
-    structlog \
-    aiosqlite \
-    httpx \
-    tenacity \
-    joblib \
-    fastapi \
-    uvicorn \
-    notify-py
+    --compile \
+    "${REPO_ROOT}[api-full,notifications]"
+
 
 # Remove pip/wheel/setuptools metadata to keep the package lean
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \
@@ -122,7 +115,7 @@ rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \
 # Sets PYTHONPATH so the system python3 can find the packages installed
 # above, then invokes the edgepulse module.
 # ---------------------------------------------------------------------------
-echo "[3/7] Writing entry-point launcher..."
+echo "[4/8] Writing entry-point launcher..."
 
 cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'
 #!/bin/bash
@@ -138,7 +131,7 @@ cp "${REPO_ROOT}/src/edgepulse/scripts/bootstrap_model.py" "${STAGING_DIR}${INST
 # ---------------------------------------------------------------------------
 # Copy bootstrapped model
 # ---------------------------------------------------------------------------
-echo "[4/7] Copying bootstrapped model..."
+echo "[5/8] Copying bootstrapped model..."
 if [[ -f "${MODEL_PATH}" ]]; then
     cp "${MODEL_PATH}" "${STAGING_DIR}${VAR_DIR}/models/"
     META="${MODEL_PATH%.joblib}.json"
@@ -148,7 +141,7 @@ fi
 # ---------------------------------------------------------------------------
 # systemd unit file
 # ---------------------------------------------------------------------------
-echo "[5/7] Writing systemd unit file..."
+echo "[6/8] Writing systemd unit file..."
 cat > "${STAGING_DIR}${SYSTEMD_DIR}/edgepulse-agent.service" <<UNIT
 [Unit]
 Description=${DESCRIPTION}
@@ -170,7 +163,7 @@ SyslogIdentifier=edgepulse-agent
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/edgepulse /var/log/edgepulse /run/edgepulse /etc/edgepulse
+ReadWritePaths=/var/lib/edgepulse /var/log/edgepulse /run/edgepulse /etc/edgepulse /opt/edgepulse
 PrivateTmp=true
 LimitNOFILE=65535
 TimeoutStopSec=30
@@ -198,7 +191,7 @@ CONF
 # ---------------------------------------------------------------------------
 # Write postinst / prerm / postrm maintainer scripts
 # ---------------------------------------------------------------------------
-echo "[6/7] Writing maintainer scripts..."
+echo "[7/8] Writing maintainer scripts..."
 
 POSTINST="${SCRIPT_DIR}/postinst"
 cat > "${POSTINST}" <<'POSTINST_SCRIPT'
@@ -264,7 +257,16 @@ cat > "${POSTRM}" <<'POSTRM_SCRIPT'
 set -e
 case "$1" in
     purge)
-        rm -rf /var/lib/edgepulse /var/log/edgepulse /run/edgepulse /etc/edgepulse
+        # Remove systemd service file
+        if [ -f /etc/systemd/system/edgepulse-agent.service ]; then
+            systemctl stop edgepulse-agent.service 2>/dev/null || true
+            systemctl disable edgepulse-agent.service 2>/dev/null || true
+            rm -f /etc/systemd/system/edgepulse-agent.service
+            systemctl daemon-reload 2>/dev/null || true
+        fi
+        
+        # Remove application directories
+        rm -rf /var/lib/edgepulse /var/log/edgepulse /run/edgepulse /etc/edgepulse /opt/edgepulse
         ;;
 esac
 POSTRM_SCRIPT
@@ -273,7 +275,7 @@ chmod 755 "${POSTRM}"
 # ---------------------------------------------------------------------------
 # Build with fpm
 # ---------------------------------------------------------------------------
-echo "[7/7] Running fpm..."
+echo "[8/8] Running fpm..."
 
 fpm \
     --input-type dir \
@@ -287,7 +289,7 @@ fpm \
     --license "Proprietary" \
     --category "utils" \
     --deb-priority "optional" \
-    --depends "python3 (>= 3.9)" \
+    --depends "python3 (>= 3.9, << 3.13)" \
     --depends "adduser" \
     --after-install "${POSTINST}" \
     --before-remove "${PRERM}" \
