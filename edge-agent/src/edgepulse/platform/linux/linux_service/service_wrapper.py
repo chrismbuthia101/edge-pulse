@@ -67,18 +67,18 @@ class LinuxServiceWrapper:
 
     def _build_settings(self):
         """Return an AgentSettings instance, optionally patched from the
-        JSON config file written by the installer."""
+        JSON config file written by the installer and credentials from storage."""
         from edgepulse.config.settings import AgentSettings
+        from edgepulse.auth.credentials import CredentialManager
+        import os
 
         config_file = _CONFIG_DIR / "agent_config.json"
-        if not config_file.exists():
-            return AgentSettings()
-
-        try:
-            overrides: dict = json.loads(config_file.read_text())
-        except Exception as exc:
-            logger.error("agent_config_parse_failed", error=str(exc))
-            return AgentSettings()
+        overrides: dict = {}
+        if config_file.exists():
+            try:
+                overrides = json.loads(config_file.read_text())
+            except Exception as exc:
+                logger.error("agent_config_parse_failed", error=str(exc))
 
         # Map flat config-file keys to the nested AgentSettings fields.
         env_patch: dict = {}
@@ -90,10 +90,26 @@ class LinuxServiceWrapper:
             "enable_process_monitoring":      "COLLECTION__ENABLE_PROCESS_MONITORING",
             "enable_network_monitoring":      "COLLECTION__ENABLE_NETWORK_MONITORING",
         }
-        import os
         for cfg_key, env_key in key_map.items():
             if cfg_key in overrides:
                 env_patch[env_key] = str(overrides[cfg_key])
+
+        # Load credentials from storage and set sync environment variables
+        try:
+            credential_manager = CredentialManager()
+            credentials = credential_manager.get_device_credentials()
+            if credentials:
+                if credentials.supabase_url:
+                    env_patch["SYNC__SUPABASE_URL"] = credentials.supabase_url
+                    logger.debug("loaded_supabase_url_from_credentials")
+                if credentials.api_key:
+                    env_patch["SYNC__SUPABASE_KEY"] = credentials.api_key
+                    logger.debug("loaded_api_key_from_credentials")
+                if credentials.device_id:
+                    env_patch["DEVICE_ID"] = credentials.device_id
+                    logger.debug("loaded_device_id_from_credentials")
+        except Exception as exc:
+            logger.warning("credentials_load_failed", error=str(exc))
 
         # Temporarily inject as environment variables so AgentSettings picks
         # them up via pydantic-settings' env_nested_delimiter.
@@ -111,7 +127,8 @@ class LinuxServiceWrapper:
                 else:
                     os.environ[k] = orig_v
 
-        logger.info("agent_config_loaded", path=str(config_file))
+        if config_file.exists():
+            logger.info("agent_config_loaded", path=str(config_file))
         return settings
 
     # ------------------------------------------------------------------

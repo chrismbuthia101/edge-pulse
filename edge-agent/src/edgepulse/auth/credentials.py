@@ -46,6 +46,7 @@ APP_NAME = "EdgePulseAgent"
 DEVICE_ID_KEY = "device_id"
 API_KEY_KEY = "api_key"
 ENROLLMENT_TOKEN_KEY = "enrollment_token"
+SUPABASE_URL_KEY = "supabase_url"
 
 
 @dataclass
@@ -54,6 +55,7 @@ class DeviceCredentials:
     device_id: str
     api_key: str
     enrollment_token: Optional[str] = None
+    supabase_url: Optional[str] = None
 
 
 class CredentialManager:
@@ -242,12 +244,14 @@ class CredentialManager:
             device_id = self.get_credential(DEVICE_ID_KEY)
             api_key = self.get_credential(API_KEY_KEY)
             enrollment_token = self.get_credential(ENROLLMENT_TOKEN_KEY)
+            supabase_url = self.get_credential(SUPABASE_URL_KEY)
             if not device_id or not api_key:
                 return None
             return DeviceCredentials(
                 device_id=device_id,
                 api_key=api_key,
                 enrollment_token=enrollment_token,
+                supabase_url=supabase_url,
             )
         except Exception as e:
             logger.error(f"Failed to get device credentials: {e}")
@@ -264,6 +268,9 @@ class CredentialManager:
             if credentials.enrollment_token:
                 if not self.store_credential(ENROLLMENT_TOKEN_KEY, credentials.enrollment_token):
                     success = False
+            if credentials.supabase_url:
+                if not self.store_credential(SUPABASE_URL_KEY, credentials.supabase_url):
+                    success = False
             return success
         except Exception as e:
             logger.error(f"Failed to store device credentials: {e}")
@@ -273,7 +280,7 @@ class CredentialManager:
         """Clear all stored credentials"""
         try:
             success = True
-            for key in [DEVICE_ID_KEY, API_KEY_KEY, ENROLLMENT_TOKEN_KEY]:
+            for key in [DEVICE_ID_KEY, API_KEY_KEY, ENROLLMENT_TOKEN_KEY, SUPABASE_URL_KEY]:
                 if not self.delete_credential(key):
                     success = False
             return success

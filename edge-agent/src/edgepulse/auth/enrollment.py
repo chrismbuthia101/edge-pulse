@@ -183,13 +183,17 @@ class DeviceEnrollmentClient:
                 return resp
             else:
                 try:
-                    detail = response.json().get("error", "")
+                    response_data = response.json()
+                    detail = response_data.get("error", "")
+                    if not detail:
+                        detail = response_data.get("message", response.text)
                 except Exception:
-                    detail = response.text
+                    detail = response.text or f"HTTP {response.status_code}"
                 logger.error(
                     "enrollment_http_error",
                     status=response.status_code,
                     detail=detail,
+                    url=enrollment_url,
                 )
                 return None
 
@@ -200,13 +204,14 @@ class DeviceEnrollmentClient:
             logger.error("enrollment_unexpected_error", error=str(e))
             return None
 
-    def complete_enrollment(self, response: EnrollmentResponse) -> bool:
+    def complete_enrollment(self, response: EnrollmentResponse, supabase_url: Optional[str] = None) -> bool:
         """Persist credentials via CredentialManager (single write path) and clean up."""
         try:
             credentials = DeviceCredentials(
                 device_id=response.device_id,
                 api_key=response.api_key,
                 enrollment_token=response.enrollment_token,
+                supabase_url=supabase_url,
             )
 
             if not self.credential_manager.store_device_credentials(credentials):

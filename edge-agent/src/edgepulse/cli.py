@@ -295,7 +295,7 @@ def main():
         async def do_enrollment():
             result = await enrollment_client.enroll_device(config)
             if result:
-                if enrollment_client.complete_enrollment(result):
+                if enrollment_client.complete_enrollment(result, supabase_url=config.supabase_url):
                     print(f"Device enrolled successfully!")
                     print(f"  Device ID: {result.device_id}")
                     print(f"  API Key: {result.api_key[:10]}...")
@@ -317,6 +317,24 @@ def main():
                 if hasattr(args, "config") and args.config
                 else None
             )
+
+            # Load credentials from storage and set environment variables
+            # so AgentSettings can pick them up for sync configuration
+            try:
+                from edgepulse.auth.credentials import CredentialManager
+                credential_manager = CredentialManager()
+                credentials = credential_manager.get_device_credentials()
+                if credentials:
+                    import os
+                    if credentials.supabase_url and not os.environ.get("SYNC__SUPABASE_URL"):
+                        os.environ["SYNC__SUPABASE_URL"] = credentials.supabase_url
+                    if credentials.api_key and not os.environ.get("SYNC__SUPABASE_KEY"):
+                        os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
+                    if credentials.device_id and not os.environ.get("DEVICE_ID"):
+                        os.environ["DEVICE_ID"] = credentials.device_id
+            except Exception:
+                pass  # Credentials may not be available yet
+
             settings = AgentSettings(config_path=config_path)
             agent = EdgePulseAgent(settings=settings)
 

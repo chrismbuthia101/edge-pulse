@@ -54,7 +54,9 @@ class EnrollmentManager:
             result = await self.enrollment_client.enroll_device(enrollment_config)
             
             if result:
-                success = self.enrollment_client.complete_enrollment(result)
+                success = self.enrollment_client.complete_enrollment(
+                    result, supabase_url=enrollment_config.supabase_url
+                )
                 if success:
                     self._is_enrolled = True
                     logger.info("Automatic enrollment successful")
