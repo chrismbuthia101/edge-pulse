@@ -154,7 +154,7 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run
+ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=/var/lib/edgepulse
 Restart=on-failure
 RestartSec=10
@@ -178,14 +178,87 @@ UNIT
 # ---------------------------------------------------------------------------
 cat > "${STAGING_DIR}${CONFIG_DIR}/agent_config.json" <<'CONF'
 {
-  "collection_interval": 60,
-  "detection_threshold": 0.5,
-  "sync_enabled": false,
-  "offline_queue_size": 10000,
-  "logging_level": "INFO",
-  "enable_process_monitoring": true,
-  "enable_network_monitoring": true,
-  "model_type": "isolation_forest"
+  "device_id": null,
+  "environment": "production",
+  "api": {
+    "enabled": true,
+    "mode": "auto",
+    "port": 8080,
+    "require_auth": false,
+    "socket_path": null,
+    "min_memory_mb": 512,
+    "min_cpu_cores": 2
+  },
+  "sync": {
+    "supabase_url": "https://YOUR_PROJECT.supabase.co",
+    "supabase_key": "YOUR_SUPABASE_ANON_KEY",
+    "batch_size": 50,
+    "retry_max_attempts": 5,
+    "offline_queue_max": 10000,
+    "sync_interval": 300
+  },
+  "collection": {
+    "interval": 60,
+    "window_1min": 60,
+    "window_5min": 300,
+    "window_15min": 900,
+    "enable_process_monitoring": true,
+    "enable_network_monitoring": true,
+    "max_processes": 100
+  },
+  "features": {
+    "feature_dimension": 50,
+    "history_retention_hours": 24,
+    "enable_auto_scaling": true,
+    "normalize_features": true,
+    "feature_selection": false
+  },
+  "detection": {
+    "threshold": 0.5,
+    "use_autoencoder": false,
+    "use_ensemble": true,
+    "isolation_forest_n_estimators": 100,
+    "isolation_forest_contamination": "auto",
+    "autoencoder_encoding_dim": 8,
+    "autoencoder_hidden_layers": [64, 32, 16],
+    "autoencoder_learning_rate": 0.001,
+    "autoencoder_input_dim": null,
+    "autoencoder_use_tflite": false
+  },
+  "privacy": {
+    "data_retention_days": 30,
+    "anonymization_level": "basic",
+    "collect_command_lines": false,
+    "encrypt_storage": false,
+    "hash_sensitive_data": true
+  },
+  "alerting": {
+    "enabled": true,
+    "correlation_window": 300,
+    "rate_limit": 5,
+    "rate_window": 3600,
+    "min_severity": "medium",
+    "enable_local_notifications": true
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json",
+    "file_path": null,
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "enable_console": true
+  },
+  "metrics": {
+    "enabled": true,
+    "prometheus_enabled": false,
+    "prometheus_port": 9090,
+    "collection_interval": 30,
+    "retention_hours": 168
+  },
+  "enable_ml_features": true,
+  "max_memory_usage_mb": 1024,
+  "graceful_shutdown_timeout": 30,
+  "health_check_interval": 60
 }
 CONF
 

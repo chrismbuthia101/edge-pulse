@@ -266,13 +266,28 @@ class AgentSettings(BaseSettings):
         except Exception as exc:
             raise ValueError(f"Cannot parse config file {path}: {exc}") from exc
 
-        # Apply top-level scalar overrides
+        # Apply top-level and nested overrides
         for key, value in overrides.items():
-            if hasattr(self, key):
-                try:
+            if not hasattr(self, key):
+                continue
+
+            current_value = getattr(self, key, None)
+
+            try:
+                if (
+                    isinstance(value, dict)
+                    and isinstance(current_value, BaseModel)
+                ):
+                    # Get current values as dict and merge with overrides
+                    current_dict = current_value.model_dump()
+                    current_dict.update(value)
+                    # Create new model instance
+                    new_value = current_value.__class__(**current_dict)
+                    object.__setattr__(self, key, new_value)
+                else:
                     object.__setattr__(self, key, value)
-                except Exception:
-                    pass  # Let pydantic validation handle bad values
+            except Exception:
+                pass 
 
         return self
 
