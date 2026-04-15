@@ -1,6 +1,6 @@
 # EdgePulse Agent
 
-Edge security monitoring agent: collects system telemetry, extracts behavioral features, and detects anomalies using Isolation Forest (and optionally an Autoencoder). Alerts are generated locally and optionally synced to a Supabase backend.
+Edge security monitoring agent: collects system telemetry, extracts behavioral features, and detects anomalies using Isolation Forest (and optionally an Autoencoder). Alerts are generated locally and synced to a Supabase backend.
 
 > **Note**: This project includes a `Makefile` for convenient commands. If you have `make` installed, use `make help` to see all available targets. Make commands are shown first in each section below.
 
@@ -49,7 +49,7 @@ make env                                # copies .env.example → .env
 
 # Or manually
 cp .env.example .env
-# Edit .env — minimum required: nothing (all defaults work out of the box)
+# Edit .env — REQUIRED: Set SYNC__SUPABASE_URL and SYNC__SUPABASE_KEY
 ```
 
 ### Bootstrap the ML model (first run only)
@@ -115,7 +115,99 @@ edge-agent/
 
 ---
 
-## Service Installation
+## Package Installation (Debian/Ubuntu)
+
+Download the `.deb` package and install it:
+
+```bash
+sudo dpkg -i edgepulse-agent_0.1.0_amd64.deb
+```
+
+The package installer will:
+1. Create an isolated Python virtual environment at `/opt/edgepulse/venv`
+2. Install the EdgePulse Agent and all dependencies
+3. Set up the systemd service (`edgepulse-agent.service`)
+
+### Post-Installation
+
+```bash
+# Start the service
+sudo systemctl start edgepulse-agent
+
+# Check status
+sudo systemctl status edgepulse-agent
+```
+
+### Check the API
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Agent status
+curl http://localhost:8080/status
+
+# Prometheus metrics
+curl http://localhost:8080/metrics
+```
+
+### Configuration
+
+**Cloud sync is required.** You must provide Supabase credentials:
+
+Configuration files are located at:
+- `/etc/edgepulse/agent_config.json` - Main configuration (JSON)
+- `/opt/edgepulse/.env` - Environment variables
+
+```bash
+# Edit configuration (REQUIRED: Set Supabase credentials)
+sudo nano /etc/edgepulse/agent_config.json
+
+# Or use environment variables
+sudo nano /opt/edgepulse/.env
+```
+
+Required settings:
+```json
+{
+  "sync": {
+    "supabase_url": "https://your-project.supabase.co",
+    "supabase_key": "your-api-key"
+  }
+}
+```
+
+Or in `.env`:
+```
+SYNC__SUPABASE_URL=https://your-project.supabase.co
+SYNC__SUPABASE_KEY=your-api-key
+```
+
+### View logs
+
+```bash
+sudo journalctl -u edgepulse-agent -f
+```
+
+### Upgrading
+
+```bash
+sudo dpkg -i edgepulse-agent_new_version_amd64.deb
+sudo systemctl restart edgepulse-agent
+```
+
+### Uninstalling
+
+```bash
+sudo systemctl stop edgepulse-agent
+sudo dpkg -r edgepulse-agent
+# Remove data (optional)
+sudo rm -rf /etc/edgepulse /opt/edgepulse /var/lib/edgepulse
+```
+
+---
+
+## Service Installation (Development)
 
 ### Linux (systemd)
 

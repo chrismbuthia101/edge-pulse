@@ -431,7 +431,8 @@ class ConfigManager:
             required_items = [
                 "collection.interval",
                 "detection.threshold",
-                "sync.enabled",
+                "sync.supabase_url",
+                "sync.supabase_key",
             ]
 
             for item in required_items:
@@ -526,7 +527,6 @@ class ConfigManager:
             default_config = {
                 "collection.interval": 60,
                 "detection.threshold": 0.5,
-                "sync.enabled": True,
                 "sync.offline_queue_size": 10000,
                 "logging.level": "INFO",
                 "telemetry.enable_process_monitoring": True,

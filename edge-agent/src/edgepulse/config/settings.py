@@ -32,9 +32,8 @@ class APIConfig(BaseModel):
 
 class SyncConfig(BaseModel):
     """Synchronization configuration (env prefix: SYNC__)"""
-    enabled: bool = Field(default=False, description="Enable cloud sync")
-    supabase_url: Optional[str] = Field(default=None, description="Supabase URL")
-    supabase_key: Optional[SecretStr] = Field(default=None, description="Supabase API key")
+    supabase_url: str = Field(description="Supabase URL (required)")
+    supabase_key: SecretStr = Field(description="Supabase API key (required)")
     batch_size: int = Field(default=50, ge=1, le=1000, description="Sync batch size")
     retry_max_attempts: int = Field(default=5, ge=1, le=20, description="Max retry attempts")
     offline_queue_max: int = Field(default=10000, ge=100, description="Max offline queue size")
@@ -162,7 +161,7 @@ class AgentSettings(BaseSettings):
 
     Environment variable mapping (pydantic-settings v2 with nested delimiter):
         API__PORT=9090          → settings.api.port
-        SYNC__ENABLED=true      → settings.sync.enabled
+        SYNC__SUPABASE_URL=...  → settings.sync.supabase_url
         DETECTION__THRESHOLD=0.7 → settings.detection.threshold
         LOG__LEVEL=DEBUG        → settings.logging.level
         etc.
@@ -173,7 +172,7 @@ class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",   # SYNC__ENABLED maps to sync.enabled
+        env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
     )
@@ -298,9 +297,7 @@ class AgentSettings(BaseSettings):
         return self.api.enabled
 
     def should_enable_sync(self) -> bool:
-        return self.sync.enabled and bool(
-            self.sync.supabase_url and self.sync.supabase_key
-        )
+        return bool(self.sync.supabase_url and self.sync.supabase_key)
 
     def should_enable_ml(self) -> bool:
         return self.enable_ml_features

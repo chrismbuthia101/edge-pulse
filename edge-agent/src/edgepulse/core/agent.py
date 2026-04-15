@@ -450,7 +450,6 @@ class EdgePulseAgent:
             self._sync_client = SupabaseSync(
                 supabase_url=self.settings.sync.supabase_url,
                 supabase_key=supabase_key,
-                enabled=self.settings.sync.enabled,
                 timeout=10.0,
                 max_retries=3,
             )

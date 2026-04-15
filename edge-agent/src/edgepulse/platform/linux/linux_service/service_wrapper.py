@@ -85,7 +85,6 @@ class LinuxServiceWrapper:
         key_map = {
             "collection_interval":            "COLLECTION__INTERVAL",
             "detection_threshold":            "DETECTION__THRESHOLD",
-            "sync_enabled":                   "SYNC__ENABLED",
             "offline_queue_size":             "SYNC__OFFLINE_QUEUE_MAX",
             "logging_level":                  "LOG__LEVEL",
             "enable_process_monitoring":      "COLLECTION__ENABLE_PROCESS_MONITORING",
@@ -195,7 +194,6 @@ class LinuxServiceWrapper:
         default: dict = {
             "collection_interval": 60,
             "detection_threshold": 0.5,
-            "sync_enabled": False,
             "offline_queue_size": 10000,
             "logging_level": "INFO",
             "enable_process_monitoring": True,

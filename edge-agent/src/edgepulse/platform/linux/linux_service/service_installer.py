@@ -311,9 +311,12 @@ class EdgePulseLinuxInstaller:
             return
 
         default: dict = {
+            "sync": {
+                "supabase_url": "https://your-project.supabase.co",
+                "supabase_key": "your-api-key"
+            },
             "collection_interval": 60,
             "detection_threshold": 0.5,
-            "sync_enabled": False,
             "offline_queue_size": 10000,
             "logging_level": "INFO",
             "enable_process_monitoring": True,

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  build_deb.sh  —  Build an EdgePulse Agent .deb package using fpm
+#  build_deb.sh  —  Build a thin EdgePulse Agent .deb using fpm
 #
 #  Run from the edge-agent/ directory:
 #      bash packaging/linux/build_deb.sh
 #
 #  Prerequisites:
 #      gem install fpm
-#      python bootstrap_model.py   (run once before packaging)
+#      python3 -m pip install --upgrade build twine
 # =============================================================================
 
 set -euo pipefail
@@ -33,10 +33,11 @@ URL="https://edgepulse.io"
 
 STAGING_DIR="/tmp/edgepulse-deb-staging"
 DIST_DIR="${REPO_ROOT}/packaging/dist"
+WHEEL_DIR="${REPO_ROOT}/dist"
 OUTPUT="${DIST_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 
 INSTALL_PREFIX="/opt/edgepulse"
-SITE_PACKAGES="${INSTALL_PREFIX}/lib/site-packages"
+VENV_DIR="${INSTALL_PREFIX}/venv"
 SYSTEMD_DIR="/etc/systemd/system"
 CONFIG_DIR="/etc/edgepulse"
 VAR_DIR="/var/lib/edgepulse"
@@ -61,77 +62,56 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Build Python wheel (thin packaging - no deps bundled)
+# ---------------------------------------------------------------------------
+echo "[1/7] Building Python wheel..."
+cd "${REPO_ROOT}"
+
+rm -rf "${WHEEL_DIR}"/*.whl 2>/dev/null || true
+python3 -m pip install --quiet build
+python3 -m build --wheel --no-isolation -o "${WHEEL_DIR}" .
+
+WHEEL_FILE=$(ls "${WHEEL_DIR}"/edge_agent-*.whl 2>/dev/null | head -1)
+if [[ -z "${WHEEL_FILE}" ]]; then
+    echo "ERROR: Wheel build failed. Check output above."
+    exit 1
+fi
+echo "  Wheel: $(basename "${WHEEL_FILE}")"
+
+# ---------------------------------------------------------------------------
+# Bootstrap model if not present
+# ---------------------------------------------------------------------------
 MODEL_PATH="${REPO_ROOT}/src/models/edgepulse_primary_isolation_forest.joblib"
 if [[ ! -f "${MODEL_PATH}" ]]; then
-    echo "WARNING: No bootstrapped model found at ${MODEL_PATH}"
-    echo "         Running bootstrap_model.py now..."
+    echo "[2/7] Bootstrapping ML model..."
     cd "${REPO_ROOT}"
+    python3 -m pip install --quiet joblib numpy scikit-learn
     python3 src/edgepulse/scripts/bootstrap_model.py --output-dir src/models/
 fi
 
 # ---------------------------------------------------------------------------
-# Clean staging area
+# Clean and create staging directory
 # ---------------------------------------------------------------------------
-echo "[1/8] Cleaning staging directory..."
+echo "[3/7] Creating staging directory..."
 rm -rf "${STAGING_DIR}"
 mkdir -p \
     "${STAGING_DIR}${INSTALL_PREFIX}/bin" \
-    "${STAGING_DIR}${INSTALL_PREFIX}/lib" \
-    "${STAGING_DIR}${INSTALL_PREFIX}/share/edgepulse" \
     "${STAGING_DIR}${SYSTEMD_DIR}" \
     "${STAGING_DIR}${CONFIG_DIR}" \
     "${STAGING_DIR}${VAR_DIR}/models" \
     "${DIST_DIR}"
 
 # ---------------------------------------------------------------------------
-# Install system build dependencies for compiled packages
+# Copy app files (no site-packages!)
 # ---------------------------------------------------------------------------
-echo "[2/8] Installing system build dependencies..."
-if command -v apt-get &>/dev/null; then
-    apt-get update && apt-get install -y python3-dev build-essential || true
-fi
+echo "[4/7] Copying application files (thin packaging)..."
 
-# ---------------------------------------------------------------------------
-# Install Python packages via pip --target
-# ---------------------------------------------------------------------------
-echo "[3/8] Installing Python packages via pip --target..."
-python3 -m pip install --quiet --upgrade pip wheel setuptools cython meson meson-python ninja poetry-core
+cp "${WHEEL_FILE}" "${STAGING_DIR}${INSTALL_PREFIX}/edge_agent-${VERSION}-py3-none-any.whl"
 
-python3 -m pip install --quiet \
-    --target "${STAGING_DIR}${SITE_PACKAGES}" \
-    --compile \
-    "${REPO_ROOT}[api-full,notifications]"
+cp "${REPO_ROOT}/src/edgepulse/scripts/bootstrap_model.py" "${STAGING_DIR}${INSTALL_PREFIX}/"
 
-
-# Remove pip/wheel/setuptools metadata to keep the package lean
-rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/pip \
-       "${STAGING_DIR}${SITE_PACKAGES}"/wheel \
-       "${STAGING_DIR}${SITE_PACKAGES}"/setuptools \
-       "${STAGING_DIR}${SITE_PACKAGES}"/*.dist-info/RECORD || true
-
-# ---------------------------------------------------------------------------
-# Entry-point launcher
-#
-# Sets PYTHONPATH so the system python3 can find the packages installed
-# above, then invokes the edgepulse module.
-# ---------------------------------------------------------------------------
-echo "[4/8] Writing entry-point launcher..."
-
-cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'
-#!/bin/bash
-# EdgePulse Agent launcher
-# Sets PYTHONPATH so the system python3 can find our bundled packages.
-export PYTHONPATH=/opt/edgepulse/lib/site-packages${PYTHONPATH:+:${PYTHONPATH}}
-exec python3 -m edgepulse "$@"
-WRAPPER
-chmod 755 "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent"
-
-cp "${REPO_ROOT}/src/edgepulse/scripts/bootstrap_model.py" "${STAGING_DIR}${INSTALL_PREFIX}/share/edgepulse/"
-
-# ---------------------------------------------------------------------------
 # Copy bootstrapped model
-# ---------------------------------------------------------------------------
-echo "[5/8] Copying bootstrapped model..."
 if [[ -f "${MODEL_PATH}" ]]; then
     cp "${MODEL_PATH}" "${STAGING_DIR}${VAR_DIR}/models/"
     META="${MODEL_PATH%.joblib}.json"
@@ -139,9 +119,30 @@ if [[ -f "${MODEL_PATH}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# systemd unit file
+# Entry-point launcher (uses venv)
 # ---------------------------------------------------------------------------
-echo "[6/8] Writing systemd unit file..."
+echo "[5/7] Writing entry-point launcher..."
+cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'
+#!/bin/bash
+# EdgePulse Agent launcher
+# Uses the venv Python installed at /opt/edgepulse/venv
+
+VENV_PYTHON="/opt/edgepulse/venv/bin/python3"
+
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+    echo "ERROR: EdgePulse venv not found at ${VENV_PYTHON}" >&2
+    echo "Please reinstall the package or run: /opt/edgepulse/bin/install-deps" >&2
+    exit 1
+fi
+
+exec "${VENV_PYTHON}" -m edgepulse "$@"
+WRAPPER
+chmod 755 "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent"
+
+# ---------------------------------------------------------------------------
+# systemd unit file (uses venv Python)
+# ---------------------------------------------------------------------------
+echo "[6/7] Writing systemd unit file..."
 cat > "${STAGING_DIR}${SYSTEMD_DIR}/edgepulse-agent.service" <<UNIT
 [Unit]
 Description=${DESCRIPTION}
@@ -153,7 +154,7 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-ExecStart=/opt/edgepulse/bin/edge-agent run
+ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run
 WorkingDirectory=/var/lib/edgepulse
 Restart=on-failure
 RestartSec=10
@@ -189,56 +190,92 @@ cat > "${STAGING_DIR}${CONFIG_DIR}/agent_config.json" <<'CONF'
 CONF
 
 # ---------------------------------------------------------------------------
-# Write postinst / prerm / postrm maintainer scripts
+# Write maintainer scripts
 # ---------------------------------------------------------------------------
-echo "[7/8] Writing maintainer scripts..."
+echo "[7/7] Writing maintainer scripts..."
 
+# ---- postinst: creates venv and installs deps on TARGET ----
 POSTINST="${SCRIPT_DIR}/postinst"
 cat > "${POSTINST}" <<'POSTINST_SCRIPT'
 #!/bin/bash
+# postinst — Fix 4: Create venv and install dependencies on TARGET
 set -e
 
-# Create service directories with restricted permissions
+VENV_DIR="/opt/edgepulse/venv"
+WHEEL_PATH="/opt/edgepulse/edge_agent-VERSION_PLACEHOLDER-py3-none-any.whl"
+AGENT_BIN="/opt/edgepulse/bin/edge-agent"
+
+# Create service directories
 for dir in /var/lib/edgepulse /var/lib/edgepulse/models /var/lib/edgepulse/data \
            /var/log/edgepulse /run/edgepulse /etc/edgepulse; do
     mkdir -p "$dir"
     chmod 750 "$dir"
 done
 
-# Bootstrap the ML model if not already present (e.g. fresh install without
-# a bundled model, or if the bundled copy was skipped at package-build time).
-MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
-if [[ ! -f "$MODEL" ]]; then
-    echo "EdgePulse: Bootstrapping anomaly detection model (this takes ~10 seconds)..."
-    PYTHONPATH=/opt/edgepulse/lib/site-packages \
-    python3 /opt/edgepulse/share/edgepulse/bootstrap_model.py \
-        --output-dir /var/lib/edgepulse/models/ \
-        --n-samples 2000 \
-        2>&1 | sed 's/^/  /'
-    echo "EdgePulse: Model ready."
+WHEEL_FILE=$(ls /opt/edgepulse/*.whl 2>/dev/null | head -1)
+if [[ -z "${WHEEL_FILE}" ]]; then
+    echo "ERROR: Could not find wheel file" >&2
+    exit 1
 fi
 
-# Reload systemd and enable (but don't auto-start) the service
+echo "EdgePulse: Setting up Python environment..."
+
+# Create venv if not exists
+if [[ ! -d "${VENV_DIR}" ]]; then
+    echo "  Creating isolated Python environment..."
+    python3 -m venv "${VENV_DIR}"
+fi
+
+# Upgrade pip in venv
+"${VENV_DIR}/bin/pip" install --quiet --upgrade pip setuptools wheel
+
+# Install the agent wheel with all dependencies
+echo "  Installing EdgePulse Agent and dependencies..."
+"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications]"
+
+# Bootstrap the ML model if not present
+MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
+if [[ ! -f "$MODEL" ]]; then
+    echo "  Bootstrapping anomaly detection model (this takes ~10 seconds)..."
+    "${VENV_DIR}/bin/python" /opt/edgepulse/bootstrap_model.py \
+        --output-dir /var/lib/edgepulse/models/ \
+        --n-samples 2000 \
+        2>&1 | sed 's/^/    /'
+fi
+
+# Ensure bin directory exists and is linked
+mkdir -p "${VENV_DIR}/bin"
+ln -sf "${VENV_DIR}/bin/python" "${AGENT_BIN}" 2>/dev/null || true
+
+# Reload systemd and enable service
 if command -v systemctl &>/dev/null && systemctl --version &>/dev/null 2>&1; then
     systemctl daemon-reload
     systemctl enable edgepulse-agent.service
-    echo ""
-    echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│  EdgePulse Agent installed successfully!                │"
-    echo "│                                                         │"
-    echo "│  Start the service:                                     │"
-    echo "│    sudo systemctl start edgepulse-agent                 │"
-    echo "│                                                         │"
-    echo "│  Check status:                                          │"
-    echo "│    sudo systemctl status edgepulse-agent                │"
-    echo "│                                                         │"
-    echo "│  Edit config:                                           │"
-    echo "│    sudo nano /etc/edgepulse/agent_config.json           │"
-    echo "└─────────────────────────────────────────────────────────┘"
 fi
+
+echo ""
+echo "┌─────────────────────────────────────────────────────────┐"
+echo "│  EdgePulse Agent installed successfully!                 │"
+echo "│                                                         │"
+echo "│  Python environment: /opt/edgepulse/venv               │"
+echo "│                                                         │"
+echo "│  Start the service:                                     │"
+echo "│    sudo systemctl start edgepulse-agent                │"
+echo "│                                                         │"
+echo "│  Check status:                                          │"
+echo "│    sudo systemctl status edgepulse-agent               │"
+echo "│                                                         │"
+echo "│  Edit config:                                           │"
+echo "│    sudo nano /etc/edgepulse/agent_config.json           │"
+echo "└─────────────────────────────────────────────────────────┘"
 POSTINST_SCRIPT
+
+# Fix the VERSION placeholder in postinst
+VERSION_ESCAPED=$(echo "${VERSION}" | sed 's/\./\\./g')
+sed -i "s/VERSION_PLACEHOLDER/${VERSION_ESCAPED}/g" "${POSTINST}"
 chmod 755 "${POSTINST}"
 
+# ---- prerm: stop service ----
 PRERM="${SCRIPT_DIR}/prerm"
 cat > "${PRERM}" <<'PRERM_SCRIPT'
 #!/bin/bash
@@ -251,21 +288,19 @@ fi
 PRERM_SCRIPT
 chmod 755 "${PRERM}"
 
+# ---- postrm: cleanup ----
 POSTRM="${SCRIPT_DIR}/postrm"
 cat > "${POSTRM}" <<'POSTRM_SCRIPT'
 #!/bin/bash
 set -e
 case "$1" in
     purge)
-        # Remove systemd service file
-        if [ -f /etc/systemd/system/edgepulse-agent.service ]; then
+        if command -v systemctl &>/dev/null; then
             systemctl stop edgepulse-agent.service 2>/dev/null || true
             systemctl disable edgepulse-agent.service 2>/dev/null || true
             rm -f /etc/systemd/system/edgepulse-agent.service
             systemctl daemon-reload 2>/dev/null || true
         fi
-        
-        # Remove application directories
         rm -rf /var/lib/edgepulse /var/log/edgepulse /run/edgepulse /etc/edgepulse /opt/edgepulse
         ;;
 esac
@@ -273,9 +308,10 @@ POSTRM_SCRIPT
 chmod 755 "${POSTRM}"
 
 # ---------------------------------------------------------------------------
-# Build with fpm
+# Build with fpm (thin package - no bundled deps!)
 # ---------------------------------------------------------------------------
-echo "[8/8] Running fpm..."
+echo ""
+echo "Building .deb with fpm..."
 
 fpm \
     --input-type dir \
@@ -289,7 +325,7 @@ fpm \
     --license "Proprietary" \
     --category "utils" \
     --deb-priority "optional" \
-    --depends "python3 (>= 3.9, << 3.13)" \
+    --depends "python3 (>= 3.9), python3 (<< 3.14)" \
     --depends "adduser" \
     --after-install "${POSTINST}" \
     --before-remove "${PRERM}" \
@@ -299,7 +335,7 @@ fpm \
     --prefix "/" \
     .
 
-# Clean up maintainer scripts from the source tree
+# Clean up maintainer scripts from source tree
 rm -f "${POSTINST}" "${PRERM}" "${POSTRM}"
 
 echo ""
@@ -308,7 +344,16 @@ echo "  SUCCESS: ${OUTPUT}"
 echo "  Size   : $(du -sh "${OUTPUT}" | cut -f1)"
 echo "============================================================"
 echo ""
+echo "  Package type: THIN (venv created on install)"
+echo "  Python deps:  Installed at install-time (not bundled)"
+echo ""
 echo "  Install with:"
 echo "    sudo dpkg -i ${OUTPUT}"
 echo "    sudo apt-get install -f"
+echo ""
+echo "  What happens on install:"
+echo "    1. Creates venv at /opt/edgepulse/venv"
+echo "    2. Installs Python deps via pip (correct ABI)"
+echo "    3. Bootstraps ML model"
+echo "    4. Enables systemd service"
 echo ""
