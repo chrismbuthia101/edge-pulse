@@ -22,17 +22,11 @@ interface AuthStore {
   isAdmin: boolean;
   isAnalyst: boolean;
 
-  resetInactivityTimer: () => void;
   clearSessionData: () => void;
 
   clearError: () => void;
   setError: (error: string) => void;
 }
-
-const INACTIVITY_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
-const WARNING_TIMEOUT = 5 * 60 * 1000; // 5 minutes before logout
-const LAST_ACTIVITY_KEY = 'edgepulse_last_activity';
-const SESSION_START_KEY = 'edgepulse_session_start';
 
 const authRepository = new AuthRepository();
 const authService = new AuthService(authRepository);
@@ -85,22 +79,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ session, user: sessionResult.user });
 
       if (sessionResult.user) {
-        const lastActivity = localStorage.getItem(LAST_ACTIVITY_KEY);
-        const now = Date.now();
-
-        if (lastActivity) {
-          const elapsed = now - parseInt(lastActivity, 10);
-
-          if (elapsed >= INACTIVITY_TIMEOUT) {
-            console.log("Session expired due to inactivity");
-            await get().signOut();
-            return;
-          }
-        } else {
-          localStorage.setItem(SESSION_START_KEY, now.toString());
-          localStorage.setItem(LAST_ACTIVITY_KEY, now.toString());
-        }
-
         const userProfile = await authRepository.getUserWithProfile(sessionResult.user.id);
         if (userProfile.user) {
           set({
@@ -206,9 +184,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   clearSessionData: () => {
     try {
-      localStorage.removeItem(LAST_ACTIVITY_KEY);
-      localStorage.removeItem(SESSION_START_KEY);
-
       document.cookie.split(";").forEach((c) => {
         const cookie = c.trim();
         if (cookie.length > 0) {
@@ -225,30 +200,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  resetInactivityTimer: () => {
-    const { user } = get();
-
-    if (user) {
-      const now = Date.now();
-
-      localStorage.setItem(LAST_ACTIVITY_KEY, now.toString());
-
-      setTimeout(() => {
-        toast.warning("You will be logged out due to inactivity in 5 minutes", {
-          duration: 10000,
-          action: {
-            label: "Stay Logged In",
-            onClick: () => get().resetInactivityTimer(),
-          },
-        });
-      }, INACTIVITY_TIMEOUT - WARNING_TIMEOUT);
-
-      setTimeout(() => {
-        toast.error("You have been logged out due to inactivity");
-        get().signOut();
-      }, INACTIVITY_TIMEOUT);
-    }
-  },
+  resetInactivityTimer: () => {},
 
   clearError: () => set({ error: null }),
 

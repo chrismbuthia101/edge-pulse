@@ -76,10 +76,10 @@ env:
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 dev:
-	poetry run edge-agent run --verbose
+	EDGE_PULSE_DATA_DIR=$(CURDIR)/src/data poetry run edge-agent run --verbose
 
 run:
-	poetry run edge-agent run
+	EDGE_PULSE_DATA_DIR=$(CURDIR)/src/data poetry run edge-agent run
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 test:

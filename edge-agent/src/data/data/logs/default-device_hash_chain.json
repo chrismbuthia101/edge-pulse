@@ -1,0 +1,30 @@
+{
+  "device_id": "default-device",
+  "genesis_hash": "69304ad91f1177d0b48e3622b720a18dafb107cbf3448eef4b18e5e9449cb8c7",
+  "chain_length": 2,
+  "last_updated": "2026-04-16T15:51:29.387803",
+  "chain": [
+    {
+      "sequence_number": 0,
+      "timestamp": "2026-04-16T15:28:01.546132",
+      "event_type": "agent_started",
+      "event_data": {
+        "device_id": "default-device"
+      },
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "device_id": "default-device",
+      "current_hash": "69304ad91f1177d0b48e3622b720a18dafb107cbf3448eef4b18e5e9449cb8c7"
+    },
+    {
+      "sequence_number": 1,
+      "timestamp": "2026-04-16T15:51:29.387645",
+      "event_type": "agent_started",
+      "event_data": {
+        "device_id": "default-device"
+      },
+      "previous_hash": "69304ad91f1177d0b48e3622b720a18dafb107cbf3448eef4b18e5e9449cb8c7",
+      "device_id": "default-device",
+      "current_hash": "b5e070b293862b8f971fcc62bd16fe1654d5a0bc0d52b58e36cbcf17dc731ac7"
+    }
+  ]
+}

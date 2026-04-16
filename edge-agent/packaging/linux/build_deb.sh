@@ -80,14 +80,20 @@ fi
 echo "  Wheel: $(basename "${WHEEL_FILE}")"
 
 # ---------------------------------------------------------------------------
-# Bootstrap model if not present
+# Bootstrap model if missing
 # ---------------------------------------------------------------------------
 MODEL_PATH="${REPO_ROOT}/src/models/edgepulse_primary_isolation_forest.joblib"
 if [[ ! -f "${MODEL_PATH}" ]]; then
     echo "[2/7] Bootstrapping ML model..."
     cd "${REPO_ROOT}"
     python3 -m pip install --quiet joblib numpy scikit-learn
-    python3 src/edgepulse/scripts/bootstrap_model.py --output-dir src/models/
+    python3 src/edgepulse/scripts/bootstrap_model.py --output-dir src/models/ --n-samples 2000
+fi
+
+if [[ -f "${MODEL_PATH}" ]]; then
+    echo "  Bundled model: $(basename ${MODEL_PATH})"
+else
+    echo "WARNING: Model file still not found after bootstrap attempt — package will bootstrap on install"
 fi
 
 # ---------------------------------------------------------------------------
@@ -111,12 +117,17 @@ cp "${WHEEL_FILE}" "${STAGING_DIR}${INSTALL_PREFIX}/edge_agent-${VERSION}-py3-no
 
 cp "${REPO_ROOT}/src/edgepulse/scripts/bootstrap_model.py" "${STAGING_DIR}${INSTALL_PREFIX}/"
 
-# Copy bootstrapped model
+# Copy all model files from src/models/ to staging
 if [[ -f "${MODEL_PATH}" ]]; then
     cp "${MODEL_PATH}" "${STAGING_DIR}${VAR_DIR}/models/"
     META="${MODEL_PATH%.joblib}.json"
     [[ -f "${META}" ]] && cp "${META}" "${STAGING_DIR}${VAR_DIR}/models/"
 fi
+for model_file in "${REPO_ROOT}"/src/models/*; do
+    if [[ -f "${model_file}" ]]; then
+        cp "${model_file}" "${STAGING_DIR}${VAR_DIR}/models/"
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # Entry-point launcher (uses venv)
@@ -154,6 +165,7 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+Environment="EDGE_PULSE_DATA_DIR=/var/lib/edgepulse"
 ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=/var/lib/edgepulse
 RuntimeDirectory=edgepulse
@@ -227,11 +239,18 @@ echo "  Installing EdgePulse Agent and dependencies..."
 # ── 5. Bootstrap ML model ────────────────────────────────────────────────────
 MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
 if [[ ! -f "${MODEL}" ]]; then
-    echo "  Bootstrapping anomaly detection model (this takes ~10-30 seconds)..."
-    "${VENV_DIR}/bin/python" /opt/edgepulse/bootstrap_model.py \
-        --output-dir /var/lib/edgepulse/models/ \
-        --n-samples 2000 \
-        2>&1 | sed 's/^/    /' || true
+    echo "  Model not found in package, bootstrapping now (this takes ~10-30 seconds)..."
+    if [[ -f "/opt/edgepulse/bootstrap_model.py" ]]; then
+        "${VENV_DIR}/bin/python" /opt/edgepulse/bootstrap_model.py \
+            --output-dir /var/lib/edgepulse/models/ \
+            --n-samples 2000 \
+            2>&1 | sed 's/^/    /' || true
+    else
+        echo "  WARNING: bootstrap_model.py not found, skipping model bootstrap."
+        echo "  Run manually: sudo /opt/edgepulse/venv/bin/python /opt/edgepulse/bootstrap_model.py --output-dir /var/lib/edgepulse/models/"
+    fi
+else
+    echo "  Anomaly detection model found: ${MODEL}"
 fi
 
 # ── 6. Write enrollment config template (only if not already present) ────────

@@ -19,14 +19,13 @@ interface AuthContextType {
   isAnalyst: boolean;
   isApproved: boolean;
   approvalStatus: string | null;
-  resetInactivityTimer: () => void;
 }
 
 export function useAuth(): AuthContextType {
   const authStore = useAuthStore();
 
   useEffect(() => {
-    let mounted = true;
+    const mounted = true;
 
     const initializeAuth = async () => {
       if (!mounted) return;
@@ -35,38 +34,6 @@ export function useAuth(): AuthContextType {
     };
 
     initializeAuth();
-
-    const activityEvents = [
-      'mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart',
-      'click', 'keydown', 'keyup', 'focus', 'blur'
-    ];
-
-    const handleActivity = () => {
-      const store = useAuthStore.getState();
-      store.resetInactivityTimer();
-    };
-
-    activityEvents.forEach(event => {
-      document.addEventListener(event, handleActivity, true);
-    });
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        const store = useAuthStore.getState();
-        store.resetInactivityTimer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      mounted = false;
-
-      activityEvents.forEach(event => {
-        document.removeEventListener(event, handleActivity, true);
-      });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
   }, []);
 
   const isApproved = authStore.user?.approval_status === 'APPROVED' && authStore.user?.is_active === true;
@@ -84,7 +51,6 @@ export function useAuth(): AuthContextType {
     isAnalyst: authStore.isAnalyst,
     isApproved,
     approvalStatus,
-    resetInactivityTimer: authStore.resetInactivityTimer,
   };
 }
 

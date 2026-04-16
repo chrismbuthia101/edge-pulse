@@ -444,9 +444,25 @@ class EdgePulseAgent:
                 else raw_key
             )
 
+            device_id = self.settings.device_id
+            api_key = None
+
+            try:
+                from edgepulse.auth.credentials import CredentialManager
+                cred_manager = CredentialManager()
+                creds = cred_manager.get_device_credentials()
+                if creds:
+                    device_id = creds.device_id or device_id
+                    api_key = creds.api_key
+                    logger.info("Using device credentials for sync", device_id=device_id)
+            except Exception as e:
+                logger.warning("Could not load device credentials", error=str(e))
+
             self._sync_client = SupabaseSync(
                 supabase_url=self.settings.sync.supabase_url,
                 supabase_key=supabase_key,
+                device_id=device_id,
+                api_key=api_key,
                 timeout=10.0,
                 max_retries=3,
             )

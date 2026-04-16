@@ -1,18 +1,28 @@
-# Path management utility for consistent path handling.
-
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 
+def _detect_install_mode() -> bool:
+    return str(Path(__file__)).startswith("/opt/edgepulse")
+
+
 class PathManager:
-    """Manages all file paths consistently."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
-   
-        if base_dir is None:
-            self.base_dir = Path(__file__).parent.parent.parent.resolve()
-        else:
+        if base_dir is not None:
             self.base_dir = Path(base_dir).resolve()
+            self._system_install = False
+        elif env_base := os.environ.get("EDGE_PULSE_DATA_DIR"):
+            self.base_dir = Path(env_base).resolve()
+            self._system_install = False
+        elif _detect_install_mode():
+            self.base_dir = Path(os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR", "/var/lib/edgepulse"))
+            self._system_install = True
+        else:
+            self.base_dir = Path(__file__).parent.parent.parent.resolve()
+            self._system_install = False
 
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -36,7 +46,10 @@ class PathManager:
 
     @property
     def models_dir(self) -> Path:
-        path = self.base_dir / "models"
+        if self._system_install:
+            path = Path(os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR", "/var/lib/edgepulse")) / "models"
+        else:
+            path = self.base_dir / "models"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -57,6 +70,8 @@ class PathManager:
         return self.logs_dir / f"{device_id}_hash_chain.json"
 
     def get_config_path(self) -> Path:
+        if self._system_install:
+            return Path(os.environ.get("EDGE_PULSE_SYSTEM_CONFIG_DIR", "/etc/edgepulse")) / "agent_config.json"
         config_dir = Path.home() / ".edge-pulse"
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir / "config.yaml"

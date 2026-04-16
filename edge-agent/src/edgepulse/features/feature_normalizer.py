@@ -1,5 +1,6 @@
 # Device Normalizer
 
+import os
 from edgepulse.utils.log_handler import get_logger
 import pickle
 from typing import Optional
@@ -34,11 +35,18 @@ class DeviceNormalizer:
         self.learning_period_hours = learning_period_hours
         self.decay_factor = decay_factor
         self.path_manager = path_manager or PathManager()
-        
+
         if baseline_path:
             self.baseline_path = Path(baseline_path)
         else:
             self.baseline_path = self.path_manager.get_baseline_path(device_id)
+
+        logger.info(
+            "DeviceNormalizer initialized",
+            baseline_path=str(self.baseline_path),
+            models_dir=str(self.path_manager.models_dir),
+            base_dir=str(self.path_manager.base_dir),
+        )
         
         # Initialize scaler
         if use_robust_scaler:
@@ -200,18 +208,45 @@ class DeviceNormalizer:
             raise ModelError(f"Failed to save baseline: {e}") from e
 
     def load_baseline(self, path: Optional[Path] = None) -> bool:
-        # Load baseline statistics from disk.
-  
-        load_path = Path(path) if path else self.baseline_path
-        
-        if not load_path.exists():
-            logger.warning(f"Baseline file not found: {load_path}")
+        candidate_paths = []
+
+        if path:
+            candidate_paths.append(Path(path))
+        else:
+            candidate_paths.append(self.baseline_path)
+
+        # Add fallback system paths
+        device_id = self.device_id or "unknown"
+        system_paths = []
+        if system_dir := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
+            system_paths.append(Path(system_dir) / "models" / f"{device_id}_baseline.pkl")
+        system_paths.extend([
+            Path(f"/opt/edgepulse/data/models/{device_id}_baseline.pkl"),
+        ])
+        for sys_path in system_paths:
+            if sys_path not in candidate_paths:
+                candidate_paths.append(sys_path)
+
+        load_path = None
+        for candidate in candidate_paths:
+            try:
+                if candidate.exists():
+                    load_path = candidate
+                    break
+            except (PermissionError, OSError):
+                continue
+
+        if load_path is None:
+            logger.warning(
+                f"Baseline file not found in any location",
+                searched_paths=[str(p) for p in candidate_paths],
+            )
             return False
-        
+
         try:
             with open(load_path, 'rb') as f:
                 baseline_data = pickle.load(f)
-            
+
             self.device_id = baseline_data.get("device_id", self.device_id)
             self.scaler = baseline_data.get("scaler", self.scaler)
             self.is_fitted = baseline_data.get("is_fitted", False)
@@ -219,11 +254,11 @@ class DeviceNormalizer:
             self.baseline_mean = baseline_data.get("baseline_mean")
             self.baseline_std = baseline_data.get("baseline_std")
             self.use_robust_scaler = baseline_data.get("use_robust_scaler", True)
-            
+
             logger.info(f"Loaded baseline from {load_path} ({self.sample_count} samples)")
             return True
         except Exception as e:
-            logger.error(f"Error loading baseline: {e}")
+            logger.error(f"Error loading baseline from {load_path}: {e}")
             return False
 
     def reset_baseline(self) -> None:

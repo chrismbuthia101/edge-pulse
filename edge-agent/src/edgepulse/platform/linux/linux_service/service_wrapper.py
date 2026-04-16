@@ -6,6 +6,7 @@ Runs the canonical EdgePulseAgent (core/agent.py) under systemd.
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,8 @@ logger = get_logger(__name__)
 _BASE_DIR = Path("/var/lib/edgepulse")
 _CONFIG_DIR = Path("/etc/edgepulse")
 _LOG_DIR = Path("/var/log/edgepulse")
+
+os.environ["EDGE_PULSE_DATA_DIR"] = str(_BASE_DIR)
 
 
 def _safe_base_dir() -> Path:

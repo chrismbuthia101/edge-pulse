@@ -1,6 +1,7 @@
 # Isolation Forest Detector
 # Primary unsupervised anomaly detector using Isolation Forest algorithm.
 
+import os
 from edgepulse.utils.log_handler import get_logger
 import joblib
 import time
@@ -67,30 +68,46 @@ class IsolationForestDetector(BaseDetector):
         self.status_detail: str = "not_loaded"
 
     # ------------------------------------------------------------------
-    # Model loading — the key change
+    # Model loading
     # ------------------------------------------------------------------
 
     def load_model(self, path: Optional[Path] = None) -> bool:
-        """Load a trained model from disk.
-
-        Returns True on success.  On failure emits a prominent warning
-        and sets ``is_trained = False`` so the pipeline can run safely
-        without detection rather than crashing.
-        """
         load_path = Path(path) if path else self.model_path
 
-        # Also check the canonical bootstrap output path so the detector
-        # finds models/edgepulse_primary_isolation_forest.joblib without
-        # requiring explicit configuration.
         candidate_paths = [load_path]
-        bootstrap_path = (
-            self.path_manager.models_dir / "edgepulse_primary_isolation_forest.joblib"
+
+        extra_candidates = [
+            self.path_manager.models_dir / "edgepulse_primary_isolation_forest.joblib",
+        ]
+        if system_path := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
+            extra_candidates.append(Path(system_path) / "models/edgepulse_primary_isolation_forest.joblib")
+
+        for bootstrap_path in extra_candidates:
+            if bootstrap_path not in candidate_paths and bootstrap_path.exists():
+                candidate_paths.insert(0, bootstrap_path)
+
+        system_paths = []
+        if system_dir := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
+            system_paths.append(Path(system_dir) / "models/default-device_isolation_forest.pkl")
+        system_paths.extend([
+            Path("/opt/edgepulse/data/models/edgepulse_primary_isolation_forest.joblib"),
+        ])
+        for sys_path in system_paths:
+            if sys_path not in candidate_paths:
+                candidate_paths.append(sys_path)
+
+        logger.debug(
+            "isolation_forest_loading_model",
+            candidate_paths=[str(p) for p in candidate_paths],
+            models_dir=str(self.path_manager.models_dir),
         )
-        if bootstrap_path not in candidate_paths and bootstrap_path.exists():
-            candidate_paths.insert(0, bootstrap_path)
 
         for candidate in candidate_paths:
-            if not candidate.exists():
+            try:
+                if not candidate.exists():
+                    logger.debug("model_path_not_found", path=str(candidate))
+                    continue
+            except (PermissionError, OSError):
                 continue
             try:
                 model_data = joblib.load(candidate)
@@ -111,7 +128,12 @@ class IsolationForestDetector(BaseDetector):
                 logger.error("isolation_forest_load_error", path=str(candidate), error=str(e))
                 self.status_detail = f"load_error:{e}"
 
-        # No model found — emit a highly visible warning.
+        # No model found — emit a highly visible warning with helpful info
+        logger.warning(
+            "no_model_found_in_paths",
+            searched_paths=[str(p) for p in candidate_paths],
+            models_dir=str(self.path_manager.models_dir),
+        )
         self._emit_bootstrap_warning(load_path)
         self.status_detail = "missing_model_file"
         return False

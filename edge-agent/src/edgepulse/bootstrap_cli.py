@@ -52,13 +52,17 @@ def run_bootstrap(args: argparse.Namespace) -> int:
 
     Returns 0 on success, 1 on failure.
     """
+    import os
     import platform
 
-    # Resolve output directory
     if args.output_dir:
         output_dir = Path(args.output_dir)
+    elif env_dir := os.environ.get("EDGE_PULSE_DATA_DIR"):
+        output_dir = Path(env_dir) / "models"
     elif platform.system() == "Windows":
         output_dir = Path("C:/ProgramData/EdgePulse/models")
+    elif env_system_dir := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
+        output_dir = Path(env_system_dir) / "models"
     else:
         output_dir = Path("/var/lib/edgepulse/models")
 
