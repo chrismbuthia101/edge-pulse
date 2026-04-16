@@ -17,6 +17,9 @@ const DEFAULT_ALERT_SELECT = `
   alert_id,
   device_id,
   device_name,
+  telemetry_event_id,
+  feature_vector_id,
+  anomaly_score_id,
   title,
   description,
   severity,
@@ -46,7 +49,8 @@ const DEFAULT_ALERT_SELECT = `
   investigated_by,
   closed_at,
   closed_by,
-  read
+  read,
+  explanation_json
 `.trim();
 
 const METRICS_SELECT =
