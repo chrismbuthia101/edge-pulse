@@ -111,6 +111,7 @@ StartLimitBurst=3
 Type=simple
 ExecStart=/opt/edgepulse/bin/edge-agent run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=/var/lib/edgepulse
+RuntimeDirectory=edgepulse
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

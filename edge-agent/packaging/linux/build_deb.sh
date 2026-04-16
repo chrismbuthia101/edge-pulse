@@ -156,6 +156,7 @@ StartLimitBurst=3
 Type=simple
 ExecStart=/opt/edgepulse/venv/bin/python3 -m edgepulse run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=/var/lib/edgepulse
+RuntimeDirectory=edgepulse
 Restart=on-failure
 RestartSec=10
 RestartPreventExitStatus=0
