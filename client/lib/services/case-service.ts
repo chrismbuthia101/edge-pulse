@@ -56,14 +56,19 @@ export class CaseService {
   }
 
   async createCase(options: CreateCaseOptions): Promise<Case> {
-    return this.repository.createCase({
+    const newCase = await this.repository.createCase({
       title: options.title,
       description: options.description,
       severity: options.severity,
       assigned_to: options.assignedTo,
-      alert_ids: options.alertIds,
       created_by: options.userId,
     });
+
+    if (options.alertIds && options.alertIds.length > 0) {
+      await this.repository.linkAlertsToCase(newCase.id, options.alertIds);
+    }
+
+    return newCase;
   }
 
   async updateCaseStatus(

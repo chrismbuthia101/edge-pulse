@@ -70,7 +70,7 @@ export default function CasesPage() {
     const filteredCases = cases.filter(
         (caseItem) =>
             caseItem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            caseItem.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (caseItem.description?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
             caseItem.case_number.toLowerCase().includes(searchTerm.toLowerCase())
     );
 

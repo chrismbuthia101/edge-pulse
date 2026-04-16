@@ -238,6 +238,21 @@ export class CaseRepository extends BaseRepository<Case> {
     return (data || []) as CaseAlertLink[];
   }
 
+  async linkAlertsToCase(caseId: string, alertIds: string[]): Promise<void> {
+    if (alertIds.length === 0) return;
+
+    const { error } = await this.supabase
+      .from('case_alerts')
+      .insert(
+        alertIds.map((alertId) => ({
+          case_id: caseId,
+          alert_id: alertId,
+        }))
+      );
+
+    if (error) throw this.handleError(error);
+  }
+
   subscribeToCases(
     filters: Partial<CaseQueryOptions> = {},
     callbacks: CaseSubscriptionCallbacks = {}
