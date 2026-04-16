@@ -134,12 +134,15 @@ class StrictExplanationJSON:
         return bool(self.metadata.get("fallback") or self.metadata.get("minimal_fallback"))
 
     def to_dict(self) -> Dict[str, Any]:
+        base = self.detection_threshold
         return {
             "version": self.version,
             "explanation_type": self.explanation_type.value,
             "model_id": self.model_id,
             "timestamp": self.timestamp,
             "anomaly_score": self.anomaly_score,
+            "base_score": base,
+            "final_score": self.anomaly_score,
             "detection_threshold": self.detection_threshold,
             "is_anomaly": self.is_anomaly,
             "features": [f.to_dict() for f in self.features],

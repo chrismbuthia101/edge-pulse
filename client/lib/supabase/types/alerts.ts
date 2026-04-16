@@ -4,20 +4,31 @@ export interface ShapFeature {
   feature_name: string;
   feature_value: number;
   attribution_score: number;
-  contribution_type: 'positive' | 'negative';
+  contribution_type: 'positive' | 'negative' | 'neutral';
   rank: number;
+  normalised_attribution?: number;
 }
 
 export interface ShapExplanation {
+  version?: string;
   explanation_type?: string;
+  model_id?: string;
+  timestamp?: string;
+  anomaly_score?: number;
   base_score: number;
   final_score: number;
+  detection_threshold?: number;
+  is_anomaly?: boolean;
   features: ShapFeature[];
   summary: {
     confidence_level: number;
     main_factors: string[];
     processing_time_ms: number;
+    explanation_type?: string;
+    top_positive_factors?: string[];
+    top_negative_factors?: string[];
   };
+  metadata?: Record<string, unknown>;
 }
 
 export interface Alert {

@@ -552,6 +552,32 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
+            try:
+                if self.sync_queue:
+                    alert_payload = {
+                        "alert_id": alert.get("alert_id"),
+                        "device_id": self.device_id,
+                        "device_name": self.device_id,
+                        "title": alert.get("anomaly", {}).get("anomaly_type", "Security Alert"),
+                        "description": alert.get("anomaly", {}).get("description", "Anomaly detected"),
+                        "severity": str(alert.get("severity", severity_label)).upper(),
+                        "status": "PENDING",
+                        "category": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
+                        "confidence": alert.get("anomaly", {}).get("confidence", 0.0),
+                        "anomaly_score": alert.get("anomaly_score", 0.0),
+                        "model_id": f"iforest-{self.device_id[:8]}",
+                        "collection_agent_version": "1.0.0",
+                        "inference_latency_ms": 0,
+                        "telemetry_source": "edge_agent",
+                        "created_at": datetime.utcnow().isoformat() + "Z",
+                        "updated_at": datetime.utcnow().isoformat() + "Z",
+                        "read": False,
+                    }
+                    await self.sync_queue.enqueue("alert_records", alert_payload, priority=5)
+                    logger.info("alert_queued_for_sync", alert_id=alert.get("alert_id"))
+            except Exception as e:
+                logger.error("alert_sync_queue_error", error=str(e))
+
             await self.event_bus.publish(Event(
                 type=EventType.ALERT,
                 data={"alert": alert},
