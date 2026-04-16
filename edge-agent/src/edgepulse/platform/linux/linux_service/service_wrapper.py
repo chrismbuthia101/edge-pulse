@@ -35,6 +35,29 @@ def _safe_base_dir() -> Path:
     return _BASE_DIR.resolve()
 
 
+def _load_credentials_into_env() -> bool:
+    """
+    Attempt to inject stored device credentials as environment variables.
+    Returns True if both supabase_url and api_key were found.
+    """
+    import os
+    try:
+        from edgepulse.auth.credentials import CredentialManager
+        credential_manager = CredentialManager()
+        credentials = credential_manager.get_device_credentials()
+        if credentials:
+            if credentials.supabase_url and not os.environ.get("SYNC__SUPABASE_URL"):
+                os.environ["SYNC__SUPABASE_URL"] = credentials.supabase_url
+            if credentials.api_key and not os.environ.get("SYNC__SUPABASE_KEY"):
+                os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
+            if credentials.device_id and not os.environ.get("DEVICE_ID"):
+                os.environ["DEVICE_ID"] = credentials.device_id
+            return bool(credentials.supabase_url and credentials.api_key)
+    except Exception as exc:
+        logger.warning("credentials_load_failed", error=str(exc))
+    return False
+
+
 class LinuxServiceWrapper:
     """Thin systemd wrapper around EdgePulseAgent."""
 
@@ -45,7 +68,6 @@ class LinuxServiceWrapper:
             "EdgePulse anomaly detection and monitoring agent for Linux edge devices."
         )
 
-        # The running EdgePulseAgent instance — set in run_agent()
         self.agent = None
 
         self.program_data_path = _safe_base_dir()
@@ -62,16 +84,20 @@ class LinuxServiceWrapper:
                 logger.debug("directory_skipped_no_permission", path=str(d))
 
     # ------------------------------------------------------------------
-    # AgentSettings overrides loaded from /etc/edgepulse/agent_config.json
+    # Settings — built from config file + credential store
     # ------------------------------------------------------------------
 
     def _build_settings(self):
-        """Return an AgentSettings instance, optionally patched from the
-        JSON config file written by the installer and credentials from storage."""
+        """
+        Return an AgentSettings instance.
+        """
         from edgepulse.config.settings import AgentSettings
-        from edgepulse.auth.credentials import CredentialManager
         import os
 
+        # Inject credentials from the credential store first
+        enrolled = _load_credentials_into_env()
+
+        # Parse agent_config.json for non-credential overrides
         config_file = _CONFIG_DIR / "agent_config.json"
         overrides: dict = {}
         if config_file.exists():
@@ -80,8 +106,7 @@ class LinuxServiceWrapper:
             except Exception as exc:
                 logger.error("agent_config_parse_failed", error=str(exc))
 
-        # Map flat config-file keys to the nested AgentSettings fields.
-        env_patch: dict = {}
+        # Map flat config keys → AgentSettings env-var names
         key_map = {
             "collection_interval":            "COLLECTION__INTERVAL",
             "detection_threshold":            "DETECTION__THRESHOLD",
@@ -90,45 +115,34 @@ class LinuxServiceWrapper:
             "enable_process_monitoring":      "COLLECTION__ENABLE_PROCESS_MONITORING",
             "enable_network_monitoring":      "COLLECTION__ENABLE_NETWORK_MONITORING",
         }
+
+        original: dict = {}
         for cfg_key, env_key in key_map.items():
             if cfg_key in overrides:
-                env_patch[env_key] = str(overrides[cfg_key])
-
-        # Load credentials from storage and set sync environment variables
-        try:
-            credential_manager = CredentialManager()
-            credentials = credential_manager.get_device_credentials()
-            if credentials:
-                if credentials.supabase_url:
-                    env_patch["SYNC__SUPABASE_URL"] = credentials.supabase_url
-                    logger.debug("loaded_supabase_url_from_credentials")
-                if credentials.api_key:
-                    env_patch["SYNC__SUPABASE_KEY"] = credentials.api_key
-                    logger.debug("loaded_api_key_from_credentials")
-                if credentials.device_id:
-                    env_patch["DEVICE_ID"] = credentials.device_id
-                    logger.debug("loaded_device_id_from_credentials")
-        except Exception as exc:
-            logger.warning("credentials_load_failed", error=str(exc))
-
-        # Temporarily inject as environment variables so AgentSettings picks
-        # them up via pydantic-settings' env_nested_delimiter.
-        original = {}
-        for k, v in env_patch.items():
-            original[k] = os.environ.get(k)
-            os.environ[k] = v
+                original[env_key] = os.environ.get(env_key)
+                os.environ[env_key] = str(overrides[cfg_key])
 
         try:
             settings = AgentSettings()
         finally:
-            for k, orig_v in original.items():
+            for env_key, orig_v in original.items():
                 if orig_v is None:
-                    os.environ.pop(k, None)
+                    os.environ.pop(env_key, None)
                 else:
-                    os.environ[k] = orig_v
+                    os.environ[env_key] = orig_v
+
+        if not enrolled:
+            logger.warning(
+                "device_not_enrolled",
+                detail=(
+                    "Running in local-only mode. Sync is disabled. "
+                    "Run 'edge-agent enroll' to enroll this device."
+                ),
+            )
 
         if config_file.exists():
             logger.info("agent_config_loaded", path=str(config_file))
+
         return settings
 
     # ------------------------------------------------------------------
@@ -136,12 +150,19 @@ class LinuxServiceWrapper:
     # ------------------------------------------------------------------
 
     async def run_agent(self) -> None:
-        """Create and run EdgePulseAgent — the same class used by the CLI."""
+        """Create and run EdgePulseAgent."""
         from edgepulse.core.agent import EdgePulseAgent
 
         try:
             logger.info("linux_wrapper_starting_agent")
             settings = self._build_settings()
+
+            if not settings.should_enable_sync():
+                logger.warning(
+                    "sync_disabled",
+                    reason="No valid credentials. Start agent in local-only mode.",
+                )
+
             self.agent = EdgePulseAgent(settings=settings)
             await self.agent.run_forever()
         except Exception as exc:
@@ -152,7 +173,7 @@ class LinuxServiceWrapper:
             logger.info("linux_wrapper_agent_stopped")
 
     # ------------------------------------------------------------------
-    # Service lifecycle helpers (used by CLI / installer)
+    # Service lifecycle helpers
     # ------------------------------------------------------------------
 
     def install_service(self, python_exe: Optional[str] = None) -> bool:
@@ -208,7 +229,13 @@ class LinuxServiceWrapper:
         if config_file.exists():
             return
 
+        # Write config with empty (not placeholder) sync values so the
+        # pydantic validator does not complain on first start
         default: dict = {
+            "sync": {
+                "supabase_url": "",
+                "supabase_key": ""
+            },
             "collection_interval": 60,
             "detection_threshold": 0.5,
             "offline_queue_size": 10000,

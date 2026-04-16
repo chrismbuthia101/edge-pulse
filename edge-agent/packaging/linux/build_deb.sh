@@ -175,9 +175,84 @@ WantedBy=multi-user.target
 UNIT
 
 # ---------------------------------------------------------------------------
-# Default config file
+# Write maintainer scripts
 # ---------------------------------------------------------------------------
-cat > "${STAGING_DIR}${CONFIG_DIR}/agent_config.json" <<'CONF'
+echo "[7/7] Writing maintainer scripts..."
+
+# ---- postinst: creates venv and installs deps on TARGET ----
+POSTINST="${SCRIPT_DIR}/postinst"
+cat > "${POSTINST}" <<'POSTINST_SCRIPT'
+#!/bin/bash
+# postinst — EdgePulse Agent post-install script
+# Creates the Python venv, installs deps, bootstraps the ML model,
+# and prints clear numbered setup instructions.
+set -e
+
+VENV_DIR="/opt/edgepulse/venv"
+AGENT_BIN="${VENV_DIR}/bin/edge-agent"
+
+# ── 1. Create required directories ──────────────────────────────────────────
+for dir in /var/lib/edgepulse \
+           /var/lib/edgepulse/models \
+           /var/lib/edgepulse/data \
+           /var/log/edgepulse \
+           /run/edgepulse \
+           /etc/edgepulse; do
+    mkdir -p "$dir"
+    chmod 750 "$dir"
+done
+
+# ── 2. Find wheel file ───────────────────────────────────────────────────────
+WHEEL_FILE=$(ls /opt/edgepulse/*.whl 2>/dev/null | head -1)
+if [[ -z "${WHEEL_FILE}" ]]; then
+    echo "ERROR: Could not find EdgePulse wheel file in /opt/edgepulse/" >&2
+    exit 1
+fi
+
+# ── 3. Create Python virtual environment ────────────────────────────────────
+echo "EdgePulse: Setting up Python environment..."
+
+if [[ ! -d "${VENV_DIR}" ]]; then
+    echo "  Creating isolated Python environment at ${VENV_DIR}..."
+    python3 -m venv "${VENV_DIR}"
+fi
+
+"${VENV_DIR}/bin/pip" install --quiet --upgrade pip setuptools wheel
+
+# ── 4. Install agent and dependencies ───────────────────────────────────────
+echo "  Installing EdgePulse Agent and dependencies..."
+"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
+
+# ── 5. Bootstrap ML model ────────────────────────────────────────────────────
+MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
+if [[ ! -f "${MODEL}" ]]; then
+    echo "  Bootstrapping anomaly detection model (this takes ~10-30 seconds)..."
+    "${VENV_DIR}/bin/python" /opt/edgepulse/bootstrap_model.py \
+        --output-dir /var/lib/edgepulse/models/ \
+        --n-samples 2000 \
+        2>&1 | sed 's/^/    /' || true
+fi
+
+# ── 6. Write enrollment config template (only if not already present) ────────
+ENROLL_CFG="/etc/edgepulse/enrollment.json"
+if [[ ! -f "${ENROLL_CFG}" ]]; then
+    cat > "${ENROLL_CFG}" <<'ENROLL_CONFIG'
+{
+  "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",
+  "enrollment_token": "YOUR_ENROLLMENT_TOKEN",
+  "device_hostname": null,
+  "device_os": null,
+  "agent_version": null,
+  "timeout_seconds": 30
+}
+ENROLL_CONFIG
+    chmod 640 "${ENROLL_CFG}"
+fi
+
+# ── 7. Write agent config (only if not already present) ──────────────────────
+AGENT_CFG="/etc/edgepulse/agent_config.json"
+if [[ ! -f "${AGENT_CFG}" ]]; then
+    cat > "${AGENT_CFG}" <<'AGENT_CONFIG'
 {
   "device_id": null,
   "environment": "production",
@@ -191,8 +266,8 @@ cat > "${STAGING_DIR}${CONFIG_DIR}/agent_config.json" <<'CONF'
     "min_cpu_cores": 2
   },
   "sync": {
-    "supabase_url": "https://YOUR_PROJECT.supabase.co",
-    "supabase_key": "YOUR_SUPABASE_ANON_KEY",
+    "supabase_url": "",
+    "supabase_key": "",
     "batch_size": 50,
     "retry_max_attempts": 5,
     "offline_queue_max": 10000,
@@ -261,131 +336,84 @@ cat > "${STAGING_DIR}${CONFIG_DIR}/agent_config.json" <<'CONF'
   "graceful_shutdown_timeout": 30,
   "health_check_interval": 60
 }
-CONF
-
-# ---------------------------------------------------------------------------
-# Write maintainer scripts
-# ---------------------------------------------------------------------------
-echo "[7/7] Writing maintainer scripts..."
-
-# ---- postinst: creates venv and installs deps on TARGET ----
-POSTINST="${SCRIPT_DIR}/postinst"
-cat > "${POSTINST}" <<'POSTINST_SCRIPT'
-#!/bin/bash
-# postinst — Fix 4: Create venv and install dependencies on TARGET
-set -e
-
-VENV_DIR="/opt/edgepulse/venv"
-WHEEL_PATH="/opt/edgepulse/edge_agent-VERSION_PLACEHOLDER-py3-none-any.whl"
-AGENT_BIN="/opt/edgepulse/bin/edge-agent"
-
-# Create service directories
-for dir in /var/lib/edgepulse /var/lib/edgepulse/models /var/lib/edgepulse/data \
-           /var/log/edgepulse /run/edgepulse /etc/edgepulse; do
-    mkdir -p "$dir"
-    chmod 750 "$dir"
-done
-
-WHEEL_FILE=$(ls /opt/edgepulse/*.whl 2>/dev/null | head -1)
-if [[ -z "${WHEEL_FILE}" ]]; then
-    echo "ERROR: Could not find wheel file" >&2
-    exit 1
+AGENT_CONFIG
+    chmod 640 "${AGENT_CFG}"
 fi
 
-echo "EdgePulse: Setting up Python environment..."
-
-# Create venv if not exists
-if [[ ! -d "${VENV_DIR}" ]]; then
-    echo "  Creating isolated Python environment..."
-    python3 -m venv "${VENV_DIR}"
-fi
-
-# Upgrade pip in venv
-"${VENV_DIR}/bin/pip" install --quiet --upgrade pip setuptools wheel
-
-# Install the agent wheel with all dependencies
-echo "  Installing EdgePulse Agent and dependencies..."
-"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
-
-# Bootstrap the ML model if not present
-MODEL="/var/lib/edgepulse/models/edgepulse_primary_isolation_forest.joblib"
-if [[ ! -f "$MODEL" ]]; then
-    echo "  Bootstrapping anomaly detection model (this takes ~10 seconds)..."
-    "${VENV_DIR}/bin/python" /opt/edgepulse/bootstrap_model.py \
-        --output-dir /var/lib/edgepulse/models/ \
-        --n-samples 2000 \
-        2>&1 | sed 's/^/    /'
-fi
-
-# Create default enrollment config template
-if [[ ! -f /etc/edgepulse/enrollment.json ]]; then
-    cat > /etc/edgepulse/enrollment.json <<'ENROLL_CONFIG'
-{
-  "supabase_url": "https://YOUR_PROJECT.supabase.co",
-  "enrollment_token": "YOUR_ENROLLMENT_TOKEN",
-  "device_hostname": null,
-  "device_os": null,
-  "agent_version": null,
-  "timeout_seconds": 30
-}
-ENROLL_CONFIG
-    chmod 640 /etc/edgepulse/enrollment.json
-fi
-
-# Attempt automatic enrollment if config exists
-ENROLLMENT_CONFIG=""
-if [[ -f /etc/edgepulse/enrollment.json ]]; then
-    if grep -q "YOUR_PROJECT\|YOUR_ENROLLMENT_TOKEN" /etc/edgepulse/enrollment.json 2>/dev/null; then
-        echo ""
-        echo "  NOTE: Enrollment config found but not configured."
-        echo "        Edit /etc/edgepulse/enrollment.json and run:"
-        echo "          sudo /opt/edgepulse/venv/bin/edge-agent enroll"
-    else
-        echo "  Attempting device enrollment..."
-        if "${VENV_DIR}/bin/edge-agent" enroll; then
-            echo "  Device enrolled successfully!"
-        else
-            echo "  Enrollment not completed. You can enroll later with:"
-            echo "    sudo /opt/edgepulse/venv/bin/edge-agent enroll"
-        fi
-    fi
-fi
-
-# Ensure bin directory exists and is linked
-mkdir -p "${VENV_DIR}/bin"
-ln -sf "${VENV_DIR}/bin/python" "${AGENT_BIN}" 2>/dev/null || true
-
-# Reload systemd and enable service
+# ── 8. Enable systemd service (but do NOT start it yet) ──────────────────────
 if command -v systemctl &>/dev/null && systemctl --version &>/dev/null 2>&1; then
     systemctl daemon-reload
-    systemctl enable edgepulse-agent.service
+    systemctl enable edgepulse-agent.service 2>/dev/null || true
 fi
 
-echo ""
-echo "┌─────────────────────────────────────────────────────────┐"
-echo "│  EdgePulse Agent installed successfully!                 │"
-echo "│                                                         │"
-echo "│  Python environment: /opt/edgepulse/venv               │"
-echo "│                                                         │"
-echo "│  Enroll device:                                         │"
-echo "│    sudo /opt/edgepulse/venv/bin/edge-agent enroll       │"
-echo "│                                                         │"
-echo "│  Or edit /etc/edgepulse/enrollment.json first           │"
-echo "│                                                         │"
-echo "│  Start the service:                                     │"
-echo "│    sudo systemctl start edgepulse-agent                │"
-echo "│                                                         │"
-echo "│  Check status:                                          │"
-echo "│    sudo systemctl status edgepulse-agent               │"
-echo "│                                                         │"
-echo "│  Edit config:                                           │"
-echo "│    sudo nano /etc/edgepulse/agent_config.json           │"
-echo "└─────────────────────────────────────────────────────────┘"
+# ── 9. Print setup instructions ──────────────────────────────────────────────
+cat <<'INSTRUCTIONS'
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║            EdgePulse Agent — Installation Complete                          ║
+║                                                                              ║
+║  The agent is installed but NOT yet running.                                 ║
+║  Complete the following steps to finish configuration:                       ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  STEP 1 — Edit the enrollment configuration                                  ║
+║  ─────────────────────────────────────────                                   ║
+║  Open the enrollment file and replace the placeholder values:                ║
+║                                                                              ║
+║    sudo nano /etc/edgepulse/enrollment.json                                  ║
+║                                                                              ║
+║  Set BOTH of these values (get them from your EdgePulse dashboard):          ║
+║    "supabase_url"      → your Supabase project URL                           ║
+║                          e.g. https://abcdefghij.supabase.co                ║
+║    "enrollment_token"  → one-time token from the Devices page                ║
+║                                                                              ║
+║  STEP 2 — Enroll this device                                                 ║
+║  ────────────────────────────                                                ║
+║    sudo /opt/edgepulse/venv/bin/edge-agent enroll                            ║
+║                                                                              ║
+║  On success you will see:                                                    ║
+║    ✓ Device enrolled successfully!                                           ║
+║      Device ID : <uuid>                                                      ║
+║      API Key   : <key>...                                                    ║
+║                                                                              ║
+║  STEP 3 — Start the agent service                                            ║
+║  ───────────────────────────────                                             ║
+║    sudo systemctl start edgepulse-agent                                      ║
+║                                                                              ║
+║  STEP 4 — Verify the service is running                                      ║
+║  ──────────────────────────────────────                                      ║
+║    sudo systemctl status edgepulse-agent                                     ║
+║                                                                              ║
+║  STEP 5 — Watch live logs                                                    ║
+║  ────────────────────────                                                    ║
+║    sudo journalctl -u edgepulse-agent -f                                     ║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  USEFUL COMMANDS                                                              ║
+║                                                                              ║
+║  Check enrollment & model status:                                            ║
+║    sudo /opt/edgepulse/venv/bin/edge-agent status                            ║
+║                                                                              ║
+║  Re-enroll (e.g. token expired):                                             ║
+║    sudo nano /etc/edgepulse/enrollment.json   (update token)                 ║
+║    sudo /opt/edgepulse/venv/bin/edge-agent enroll                            ║
+║                                                                              ║
+║  Stop the service:                                                           ║
+║    sudo systemctl stop edgepulse-agent                                       ║
+║                                                                              ║
+║  Edit agent settings:                                                        ║
+║    sudo nano /etc/edgepulse/agent_config.json                                ║
+║    sudo systemctl restart edgepulse-agent                                    ║
+║                                                                              ║
+║  Uninstall:                                                                  ║
+║    sudo dpkg --purge edgepulse-agent                                         ║
+║                                                                              ║
+║  Documentation:  https://docs.edgepulse.io                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+INSTRUCTIONS
 POSTINST_SCRIPT
 
-# Fix the VERSION placeholder in postinst
-VERSION_ESCAPED=$(echo "${VERSION}" | sed 's/\./\\./g')
-sed -i "s/VERSION_PLACEHOLDER/${VERSION_ESCAPED}/g" "${POSTINST}"
 chmod 755 "${POSTINST}"
 
 # ---- prerm: stop service ----

@@ -13,143 +13,106 @@ from edgepulse.utils.device_id import get_default_device_id, validate_device_id
 
 
 # ---------------------------------------------------------------------------
-# Nested config blocks (plain BaseModel – values come from the parent
-# AgentSettings which reads env vars / .env / config file)
+# Nested config blocks
 # ---------------------------------------------------------------------------
 
 class APIConfig(BaseModel):
-    """API server configuration (env prefix: API__)"""
-    enabled: bool = Field(default=True, description="Enable API server")
-    mode: Literal["auto", "fastapi", "minimal", "socket"] = Field(
-        default="auto", description="API server mode"
-    )
-    port: int = Field(default=8080, ge=1, le=65535, description="API server port")
-    require_auth: bool = Field(default=False, description="Require authentication")
-    socket_path: Optional[str] = Field(default=None, description="Unix socket path")
-    min_memory_mb: int = Field(default=512, ge=128, description="Min memory for FastAPI")
-    min_cpu_cores: int = Field(default=2, ge=1, description="Min CPU cores for FastAPI")
+    enabled: bool = Field(default=True)
+    mode: Literal["auto", "fastapi", "minimal", "socket"] = Field(default="auto")
+    port: int = Field(default=8080, ge=1, le=65535)
+    require_auth: bool = Field(default=False)
+    socket_path: Optional[str] = Field(default=None)
+    min_memory_mb: int = Field(default=512, ge=128)
+    min_cpu_cores: int = Field(default=2, ge=1)
 
 
 class SyncConfig(BaseModel):
-    """Synchronization configuration (env prefix: SYNC__)"""
-    supabase_url: str = Field(default="", description="Supabase URL")
-    supabase_key: SecretStr = Field(default=SecretStr(""), description="Supabase API key")
-    batch_size: int = Field(default=50, ge=1, le=1000, description="Sync batch size")
-    retry_max_attempts: int = Field(default=5, ge=1, le=20, description="Max retry attempts")
-    offline_queue_max: int = Field(default=10000, ge=100, description="Max offline queue size")
-    sync_interval: int = Field(default=300, ge=60, description="Sync interval in seconds")
+    supabase_url: Optional[str] = Field(default="")
+    supabase_key: Optional[SecretStr] = Field(default=None)
+    batch_size: int = Field(default=50, ge=1, le=1000)
+    retry_max_attempts: int = Field(default=5, ge=1, le=20)
+    offline_queue_max: int = Field(default=10000, ge=100)
+    sync_interval: int = Field(default=300, ge=60)
+
+    @field_validator("supabase_url", mode="before")
+    @classmethod
+    def reject_placeholder_url(cls, v: Any) -> Any:
+        """Accept empty/None but reject obvious placeholder values."""
+        if v and isinstance(v, str) and "YOUR_PROJECT" in v:
+            return ""
+        return v
+
+    @field_validator("supabase_key", mode="before")
+    @classmethod
+    def reject_placeholder_key(cls, v: Any) -> Any:
+        if v and isinstance(v, str) and "YOUR_SUPABASE" in v:
+            return None
+        return v
 
 
 class CollectionConfig(BaseModel):
-    """Data collection configuration (env prefix: COLLECTION__)"""
-    interval: int = Field(default=60, ge=5, le=3600, description="Collection interval in seconds")
-    window_1min: int = Field(default=60, ge=10, description="1-minute window size (seconds)")
-    window_5min: int = Field(default=300, ge=60, description="5-minute window size (seconds)")
-    window_15min: int = Field(default=900, ge=300, description="15-minute window size (seconds)")
-    enable_process_monitoring: bool = Field(default=True, description="Enable process monitoring")
-    enable_network_monitoring: bool = Field(default=True, description="Enable network monitoring")
-    max_processes: int = Field(default=100, ge=10, description="Max processes to monitor")
+    interval: int = Field(default=60, ge=5, le=3600)
+    window_1min: int = Field(default=60, ge=10)
+    window_5min: int = Field(default=300, ge=60)
+    window_15min: int = Field(default=900, ge=300)
+    enable_process_monitoring: bool = Field(default=True)
+    enable_network_monitoring: bool = Field(default=True)
+    max_processes: int = Field(default=100, ge=10)
 
 
 class FeatureConfig(BaseModel):
-    """Feature extraction configuration (env prefix: FEATURES__)"""
-    feature_dimension: int = Field(default=50, ge=8, le=512, description="Feature vector dimension")
-    history_retention_hours: int = Field(default=24, ge=1, le=168, description="History retention hours")
-    enable_auto_scaling: bool = Field(default=True, description="Enable feature auto-scaling")
-    normalize_features: bool = Field(default=True, description="Normalize features")
-    feature_selection: bool = Field(default=False, description="Enable feature selection")
+    feature_dimension: int = Field(default=50, ge=8, le=512)
+    history_retention_hours: int = Field(default=24, ge=1, le=168)
+    enable_auto_scaling: bool = Field(default=True)
+    normalize_features: bool = Field(default=True)
+    feature_selection: bool = Field(default=False)
 
 
 class DetectionConfig(BaseModel):
-    """Anomaly detection configuration (env prefix: DETECTION__)"""
-    threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Detection threshold")
-    use_autoencoder: bool = Field(default=False, description="Use autoencoder model")
-    use_ensemble: bool = Field(default=True, description="Use ensemble detection")
-
-    # Isolation Forest
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    use_autoencoder: bool = Field(default=False)
+    use_ensemble: bool = Field(default=True)
     isolation_forest_n_estimators: int = Field(default=100, ge=10, le=1000)
-    isolation_forest_contamination: str = Field(
-        default="auto", description="Contamination parameter"
-    )
-
-    # Autoencoder
+    isolation_forest_contamination: str = Field(default="auto")
     autoencoder_encoding_dim: int = Field(default=8, ge=2, le=64)
-    autoencoder_hidden_layers: List[int] = Field(
-        default=[64, 32, 16], description="Hidden layer sizes"
-    )
+    autoencoder_hidden_layers: List[int] = Field(default=[64, 32, 16])
     autoencoder_learning_rate: float = Field(default=0.001, ge=0.0001, le=0.1)
-    autoencoder_input_dim: Optional[int] = Field(
-        default=None, description="Autoencoder input dimension"
-    )
-    autoencoder_use_tflite: bool = Field(
-        default=False, description="Use TensorFlow Lite for inference"
-    )
+    autoencoder_input_dim: Optional[int] = Field(default=None)
+    autoencoder_use_tflite: bool = Field(default=False)
 
 
 class PrivacyConfig(BaseModel):
-    """Privacy and data retention configuration"""
-    data_retention_days: int = Field(
-        default=30, ge=1, le=365, description="Data retention in days"
-    )
-    anonymization_level: Literal["none", "basic", "medium", "full"] = Field(
-        default="basic", description="Data anonymization level"
-    )
-    collect_command_lines: bool = Field(
-        default=False, description="Collect process command lines"
-    )
-    encrypt_storage: bool = Field(default=False, description="Encrypt local storage")
-    hash_sensitive_data: bool = Field(default=True, description="Hash sensitive data")
+    data_retention_days: int = Field(default=30, ge=1, le=365)
+    anonymization_level: Literal["none", "basic", "medium", "full"] = Field(default="basic")
+    collect_command_lines: bool = Field(default=False)
+    encrypt_storage: bool = Field(default=False)
+    hash_sensitive_data: bool = Field(default=True)
 
 
 class AlertingConfig(BaseModel):
-    """Alerting configuration (env prefix: ALERT__)"""
-    enabled: bool = Field(default=True, description="Enable alerting")
-    correlation_window: int = Field(
-        default=300, ge=60, description="Alert correlation window in seconds"
-    )
-    rate_limit: int = Field(default=5, ge=1, description="Max alerts per rate window")
-    rate_window: int = Field(
-        default=3600, ge=300, description="Rate window in seconds"
-    )
-    min_severity: Literal["low", "medium", "high", "critical"] = Field(
-        default="medium", description="Minimum alert severity"
-    )
-    enable_local_notifications: bool = Field(
-        default=True, description="Enable local notifications"
-    )
+    enabled: bool = Field(default=True)
+    correlation_window: int = Field(default=300, ge=60)
+    rate_limit: int = Field(default=5, ge=1)
+    rate_window: int = Field(default=3600, ge=300)
+    min_severity: Literal["low", "medium", "high", "critical"] = Field(default="medium")
+    enable_local_notifications: bool = Field(default=True)
 
 
 class LoggingConfig(BaseModel):
-    """Logging configuration (env prefix: LOG__)"""
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="INFO", description="Log level"
-    )
-    format: Literal["json", "text"] = Field(
-        default="json", description="Log format"
-    )
-    file_path: Optional[str] = Field(default=None, description="Log file path")
-    max_file_size_mb: int = Field(
-        default=100, ge=1, description="Max log file size in MB"
-    )
-    backup_count: int = Field(default=5, ge=1, description="Number of log backups")
-    enable_console: bool = Field(default=True, description="Enable console logging")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO")
+    format: Literal["json", "text"] = Field(default="json")
+    file_path: Optional[str] = Field(default=None)
+    max_file_size_mb: int = Field(default=100, ge=1)
+    backup_count: int = Field(default=5, ge=1)
+    enable_console: bool = Field(default=True)
 
 
 class MetricsConfig(BaseModel):
-    """Metrics configuration (env prefix: METRICS__)"""
-    enabled: bool = Field(default=True, description="Enable metrics collection")
-    prometheus_enabled: bool = Field(
-        default=False, description="Enable Prometheus metrics"
-    )
-    prometheus_port: int = Field(
-        default=9090, ge=1, le=65535, description="Prometheus port"
-    )
-    collection_interval: int = Field(
-        default=30, ge=5, description="Metrics collection interval"
-    )
-    retention_hours: int = Field(
-        default=168, ge=24, description="Metrics retention in hours"
-    )
+    enabled: bool = Field(default=True)
+    prometheus_enabled: bool = Field(default=False)
+    prometheus_port: int = Field(default=9090, ge=1, le=65535)
+    collection_interval: int = Field(default=30, ge=5)
+    retention_hours: int = Field(default=168, ge=24)
 
 
 # ---------------------------------------------------------------------------
@@ -157,18 +120,6 @@ class MetricsConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 class AgentSettings(BaseSettings):
-    """Main agent settings.
-
-    Environment variable mapping (pydantic-settings v2 with nested delimiter):
-        API__PORT=9090          → settings.api.port
-        SYNC__SUPABASE_URL=...  → settings.sync.supabase_url
-        DETECTION__THRESHOLD=0.7 → settings.detection.threshold
-        LOG__LEVEL=DEBUG        → settings.logging.level
-        etc.
-
-    A JSON config file can override any field when config_path is supplied.
-    """
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -177,21 +128,12 @@ class AgentSettings(BaseSettings):
         extra="ignore",
     )
 
-    # ------------------------------------------------------------------
-    # Core
-    # ------------------------------------------------------------------
     device_id: str = Field(
         default_factory=get_default_device_id,
         min_length=3,
-        description="Unique device identifier (auto-generated from hostname)",
     )
-    environment: Literal["development", "staging", "production"] = Field(
-        default="production", description="Environment"
-    )
+    environment: Literal["development", "staging", "production"] = Field(default="production")
 
-    # ------------------------------------------------------------------
-    # Sub-configurations  (populated via env_nested_delimiter or config file)
-    # ------------------------------------------------------------------
     api: APIConfig = Field(default_factory=APIConfig)
     sync: SyncConfig = Field(default_factory=SyncConfig)
     collection: CollectionConfig = Field(default_factory=CollectionConfig)
@@ -202,31 +144,12 @@ class AgentSettings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
 
-    # ------------------------------------------------------------------
-    # Advanced
-    # ------------------------------------------------------------------
-    enable_ml_features: bool = Field(default=True, description="Enable ML features")
-    max_memory_usage_mb: int = Field(
-        default=1024, ge=128, description="Max memory usage in MB"
-    )
-    graceful_shutdown_timeout: int = Field(
-        default=30, ge=5, description="Graceful shutdown timeout"
-    )
-    health_check_interval: int = Field(
-        default=60, ge=10, description="Health check interval"
-    )
+    enable_ml_features: bool = Field(default=True)
+    max_memory_usage_mb: int = Field(default=1024, ge=128)
+    graceful_shutdown_timeout: int = Field(default=30, ge=5)
+    health_check_interval: int = Field(default=60, ge=10)
 
-    # ------------------------------------------------------------------
-    # config_path: optional path to a JSON config file.
-    # When provided the file is merged on top of env/default values.
-    # ------------------------------------------------------------------
-    config_path: Optional[Path] = Field(
-        default=None, description="Path to JSON config file", exclude=True
-    )
-
-    # ------------------------------------------------------------------
-    # Validators
-    # ------------------------------------------------------------------
+    config_path: Optional[Path] = Field(default=None, exclude=True)
 
     @field_validator("device_id")
     @classmethod
@@ -247,13 +170,11 @@ class AgentSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _apply_config_file(self) -> "AgentSettings":
-        """Merge values from a JSON config file if config_path is set."""
         if self.config_path is None:
             return self
 
         path = Path(self.config_path)
         if not path.exists():
-            # Non-fatal: just warn so the service can still start
             import logging
             logging.getLogger(__name__).warning(
                 f"Config file not found, ignoring: {path}"
@@ -266,28 +187,20 @@ class AgentSettings(BaseSettings):
         except Exception as exc:
             raise ValueError(f"Cannot parse config file {path}: {exc}") from exc
 
-        # Apply top-level and nested overrides
         for key, value in overrides.items():
             if not hasattr(self, key):
                 continue
-
             current_value = getattr(self, key, None)
-
             try:
-                if (
-                    isinstance(value, dict)
-                    and isinstance(current_value, BaseModel)
-                ):
-                    # Get current values as dict and merge with overrides
+                if isinstance(value, dict) and isinstance(current_value, BaseModel):
                     current_dict = current_value.model_dump()
                     current_dict.update(value)
-                    # Create new model instance
                     new_value = current_value.__class__(**current_dict)
                     object.__setattr__(self, key, new_value)
                 else:
                     object.__setattr__(self, key, value)
             except Exception:
-                pass 
+                pass
 
         return self
 
@@ -296,7 +209,6 @@ class AgentSettings(BaseSettings):
     # ------------------------------------------------------------------
 
     def get_effective_config(self) -> Dict[str, Any]:
-        """Return all settings as a flat dict (including nested)."""
         return self.model_dump()
 
     def is_production(self) -> bool:
@@ -312,13 +224,19 @@ class AgentSettings(BaseSettings):
         return self.api.enabled
 
     def should_enable_sync(self) -> bool:
-        url = self.sync.supabase_url
+        """Return True only when both URL and key are non-empty, non-placeholder."""
+        url = self.sync.supabase_url or ""
         key = self.sync.supabase_key.get_secret_value() if self.sync.supabase_key else ""
         return bool(
-            url and key
+            url
+            and key
             and "YOUR_PROJECT" not in url
             and "YOUR_SUPABASE" not in key
         )
+
+    def is_enrolled(self) -> bool:
+        """Convenience: True when sync credentials are present."""
+        return self.should_enable_sync()
 
     def should_enable_ml(self) -> bool:
         return self.enable_ml_features
