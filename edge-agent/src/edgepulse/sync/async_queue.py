@@ -182,9 +182,11 @@ class AsyncSyncQueue:
                 )
                 self.stats["total_failed"] += 1
                 logger.error(
-                    "item_max_attempts_reached",
+                    "item_permanently_dropped",
                     item_id=item_id,
+                    item_type=row.get("item_type"),
                     attempts=new_attempts,
+                    data_preview=str(row.get("data_json", ""))[:200],
                 )
             else:
                 backoff_secs = min(300, 2 ** new_attempts)
@@ -467,9 +469,10 @@ class AsyncSyncQueue:
         if item["attempts"] >= self.max_retry_attempts:
             self.stats["total_failed"] += 1
             logger.error(
-                "item_max_attempts_reached",
+                "item_permanently_dropped",
                 item_type=item["type"],
                 attempts=item["attempts"],
+                data_preview=str(item.get("data", ""))[:200],
             )
         else:
             backoff_seconds = min(300, 2 ** item["attempts"])
@@ -587,10 +590,13 @@ class AsyncSyncQueue:
 
     async def _persist_single_item(self, item: Dict[str, Any]) -> None:
         """Persist a single high-priority item immediately."""
+        data = item.get("data", {})
+        # Check for alert_id (alerts) or id (other items)
+        item_id = data.get("alert_id") or data.get("id") or "unknown"
         await self.db.enqueue_sync_item(
             item["type"],
-            item.get("data", {}).get("id", "unknown"),
-            item.get("data", {}),
+            item_id,
+            data,
             priority=item.get("priority", 0),
         )
 

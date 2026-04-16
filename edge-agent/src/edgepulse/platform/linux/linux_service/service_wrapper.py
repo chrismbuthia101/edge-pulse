@@ -41,7 +41,7 @@ def _safe_base_dir() -> Path:
 def _load_credentials_into_env() -> bool:
     """
     Attempt to inject stored device credentials as environment variables.
-    Returns True if both supabase_url and api_key were found.
+    Returns True if both URL and key were set (device is enrolled).
     """
     import os
     try:
@@ -49,11 +49,13 @@ def _load_credentials_into_env() -> bool:
         credential_manager = CredentialManager()
         credentials = credential_manager.get_device_credentials()
         if credentials:
-            if credentials.supabase_url and not os.environ.get("SYNC__SUPABASE_URL"):
+            if credentials.supabase_url:
                 os.environ["SYNC__SUPABASE_URL"] = credentials.supabase_url
-            if credentials.api_key and not os.environ.get("SYNC__SUPABASE_KEY"):
+                logger.info(f"Set SYNC__SUPABASE_URL from credentials: {credentials.supabase_url[:30]}...")
+            if credentials.api_key:
                 os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
-            if credentials.device_id and not os.environ.get("DEVICE_ID"):
+                logger.info(f"Set SYNC__SUPABASE_KEY from credentials")
+            if credentials.device_id:
                 os.environ["DEVICE_ID"] = credentials.device_id
             return bool(credentials.supabase_url and credentials.api_key)
     except Exception as exc:

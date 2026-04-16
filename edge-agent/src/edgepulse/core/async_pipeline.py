@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Any
 from edgepulse.core.events_bus import EventBus, Event, EventType, get_event_bus
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import EdgePulseError, DetectionError
-from edgepulse.shared import create_metrics_collector, StandardMetrics
+from edgepulse.shared import create_metrics_collector, StandardMetrics, TelemetryEvent
+from edgepulse.storage.database import DatabaseManager
 
 logger = get_logger(__name__)
 
@@ -63,12 +64,14 @@ class AsyncPipeline:
         device_id: str = "default-device",
         event_bus: Optional[EventBus] = None,
         metrics_collector: Optional[Any] = None,
+        database: Optional[DatabaseManager] = None,
     ):
         self.collectors = collectors
         self.extractor = feature_extractor
         self.detectors = detectors
         self.alert_engine = alert_engine
         self.device_id = device_id
+        self.database = database
 
         self.event_bus = event_bus or get_event_bus()
         self.metrics = metrics_collector or create_metrics_collector(
@@ -173,6 +176,13 @@ class AsyncPipeline:
         if not telemetry:
             logger.warning("no_telemetry_collected")
             return {"status": "no_data"}
+
+        # Save telemetry to database
+        if self.database:
+            try:
+                await self._save_telemetry(telemetry)
+            except Exception as e:
+                logger.error("telemetry_save_error", error=str(e))
 
         features = await self._extract_features(telemetry)
         if features is None or features.size == 0:
@@ -450,6 +460,33 @@ class AsyncPipeline:
                 alerts_generated += 1
 
         return alerts_generated
+
+    async def _save_telemetry(self, telemetry: Dict[str, Any]) -> None:
+        """Save telemetry data to the database."""
+        if not self.database:
+            return
+
+        try:
+            system_metrics = telemetry.get("system_metrics", {})
+            cpu = system_metrics.get("cpu", {})
+            memory = system_metrics.get("memory", {})
+            disk = system_metrics.get("disk", {})
+
+            telemetry_event = TelemetryEvent(
+                device_id=self.device_id,
+                timestamp=telemetry.get("timestamp", datetime.utcnow().isoformat()),
+                component="async_pipeline",
+                cpu_percent=cpu.get("percent"),
+                memory_percent=memory.get("percent"),
+                disk_usage=disk.get("percent"),
+                process_count=len(telemetry.get("processes", [])),
+                network_connections=len(telemetry.get("network_connections", [])),
+                metrics_json=telemetry,
+            )
+            await self.database.insert_telemetry(telemetry_event)
+            logger.debug("telemetry_saved_to_database", device_id=self.device_id)
+        except Exception as e:
+            logger.error("telemetry_save_error", error=str(e))
 
     async def _publish_error_event(self, error_message: str, error_type: str) -> None:
         if self.event_bus._running:

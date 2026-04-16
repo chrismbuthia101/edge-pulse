@@ -2,6 +2,7 @@
 Supabase Sync Client for EdgePulse
 """
 
+import hashlib
 import httpx
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -72,7 +73,7 @@ class SupabaseSync:
 
         if self.device_id and self.api_key:
             headers["X-EdgePulse-Device-Id"] = self.device_id
-            headers["X-EdgePulse-Api-Key"] = self.api_key
+            headers["X-EdgePulse-Api-Key"] = self._hash_api_key(self.api_key, self.device_id)
         elif self.supabase_key:
             headers["apikey"] = self.supabase_key
             headers["Authorization"] = f"Bearer {self.supabase_key}"
@@ -84,6 +85,11 @@ class SupabaseSync:
 
         await self.check_connectivity()
         logger.info("async_supabase_client_initialized", online=self._online)
+
+    def _hash_api_key(self, api_key: str, device_id: str) -> str:
+        """Hash API key matching the backend's hash algorithm"""
+        hash_input = f"{api_key}ep-v1-{device_id}"
+        return hashlib.sha256(hash_input.encode()).hexdigest()
 
     async def close(self) -> None:
         """Close the async client"""
@@ -168,17 +174,21 @@ class SupabaseSync:
             raise NetworkError("Supabase is offline")
 
         try:
-            payload = [self._prepare_alert(alert) for alert in alerts]
+            prepared_alerts = [self._prepare_alert(alert) for alert in alerts]
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/alert_records",
-                json=payload,
-                headers={"Prefer": "return=minimal"},
+                f"{self.supabase_url}/functions/v1/sync-device-data",
+                json={"alerts": prepared_alerts},
             )
 
-            if response.status_code == 201:
-                logger.info("alerts_synced_successfully", count=len(alerts))
-                return True
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info("alerts_synced_successfully", count=result.get("alerts_synced", len(alerts)))
+                    return True
+                else:
+                    logger.error("alerts_sync_failed", error=result.get("error"))
+                    return False
             elif response.status_code == 401:
                 logger.critical(
                     "authentication_failure",
@@ -192,9 +202,10 @@ class SupabaseSync:
                 logger.error(
                     "alerts_sync_failed",
                     status=response.status_code,
-                    response=response.text[:200],
+                    response_body=response.text[:500],
+                    payload_sample=str(prepared_alerts[0])[:200] if prepared_alerts else "",
                 )
-                raise NetworkError(f"HTTP {response.status_code}: {response.text[:200]}")
+                raise NetworkError(f"HTTP {response.status_code}: {response.text[:500]}")
 
         except httpx.RequestError as e:
             logger.error("alerts_sync_network_error", error=str(e))
@@ -209,7 +220,7 @@ class SupabaseSync:
         return await self.batch_sync_alerts([alert])
 
     # ------------------------------------------------------------------
-    # Telemetry sync — POSTs to /telemetry_events
+    # Telemetry sync — POSTs to /functions/v1/sync-device-data
     # ------------------------------------------------------------------
 
     async def batch_sync_telemetry(self, telemetry_data: List[Dict[str, Any]]) -> bool:
@@ -219,17 +230,21 @@ class SupabaseSync:
             raise NetworkError("Supabase is offline")
 
         try:
-            payload = [self._prepare_telemetry(d) for d in telemetry_data]
+            prepared_telemetry = [self._prepare_telemetry(d) for d in telemetry_data]
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/telemetry_events",
-                json=payload,
-                headers={"Prefer": "return=minimal"},
+                f"{self.supabase_url}/functions/v1/sync-device-data",
+                json={"telemetry": prepared_telemetry},
             )
 
-            if response.status_code == 201:
-                logger.info("telemetry_synced_successfully", count=len(telemetry_data))
-                return True
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info("telemetry_synced_successfully", count=result.get("telemetry_synced", len(telemetry_data)))
+                    return True
+                else:
+                    logger.error("telemetry_sync_failed", error=result.get("error"))
+                    return False
             else:
                 logger.error(
                     "telemetry_sync_failed",
@@ -243,7 +258,7 @@ class SupabaseSync:
             return False
 
     # ------------------------------------------------------------------
-    # Device heartbeat — UPSERTs to /device_registry
+    # Device heartbeat — POSTs to /functions/v1/sync-device-data
     # ------------------------------------------------------------------
 
     async def update_device_heartbeat(self, heartbeat_data: Dict[str, Any]) -> bool:
@@ -253,11 +268,10 @@ class SupabaseSync:
         try:
             target_device_id = heartbeat_data.get("device_id") or self.device_id
 
-            # Match device_registry column names from migration 001
-            payload = {
-                "id":                target_device_id,
-                "name":               heartbeat_data.get("name") or get_device_name(),
-                "last_seen":         datetime.utcnow().isoformat(),
+            # Prepare heartbeat for Edge Function
+            heartbeat_payload = {
+                "device_id":         target_device_id,
+                "name":              heartbeat_data.get("name") or get_device_name(),
                 "status":            heartbeat_data.get("status", "online"),
                 "risk":              heartbeat_data.get("risk", "none"),
                 "cpu_percent":       heartbeat_data.get("cpu_usage") or heartbeat_data.get("cpu_percent"),
@@ -265,17 +279,18 @@ class SupabaseSync:
                 "sync_queue_depth":  heartbeat_data.get("sync_queue_depth", 0),
                 "alerts_count":      heartbeat_data.get("alerts_count", 0),
                 "agent_version":     heartbeat_data.get("version") or heartbeat_data.get("agent_version", "unknown"),
-                "actively_reporting": True,
                 "hash_chain_ok":     heartbeat_data.get("hash_chain_ok", True),
             }
 
             response = await self.client.post(
-                f"{self.supabase_url}/rest/v1/device_registry",
-                json=payload,
-                headers={"Prefer": "resolution=merge-duplicates"},
+                f"{self.supabase_url}/functions/v1/sync-device-data",
+                json={"heartbeat": heartbeat_payload},
             )
 
-            return response.status_code in (201, 204)
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("success") and result.get("heartbeat_updated")
+            return False
 
         except Exception as e:
             logger.error("update_device_heartbeat_error", device_id=self.device_id, error=str(e))

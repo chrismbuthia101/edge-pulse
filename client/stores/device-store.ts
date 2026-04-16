@@ -25,6 +25,7 @@ interface DeviceStore {
   isolateDevice: (deviceId: string) => Promise<void>;
   unisolateDevice: (deviceId: string) => Promise<void>;
   updateDeviceMetrics: (deviceId: string, metrics: UpdateDeviceMetricsParams) => Promise<void>;
+  deleteDevice: (deviceId: string) => Promise<void>;
 
   searchDevices: (query: string) => Promise<Device[]>;
   getDevicesNeedingAttention: () => Promise<Device[]>;
@@ -231,6 +232,33 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
       // Rollback
       if (previous) get().updateDevice(previous);
       set({ error: errorMessage(err) });
+    }
+  },
+
+  deleteDevice: async (deviceId) => {
+    const { devices } = get();
+    const deviceToDelete = devices.find((d) => d.id === deviceId);
+
+    if (!deviceToDelete) {
+      toast.error('Device not found');
+      return;
+    }
+
+    set({
+      devices: devices.filter((d) => d.id !== deviceId),
+      onlineCount: countOnline(devices.filter((d) => d.id !== deviceId)),
+    });
+
+    try {
+      await deviceService.deleteDevice(deviceId);
+      toast.success(`${deviceToDelete.name} deleted successfully`);
+    } catch (err) {
+      console.error('Failed to delete device:', err);
+      toast.error('Failed to delete device');
+      set({
+        devices: [...devices],
+        onlineCount: countOnline(devices),
+      });
     }
   },
 

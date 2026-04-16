@@ -233,11 +233,45 @@ class DeviceEnrollmentClient:
             # Remove config file so it is not re-processed on next start
             self.delete_enrollment_config()
 
+            # Update agent_config.json with the enrolled device_id
+            self._update_agent_config_device_id(response.device_id, supabase_url)
+
             logger.info("enrollment_complete", device_id=response.device_id)
             return True
 
         except Exception as e:
             logger.error("enrollment_complete_error", error=str(e))
+            return False
+
+    def _update_agent_config_device_id(self, device_id: str, supabase_url: Optional[str] = None) -> bool:
+        """Update agent_config.json with enrolled device_id and sync URL."""
+        try:
+            from edgepulse.utils.path_manager import PathManager
+
+            config_path = PathManager().get_config_path()
+            if not config_path.exists():
+                logger.warning("agent_config_not_found", path=str(config_path))
+                return False
+
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            config["device_id"] = device_id
+
+            # Update sync URL if provided
+            if supabase_url:
+                if "sync" not in config:
+                    config["sync"] = {}
+                config["sync"]["supabase_url"] = supabase_url
+
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+
+            logger.info("agent_config_updated", device_id=device_id, path=str(config_path))
+            return True
+
+        except Exception as e:
+            logger.warning("agent_config_update_failed", error=str(e))
             return False
 
     # ------------------------------------------------------------------

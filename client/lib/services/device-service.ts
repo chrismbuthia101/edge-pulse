@@ -160,6 +160,10 @@ export class DeviceService {
     return Promise.all(deviceIds.map((id) => this.unisolateDevice(id)));
   }
 
+  async deleteDevice(id: string): Promise<void> {
+    return this.repository.delete(id);
+  }
+
   // ── Aggregations ───────────────────────────────────────────────────────────
 
   async getMetrics(): Promise<DeviceMetrics> {

@@ -135,10 +135,10 @@ export default function LogsPage() {
             <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                     <Select value={selectedDevice} onValueChange={handleDeviceChange}>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select device" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" className="w-[--radix-select-trigger-width]">
                             <SelectItem value="all">All Devices</SelectItem>
                             {devices.map((device) => (
                                 <SelectItem key={device} value={device}>
@@ -150,10 +150,10 @@ export default function LogsPage() {
                 </div>
                 <div className="flex-1">
                     <Select value={entryTypeFilter} onValueChange={handleEntryTypeChange}>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                             <SelectValue placeholder="Filter by type" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" className="w-[--radix-select-trigger-width]">
                             <SelectItem value="all">All Types</SelectItem>
                             <SelectItem value="TELEMETRY">Telemetry</SelectItem>
                             <SelectItem value="ALERT">Alerts</SelectItem>

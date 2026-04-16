@@ -311,7 +311,7 @@ if [[ ! -f "${AGENT_CFG}" ]]; then
     "feature_selection": false
   },
   "detection": {
-    "threshold": 0.5,
+    "threshold": 0.3,
     "use_autoencoder": false,
     "use_ensemble": true,
     "isolation_forest_n_estimators": 100,
@@ -332,9 +332,9 @@ if [[ ! -f "${AGENT_CFG}" ]]; then
   "alerting": {
     "enabled": true,
     "correlation_window": 300,
-    "rate_limit": 5,
+    "rate_limit": 20,
     "rate_window": 3600,
-    "min_severity": "medium",
+    "min_severity": "low",
     "enable_local_notifications": true
   },
   "logging": {

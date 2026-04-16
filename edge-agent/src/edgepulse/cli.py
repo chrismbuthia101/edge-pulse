@@ -70,11 +70,11 @@ def _load_credentials_into_env() -> bool:
         credential_manager = CredentialManager()
         credentials = credential_manager.get_device_credentials()
         if credentials:
-            if credentials.supabase_url and not os.environ.get("SYNC__SUPABASE_URL"):
+            if credentials.supabase_url:
                 os.environ["SYNC__SUPABASE_URL"] = credentials.supabase_url
-            if credentials.api_key and not os.environ.get("SYNC__SUPABASE_KEY"):
+            if credentials.api_key:
                 os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
-            if credentials.device_id and not os.environ.get("DEVICE_ID"):
+            if credentials.device_id:
                 os.environ["DEVICE_ID"] = credentials.device_id
             # Return True only if both URL and key are present
             return bool(credentials.supabase_url and credentials.api_key)

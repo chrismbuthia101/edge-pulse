@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "edge-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Edge agent for edge-pulse monitoring system"
 authors = ["cipher_101"]
 readme = "README.md"

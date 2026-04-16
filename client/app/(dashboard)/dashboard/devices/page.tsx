@@ -17,7 +17,7 @@ import {
     Link2,
     Link2Off,
     Clock,
-    Activity,
+    Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -157,12 +157,34 @@ function IsolateModal({ deviceName, open, onClose, onConfirm }: {
     );
 }
 
+function DeleteDeviceModal({ deviceName, open, onClose, onConfirm }: {
+    deviceName: string; open: boolean; onClose: () => void; onConfirm: () => void;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Delete Device</DialogTitle>
+                    <DialogDescription>
+                        This will permanently remove <strong>{deviceName}</strong> from the system. This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button variant="destructive" onClick={onConfirm}>Delete Device</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function DevicesPage() {
     useEffect(() => {
         document.title = "Device Fleet - EdgePulse";
     }, []);
 
-    const { user, isAdmin } = useAuth();
+    const { user, hasRole } = useAuth();
+    const isAdmin = hasRole(["ADMINISTRATOR"]);
     const storeDevices = useDeviceStore((s) => s.devices);
     const router = useRouter();
     const initializedRef = useRef(false);
@@ -170,13 +192,15 @@ export default function DevicesPage() {
 
     useEffect(() => {
         if (!user) return;
-        if (storeDevices.length > 0 && lastUserIdRef.current === user.id && initializedRef.current) return;
-        
+        if (lastUserIdRef.current === user.id && initializedRef.current) return;
+
         initializedRef.current = true;
         lastUserIdRef.current = user.id;
-        const { refreshDevicesForUser } = useDeviceStore.getState();
-        refreshDevicesForUser(user.id, isAdmin);
-    }, [user, isAdmin, storeDevices.length]);
+        const { initialize: initDevices, loading } = useDeviceStore.getState();
+        if (!loading) {
+            initDevices();
+        }
+    }, [user]);
 
     const rawDevices = storeDevices.map((d) => ({
         id: d.id,
@@ -204,6 +228,7 @@ export default function DevicesPage() {
     const [sortDir, setSortDir] = useState<SortDir>("asc");
     const [enrollOpen, setEnrollOpen] = useState(false);
     const [isolateDevice, setIsolateDevice] = useState<{ id: string; name: string } | null>(null);
+    const [deleteDevice, setDeleteDevice] = useState<{ id: string; name: string } | null>(null);
     const [syncing, setSyncing] = useState(false);
 
     // Enrich with computed device state
@@ -280,6 +305,16 @@ export default function DevicesPage() {
         finally { setIsolateDevice(null); }
     };
 
+    const handleDeleteConfirm = async () => {
+        if (!deleteDevice) return;
+        try {
+            const { deleteDevice: storeDeleteDevice } = useDeviceStore.getState();
+            await storeDeleteDevice(deleteDevice.id);
+            setSelectedId(null);
+        } catch { toast.error("Failed to delete device"); }
+        finally { setDeleteDevice(null); }
+    };
+
     const SortIcon = ({ col }: { col: SortKey }) => {
         if (sortKey !== col) return null;
         return sortDir === "asc"
@@ -295,6 +330,12 @@ export default function DevicesPage() {
                 open={!!isolateDevice}
                 onClose={() => setIsolateDevice(null)}
                 onConfirm={handleIsolateConfirm}
+            />
+            <DeleteDeviceModal
+                deviceName={deleteDevice?.name ?? ""}
+                open={!!deleteDevice}
+                onClose={() => setDeleteDevice(null)}
+                onConfirm={handleDeleteConfirm}
             />
 
             {/* Header */}
@@ -616,6 +657,16 @@ export default function DevicesPage() {
                                             >
                                                 Isolate
                                             </Button>
+                                            {isAdmin && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                                    onClick={() => setDeleteDevice({ id: device.id, name: device.name })}
+                                                >
+                                                    Delete
+                                                </Button>
+                                            )}
                                         </div>
                                     </motion.div>
                                 )}

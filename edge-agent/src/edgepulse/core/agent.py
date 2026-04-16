@@ -35,6 +35,7 @@ from edgepulse.utils.error_handler import (
     DetectionError, SyncError, NetworkError,
 )
 from edgepulse.shared.metrics import create_metrics_collector, StandardMetrics
+from edgepulse.shared.schemas import DetectionEvent
 
 logger = get_logger(__name__)
 
@@ -59,6 +60,19 @@ class EdgePulseAgent:
         self.settings = settings or AgentSettings()
         if device_id:
             self.settings.device_id = device_id
+
+        # Load credentials early to get the real device_id
+        try:
+            from edgepulse.auth.credentials import CredentialManager
+            cred_manager = CredentialManager()
+            creds = cred_manager.get_device_credentials()
+            if creds and creds.device_id:
+                self.settings.device_id = creds.device_id
+                logger.info("loaded_device_credentials_early", device_id=creds.device_id)
+            else:
+                logger.debug("early_credentials_no_device_id", creds_exists=bool(creds))
+        except Exception as e:
+            logger.debug("early_credentials_load_failed", error=str(e))
 
         self.device_id = self.settings.device_id
 
@@ -129,6 +143,7 @@ class EdgePulseAgent:
                 device_id=self.device_id,
                 event_bus=self.event_bus,
                 metrics_collector=self.metrics,
+                database=self.database,
             )
 
             await self._setup_event_handlers()
@@ -491,6 +506,23 @@ class EdgePulseAgent:
                 detector=detection.get("detector"),
             )
 
+            # Save detection to local database
+            try:
+                detection_event = DetectionEvent(
+                    device_id=self.device_id,
+                    detector_name=detection.get("detector", "unknown"),
+                    label=detection.get("label", 0),
+                    anomaly_score=detection.get("anomaly_score", 0.0),
+                    confidence=detection.get("confidence", 0.0),
+                    features_used=detection.get("features_used"),
+                    model_version=detection.get("model_version", "1.0"),
+                    detection_metadata={"raw_detection": detection},
+                )
+                await self.database.insert_detection(detection_event)
+                logger.debug("detection_saved_to_database", device_id=self.device_id)
+            except Exception as e:
+                logger.error("detection_save_error", error=str(e))
+
             self.metrics.increment_counter(
                 StandardMetrics.ANOMALIES_DETECTED_TOTAL,
                 labels={'severity': severity_label},
@@ -549,6 +581,25 @@ class EdgePulseAgent:
             if not alert:
                 return
 
+            # Save alert to local database
+            try:
+                from edgepulse.shared.schemas import AlertEvent, SeverityLevel
+                alert_event = AlertEvent(
+                    device_id=self.device_id,
+                    timestamp=datetime.utcnow().isoformat(),
+                    severity=SeverityLevel(str(alert.get("severity", severity_label)).lower()),
+                    anomaly_score=alert.get("anomaly_score", 0.0),
+                    alert_type=alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
+                    detector_type=detection.get("detector", "unknown"),
+                    explanation=alert.get("explanation", {}),
+                    feature_importance=explanation.get("feature_importance") if explanation else None,
+                    acknowledged=False,
+                )
+                await self.database.insert_alert(alert_event)
+                logger.debug("alert_saved_to_database", alert_id=alert.get("alert_id"))
+            except Exception as e:
+                logger.error("alert_save_error", error=str(e))
+
             alert_severity = str(alert.get("severity", severity_label))
             self.metrics.record_alert(alert_severity)
 
@@ -584,7 +635,7 @@ class EdgePulseAgent:
                         "model_id": f"iforest-{self.device_id[:8]}",
                         "collection_agent_version": "1.0.0",
                         "inference_latency_ms": 0,
-                        "telemetry_source": "edge_agent",
+                        "telemetry_source": "PROCESS",
                         "created_at": datetime.utcnow().isoformat() + "Z",
                         "updated_at": datetime.utcnow().isoformat() + "Z",
                         "read": False,
