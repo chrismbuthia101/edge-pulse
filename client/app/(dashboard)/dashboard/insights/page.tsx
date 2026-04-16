@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
     Brain,
@@ -68,6 +68,9 @@ export default function InsightsPage() {
 
     const alerts = useAlertStore((s) => s.alerts);
     const devices = useDeviceStore((s) => s.devices);
+    const initAlerts = useAlertStore((s) => s.initialize);
+    const initDevices = useDeviceStore((s) => s.initialize);
+    const initializedRef = useRef(false);
 
     const formatTimeAgo = (dateString: string): string => {
         const now = new Date();
@@ -88,6 +91,14 @@ export default function InsightsPage() {
     useEffect(() => {
         document.title = "ML Insights - EdgePulse";
     }, []);
+
+    useEffect(() => {
+        if (!initializedRef.current && hasRole(["ADMINISTRATOR"])) {
+            initializedRef.current = true;
+            initAlerts();
+            initDevices();
+        }
+    }, [initAlerts, initDevices, hasRole]);
 
     useEffect(() => {
         if (!loading && !hasRole(["ADMINISTRATOR"])) {

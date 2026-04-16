@@ -260,6 +260,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
   reapproveUser: async (userId: string, role: "ANALYST" | "ADMINISTRATOR") => {
     const { users } = get();
+    const previousUser = users.find(u => u.user_id === userId);
 
     set({
       users: users.map(user =>
@@ -276,7 +277,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch (err) {
       console.error("Failed to reapprove user:", err);
       toast.error("Failed to reapprove user");
-      get().refreshUsers();
+      if (previousUser) {
+        set({ users: users.map(u => u.user_id === userId ? previousUser : u) });
+      }
     }
   },
 

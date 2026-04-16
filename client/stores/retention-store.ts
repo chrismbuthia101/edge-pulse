@@ -53,44 +53,54 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
   },
 
   updateRetentionPeriod: async (days: number, deviceId?: string) => {
-    set({ loading: true, error: null });
+    const previousPeriod = get().retentionPeriod;
+    const previousStorage = get().storageUsage;
+    
+    set({ retentionPeriod: days, loading: true, error: null });
     
     try {
       await retentionService.updateRetentionSettings(deviceId || 'global', days);
       
-      // Refresh storage usage after updating retention period
       const storageUsage = await retentionService.refreshStorageUsage(deviceId || 'global', days);
       
-      set({ 
-        retentionPeriod: days, 
-        storageUsage, 
-        loading: false 
-      });
+      set({ storageUsage, loading: false });
+      toast.success('Retention period updated');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update retention period';
-      set({ error: errorMessage, loading: false });
-      toast.error(errorMessage);
+      set({ 
+        retentionPeriod: previousPeriod,
+        storageUsage: previousStorage,
+        error: error instanceof Error ? error.message : 'Failed to update retention period',
+        loading: false
+      });
+      toast.error(error instanceof Error ? error.message : 'Failed to update retention period');
     }
   },
 
   purgeOldData: async (deviceId?: string) => {
-    set({ loading: true, error: null });
+    const previousStorage = get().storageUsage;
+    const optimisticStorage = {
+      ...previousStorage,
+      telemetry: previousStorage.telemetry * 0.9,
+      total: previousStorage.total * 0.9,
+    };
+    
+    set({ storageUsage: optimisticStorage, loading: true, error: null });
     
     try {
       const { retentionPeriod } = get();
       await retentionService.purgeOldData(deviceId || 'global', retentionPeriod);
       
-      // Refresh storage usage after purging
       const storageUsage = await retentionService.refreshStorageUsage(deviceId || 'global', retentionPeriod);
       
-      set({ 
-        storageUsage, 
-        loading: false 
-      });
+      set({ storageUsage, loading: false });
+      toast.success('Old data purged successfully');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to purge old data';
-      set({ error: errorMessage, loading: false });
-      toast.error(errorMessage);
+      set({ 
+        storageUsage: previousStorage,
+        error: error instanceof Error ? error.message : 'Failed to purge old data',
+        loading: false
+      });
+      toast.error(error instanceof Error ? error.message : 'Failed to purge old data');
     }
   },
 

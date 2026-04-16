@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ChevronRight,
@@ -146,13 +146,18 @@ export default function AlertsPage() {
 
     const { user, isAdmin } = useAuth();
     const { alerts, bulkAcknowledge } = useAlertStore();
+    const initializedRef = useRef(false);
+    const lastUserIdRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (user) {
-            const { refreshAlertsForUser } = useAlertStore.getState();
-            refreshAlertsForUser(user.id, isAdmin);
-        }
-    }, [user, isAdmin]);
+        if (!user) return;
+        if (alerts.length > 0 && lastUserIdRef.current === user.id && initializedRef.current) return;
+        
+        initializedRef.current = true;
+        lastUserIdRef.current = user.id;
+        const { refreshAlertsForUser } = useAlertStore.getState();
+        refreshAlertsForUser(user.id, isAdmin);
+    }, [user, isAdmin, alerts.length]);
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
     const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");

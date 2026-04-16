@@ -151,6 +151,7 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   },
 
   bulkUpdateStatus: async (ids, status, userId) => {
+    const previousAlerts = get().alerts;
     ids.forEach((id) => get().updateAlert(id, { status }));
 
     const operation =
@@ -167,7 +168,7 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
         options: { userId },
       });
     } catch (err) {
-      set({ error: errorMessage(err) });
+      set({ alerts: previousAlerts, error: errorMessage(err) });
     }
   },
 

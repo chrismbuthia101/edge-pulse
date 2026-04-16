@@ -67,12 +67,13 @@ export default function ResiliencePage() {
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [timeRange, setTimeRange] = useState<string>("1h");
 
-  const { summaries, totalPending, totalFailed, initialize } = useSyncQueueStore();
-  const { devices } = useDeviceStore();
+  const { summaries, totalPending, totalFailed, initialize: initSync } = useSyncQueueStore();
+  const { devices, initialize: initDevices } = useDeviceStore();
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    initSync();
+    initDevices();
+  }, [initSync, initDevices]);
 
   // Mock connection metrics data
   const connectionMetrics: ConnectionMetrics[] = useMemo(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -21,8 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCaseStore } from "@/stores/case-store";
 import { useAuth } from "@/lib/auth/useAuth";
-import { toast } from "sonner";
-import type { CaseStatus, CaseSeverity } from "@/lib/supabase/types";
 
 const severityColors = {
     LOW: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -41,38 +39,32 @@ const statusColors = {
 export default function CasesPage() {
     const router = useRouter();
     const { hasRole } = useAuth();
-    const { cases, loading, getCases, setCases } = useCaseStore();
+    const { cases, loading, initialize } = useCaseStore();
 
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [severityFilter, setSeverityFilter] = useState<string>("all");
-
-    const fetchCasesData = useCallback(async () => {
-        try {
-            const casesData = await getCases({
-                status: statusFilter !== "all" ? statusFilter as CaseStatus : undefined,
-                severity: severityFilter !== "all" ? severityFilter as CaseSeverity : undefined,
-                search: searchTerm || undefined,
-            });
-
-            setCases(casesData);
-        } catch (error) {
-            console.error("Failed to fetch cases:", error);
-            toast.error("Failed to load cases");
-        }
-    }, [statusFilter, severityFilter, searchTerm, getCases, setCases]);
+    const initializedRef = useRef(false);
 
     useEffect(() => {
         document.title = "Cases - EdgePulse";
-        fetchCasesData();
-    }, [statusFilter, severityFilter, searchTerm, fetchCasesData]);
+        if (!initializedRef.current) {
+            initializedRef.current = true;
+            initialize();
+        }
+    }, [initialize]);
 
-    const filteredCases = cases.filter(
-        (caseItem) =>
-            caseItem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (caseItem.description?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-            caseItem.case_number.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredCases = useMemo(() => {
+        return cases.filter((caseItem) => {
+            const matchesSearch =
+                caseItem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (caseItem.description?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+                caseItem.case_number.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesStatus = statusFilter === "all" || caseItem.status === statusFilter;
+            const matchesSeverity = severityFilter === "all" || caseItem.severity === severityFilter;
+            return matchesSearch && matchesStatus && matchesSeverity;
+        });
+    }, [cases, searchTerm, statusFilter, severityFilter]);
 
     const handleCreateCase = () => {
         router.push("/dashboard/cases/create");

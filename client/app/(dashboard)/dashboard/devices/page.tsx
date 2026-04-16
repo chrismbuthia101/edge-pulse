@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
     MonitorSmartphone,
@@ -165,13 +165,18 @@ export default function DevicesPage() {
     const { user, isAdmin } = useAuth();
     const storeDevices = useDeviceStore((s) => s.devices);
     const router = useRouter();
+    const initializedRef = useRef(false);
+    const lastUserIdRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (user) {
-            const { refreshDevicesForUser } = useDeviceStore.getState();
-            refreshDevicesForUser(user.id, isAdmin);
-        }
-    }, [user, isAdmin]);
+        if (!user) return;
+        if (storeDevices.length > 0 && lastUserIdRef.current === user.id && initializedRef.current) return;
+        
+        initializedRef.current = true;
+        lastUserIdRef.current = user.id;
+        const { refreshDevicesForUser } = useDeviceStore.getState();
+        refreshDevicesForUser(user.id, isAdmin);
+    }, [user, isAdmin, storeDevices.length]);
 
     const rawDevices = storeDevices.map((d) => ({
         id: d.id,

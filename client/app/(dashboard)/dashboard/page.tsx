@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Alert } from "@/lib/supabase/types";
 import {
     ShieldAlert,
@@ -18,16 +18,25 @@ import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
+import { useAuth } from "@/lib/auth/useAuth";
 
 export default function DashboardPage() {
     useEffect(() => {
         document.title = "Security Dashboard - EdgePulse";
     }, []);
 
-    const alerts = useAlertStore((s) => s.alerts);
-    const pendingCount = useAlertStore((s) => s.pendingCount);
-    const devices = useDeviceStore((s) => s.devices);
-    const onlineCount = useDeviceStore((s) => s.onlineCount);
+    const { user } = useAuth();
+    const initialized = useRef(false);
+
+    const { initialize: initAlerts, alerts, pendingCount, loading: alertsLoading } = useAlertStore();
+    const { initialize: initDevices, devices, onlineCount, loading: devicesLoading } = useDeviceStore();
+
+    useEffect(() => {
+        if (!user || initialized.current) return;
+        initialized.current = true;
+        initAlerts();
+        initDevices();
+    }, [user, initAlerts, initDevices]);
 
     const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length, [alerts]);
     const anomaliesResolved = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length, [alerts]);
@@ -45,8 +54,8 @@ export default function DashboardPage() {
     const stats = useMemo(() => [
         {
             title: "Total Devices",
-            value: devices.length.toLocaleString(),
-            delta: `${onlineCount} online`,
+            value: devicesLoading ? "—" : devices.length.toLocaleString(),
+            delta: devicesLoading ? "Loading..." : `${onlineCount} online`,
             deltaPositive: true,
             icon: MonitorSmartphone,
             accent: "text-primary",
@@ -56,8 +65,8 @@ export default function DashboardPage() {
         },
         {
             title: "Active Alerts",
-            value: activeAlerts.toString(),
-            delta: `${pendingCount} pending`,
+            value: alertsLoading ? "—" : activeAlerts.toString(),
+            delta: alertsLoading ? "Loading..." : `${pendingCount} pending`,
             deltaPositive: pendingCount === 0,
             icon: ShieldAlert,
             accent: "text-destructive",
@@ -78,8 +87,8 @@ export default function DashboardPage() {
         },
         {
             title: "Anomalies Resolved",
-            value: anomaliesResolved.toLocaleString(),
-            delta: `${resolvedToday} today`,
+            value: alertsLoading ? "—" : anomaliesResolved.toLocaleString(),
+            delta: alertsLoading ? "Loading..." : `${resolvedToday} today`,
             deltaPositive: true,
             icon: Shield,
             accent: "text-violet-500",
@@ -87,7 +96,7 @@ export default function DashboardPage() {
             accentBorder: "border-violet-500/20",
             href: null,
         },
-    ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, anomaliesResolved, resolvedToday]);
+    ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, anomaliesResolved, resolvedToday, devicesLoading, alertsLoading]);
 
     return (
         <div className="space-y-4 lg:space-y-6 max-w-[1400px]">

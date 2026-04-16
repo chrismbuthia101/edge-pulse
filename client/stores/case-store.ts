@@ -123,23 +123,51 @@ export const useCaseStore = create<CaseStore>((set, get) => ({
   // ── Remote mutations ───────────────────────────────────────────────────────
 
   createCase: async (caseData) => {
+    const optimisticCase: Case = {
+      id: `temp-${Date.now()}`,
+      case_number: `CASE-${Date.now()}`,
+      title: caseData.title,
+      description: caseData.description,
+      severity: caseData.severity,
+      status: 'OPEN',
+      assigned_to: caseData.assignedTo || null,
+      alert_count: caseData.alertIds?.length || 0,
+      created_by: caseData.userId || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+      started_at: null,
+      closed_at: null,
+      closed_by: null,
+    };
+
+    set((state) => ({ cases: [optimisticCase, ...state.cases] }));
+
     try {
       const newCase = await caseService.createCase(caseData);
-      set((state) => ({ cases: [newCase, ...state.cases] }));
+      set((state) => ({
+        cases: state.cases.map((c) =>
+          c.id === optimisticCase.id ? newCase : c
+        ),
+      }));
       toast.success('Case created successfully');
       return newCase;
     } catch (err) {
+      set((state) => ({
+        cases: state.cases.filter((c) => c.id !== optimisticCase.id),
+      }));
       set({ error: errorMessage(err) });
       throw err;
     }
   },
 
   updateCaseStatus: async (id, status, userId) => {
+    const previous = get().cases.find((c) => c.id === id);
+    
+    get().updateCase(id, { status });
+
     try {
       await caseService.updateCaseStatus(id, status, { userId });
-
-      // Optimistic update
-      get().updateCase(id, { status });
 
       if (status === 'CLOSED') {
         toast.success('Case closed');
@@ -147,32 +175,48 @@ export const useCaseStore = create<CaseStore>((set, get) => ({
         toast.success('Case updated to in progress');
       }
     } catch (err) {
+      if (previous) get().updateCase(id, { status: previous.status });
       set({ error: errorMessage(err) });
       throw err;
     }
   },
 
   assignCase: async (id, assignedTo) => {
+    const previous = get().cases.find((c) => c.id === id);
+    
+    get().updateCase(id, { assigned_to: assignedTo });
+
     try {
       await caseService.assignCase(id, assignedTo);
-      get().updateCase(id, { assigned_to: assignedTo });
       toast.success('Case assigned');
     } catch (err) {
+      if (previous) get().updateCase(id, { assigned_to: previous.assigned_to });
       set({ error: errorMessage(err) });
       throw err;
     }
   },
 
   closeCase: async (id, userId) => {
+    const previous = get().cases.find((c) => c.id === id);
+    const closedAt = new Date().toISOString();
+    
+    get().updateCase(id, {
+      status: 'CLOSED',
+      closed_at: closedAt,
+      closed_by: userId
+    });
+
     try {
       await caseService.updateCaseStatus(id, 'CLOSED', { userId });
-      get().updateCase(id, {
-        status: 'CLOSED',
-        closed_at: new Date().toISOString(),
-        closed_by: userId
-      });
       toast.success('Case closed');
     } catch (err) {
+      if (previous) {
+        get().updateCase(id, {
+          status: previous.status,
+          closed_at: previous.closed_at,
+          closed_by: previous.closed_by
+        });
+      }
       set({ error: errorMessage(err) });
       throw err;
     }
