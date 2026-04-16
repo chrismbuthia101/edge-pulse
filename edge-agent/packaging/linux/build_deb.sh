@@ -240,6 +240,7 @@ if [[ ! -f "${ENROLL_CFG}" ]]; then
 {
   "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",
   "enrollment_token": "YOUR_ENROLLMENT_TOKEN",
+  "supabase_anon_key": "YOUR_ANON_KEY",
   "device_hostname": null,
   "device_os": null,
   "agent_version": null,
@@ -362,10 +363,11 @@ cat <<'INSTRUCTIONS'
 ║                                                                              ║
 ║    sudo nano /etc/edgepulse/enrollment.json                                  ║
 ║                                                                              ║
-║  Set BOTH of these values (get them from your EdgePulse dashboard):          ║
-║    "supabase_url"      → your Supabase project URL                           ║
-║                          e.g. https://abcdefghij.supabase.co                ║
-║    "enrollment_token"  → one-time token from the Devices page                ║
+║  Set ALL of these values (get them from your EdgePulse dashboard):           ║
+║    "supabase_url"       → your Supabase project URL                          ║
+║                           e.g. https://abcdefghij.supabase.co               ║
+║    "enrollment_token"   → one-time token from the Devices page               ║
+║    "supabase_anon_key"  → your Supabase anon/public API key                  ║
 ║                                                                              ║
 ║  STEP 2 — Enroll this device                                                 ║
 ║  ────────────────────────────                                                ║

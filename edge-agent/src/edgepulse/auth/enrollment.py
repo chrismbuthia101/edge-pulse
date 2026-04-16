@@ -35,6 +35,7 @@ class EnrollmentConfig:
     """Parsed content of enroll.cfg / enrollment.json."""
     supabase_url: str
     enrollment_token: str
+    supabase_anon_key: Optional[str] = None
     device_hostname: Optional[str] = None
     device_os: Optional[str] = None
     agent_version: Optional[str] = None
@@ -97,6 +98,7 @@ class DeviceEnrollmentClient:
                 return EnrollmentConfig(
                     supabase_url=data["supabase_url"],
                     enrollment_token=data["enrollment_token"],
+                    supabase_anon_key=data.get("supabase_anon_key"),
                     device_hostname=data.get("device_hostname"),
                     device_os=data.get("device_os"),
                     agent_version=data.get("agent_version"),
@@ -114,6 +116,7 @@ class DeviceEnrollmentClient:
                 return EnrollmentConfig(
                     supabase_url=cfg["supabase_url"],
                     enrollment_token=cfg["enrollment_token"],
+                    supabase_anon_key=cfg.get("supabase_anon_key"),
                     device_hostname=cfg.get("device_hostname"),
                     device_os=cfg.get("device_os"),
                     agent_version=cfg.get("agent_version"),
@@ -161,14 +164,20 @@ class DeviceEnrollmentClient:
 
             enrollment_url = f"{config.supabase_url}/functions/v1/enroll-device"
 
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": f"EdgePulseAgent/{agent_version}",
+            }
+
+            # Add Supabase anon key for edge function authentication
+            if config.supabase_anon_key:
+                headers["Authorization"] = f"Bearer {config.supabase_anon_key}"
+
             async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
                 response = await client.post(
                     enrollment_url,
                     json=enrollment_data,
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": f"EdgePulseAgent/{agent_version}",
-                    },
+                    headers=headers,
                 )
 
             if response.status_code == 200:

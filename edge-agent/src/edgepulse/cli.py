@@ -123,6 +123,11 @@ def main():
             type=str,
             help="Supabase URL (can also be provided via config file)",
         )
+        enroll_parser.add_argument(
+            "--anon-key",
+            type=str,
+            help="Supabase anon key (can also be provided via config file)",
+        )
 
     # ── status subcommand ─────────────────────────────────────────────────────
     subparsers.add_parser("status", help="Show enrollment and agent status")
@@ -273,6 +278,7 @@ def _run_enrollment(args) -> int:
             config = EnrollmentConfig(
                 supabase_url=data["supabase_url"],
                 enrollment_token=data["enrollment_token"],
+                supabase_anon_key=data.get("supabase_anon_key"),
                 device_hostname=data.get("device_hostname"),
                 device_os=data.get("device_os"),
                 agent_version=data.get("agent_version"),
@@ -289,9 +295,11 @@ def _run_enrollment(args) -> int:
     if config is None and hasattr(args, "token") and args.token \
             and hasattr(args, "supabase_url") and args.supabase_url:
         from edgepulse.auth.enrollment import EnrollmentConfig
+        anon_key = getattr(args, "anon_key", None)
         config = EnrollmentConfig(
             supabase_url=args.supabase_url,
             enrollment_token=args.token,
+            supabase_anon_key=anon_key,
         )
 
     if not config:
@@ -305,7 +313,8 @@ def _run_enrollment(args) -> int:
         print("  Contents:")
         print('  {')
         print('    "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",')
-        print('    "enrollment_token": "YOUR_ENROLLMENT_TOKEN"')
+        print('    "enrollment_token": "YOUR_ENROLLMENT_TOKEN",')
+        print('    "supabase_anon_key": "YOUR_ANON_KEY"')
         print('  }')
         print()
         print("Then run:  sudo /opt/edgepulse/venv/bin/edge-agent enroll")
