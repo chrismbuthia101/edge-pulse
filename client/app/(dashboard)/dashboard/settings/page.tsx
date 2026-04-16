@@ -437,7 +437,7 @@ export default function SettingsPage() {
                                 <div className="pt-4 border-t border-border space-y-3">
                                     <p className="text-sm font-medium text-foreground">Agent Behavior</p>
                                     {[
-                                        { label: "Auto-block on critical detections", desc: "Automatically isolate device when critical threat detected", on: true },
+                                        { label: "Auto-block on critical detections", desc: "Automatically isolate device when critical anomaly detected", on: true },
                                         { label: "Offline mode fallback", desc: "Continue detection without cloud connectivity", on: true },
                                         { label: "Send telemetry to dashboard", desc: "Stream real-time events to central dashboard", on: true },
                                         { label: "Auto-update agents", desc: "Silently update agents when new version available", on: false },

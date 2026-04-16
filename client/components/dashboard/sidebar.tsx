@@ -275,7 +275,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                     ))}
                 </nav>
 
-                {/* Threat level indicator */}
+                {/* Anomaly level indicator */}
                 <AnimatePresence>
                     {!collapsed && (
                         <motion.div
@@ -288,7 +288,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                 <div className="flex items-center gap-2 mb-2">
                                     <Zap className="h-3.5 w-3.5 text-amber-500" />
                                     <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                        Threat Level: Medium
+                                        Anomaly Level: Medium
                                     </span>
                                 </div>
                                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">

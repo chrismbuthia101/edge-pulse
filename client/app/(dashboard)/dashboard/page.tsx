@@ -12,7 +12,7 @@ import {
     ArrowDownRight,
     Activity,
 } from "lucide-react";
-import { ThreatChart } from "@/components/dashboard/threat-chart";
+import { AnomalyChart } from "@/components/dashboard/anomaly-chart";
 import { AlertFeed } from "@/components/dashboard/alert-feed";
 import { ShapPanel } from "@/components/dashboard/shap-panel";
 import { SystemHealth } from "@/components/dashboard/system-health";
@@ -30,7 +30,7 @@ export default function DashboardPage() {
     const onlineCount = useDeviceStore((s) => s.onlineCount);
 
     const activeAlerts = useMemo(() => alerts.filter((a) => a.status !== "CLOSED").length, [alerts]);
-    const threatsBlocked = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length, [alerts]);
+    const anomaliesResolved = useMemo(() => alerts.filter((a) => a.status === "CLOSED").length, [alerts]);
 
     const latencyAlerts = useMemo(() => alerts.filter((a) => a.inference_latency_ms > 0).slice(0, 50), [alerts]);
     const avgLatency = useMemo(() => latencyAlerts.length > 0
@@ -77,8 +77,8 @@ export default function DashboardPage() {
             href: null,
         },
         {
-            title: "Threats Blocked",
-            value: threatsBlocked.toLocaleString(),
+            title: "Anomalies Resolved",
+            value: anomaliesResolved.toLocaleString(),
             delta: `${resolvedToday} today`,
             deltaPositive: true,
             icon: Shield,
@@ -87,7 +87,7 @@ export default function DashboardPage() {
             accentBorder: "border-violet-500/20",
             href: null,
         },
-    ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, threatsBlocked, resolvedToday]);
+    ], [devices, onlineCount, activeAlerts, pendingCount, avgLatency, anomaliesResolved, resolvedToday]);
 
     return (
         <div className="space-y-4 lg:space-y-6 max-w-[1400px]">
@@ -155,7 +155,7 @@ export default function DashboardPage() {
             {/* Main content */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-5">
                 <div className="xl:col-span-2 space-y-4 lg:space-y-5">
-                    <ThreatChart />
+                    <AnomalyChart />
                     <AlertFeed />
                 </div>
                 <div className="space-y-4 lg:space-y-5">

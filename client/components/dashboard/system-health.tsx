@@ -12,33 +12,25 @@ import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-servic
 const telemetryService = new TelemetryService();
 const anomalyService = new AnomalyService(anomalyRepository);
 
-const defaultServices = [
-    { name: "ML Inference Engine", status: "operational", latency: "12ms" },
-    { name: "Alert Pipeline", status: "operational", latency: "4ms" },
-    { name: "Device Sync Service", status: "operational", latency: "280ms" },
-    { name: "SHAP Explainer", status: "operational", latency: "28ms" },
-    { name: "Database Cluster", status: "operational", latency: "6ms" },
-    { name: "Backup Service", status: "operational", latency: "120ms" },
-];
-
 const statusConfig = {
     operational: { label: "Operational", color: "text-green-500", bg: "bg-green-500", dot: "bg-green-500" },
     degraded: { label: "Degraded", color: "text-amber-500", bg: "bg-amber-500", dot: "bg-amber-500" },
     down: { label: "Down", color: "text-destructive", bg: "bg-destructive", dot: "bg-destructive" },
+    unknown: { label: "Unknown", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-muted-foreground" },
 };
 
 export function SystemHealth() {
     const alerts = useAlertStore((s) => s.alerts);
     const devices = useDeviceStore((s) => s.devices);
-    const [services, setServices] = useState(defaultServices);
+    const [services, setServices] = useState<Array<{ name: string; status: string; latency: string }>>([]);
     const [agentMetrics, setAgentMetrics] = useState({
-        cpuUsage: 3.2,
-        memoryUsage: 124,
-        inferenceLatency: 12,
-        scoringCpuUsage: 8.7,
-        uptime: 99.94,
-        lastScored: "2m ago",
-        modelVersion: "v2.4.1"
+        cpuUsage: 0,
+        memoryUsage: 0,
+        inferenceLatency: 0,
+        scoringCpuUsage: 0,
+        uptime: 0,
+        lastScored: "No data",
+        modelVersion: "—"
     });
     const [loading, setLoading] = useState(true);
 
@@ -49,9 +41,9 @@ export function SystemHealth() {
 
                 const avgLatency = alerts.length > 0
                     ? alerts.reduce((sum, a) => sum + a.inference_latency_ms, 0) / alerts.length
-                    : 12;
+                    : 0;
 
-                let telemetryData = { avgCpu: 3.2, avgRam: 124 };
+                let telemetryData = { avgCpu: 0, avgRam: 0 };
                 if (devices.length > 0) {
                     telemetryData = await telemetryService.getTelemetryMetrics(devices[0].id);
                 }
@@ -67,6 +59,30 @@ export function SystemHealth() {
                     }
                 }
 
+                const derivedServices = [
+                    {
+                        name: "ML Inference Engine",
+                        status: alerts.length > 0 ? "operational" : "unknown",
+                        latency: `${Math.round(avgLatency)}ms`
+                    },
+                    {
+                        name: "Alert Pipeline",
+                        status: alerts.length > 0 ? "operational" : "unknown",
+                        latency: "—"
+                    },
+                    {
+                        name: "Device Sync Service",
+                        status: devices.length > 0 ? "operational" : "unknown",
+                        latency: "—"
+                    },
+                    {
+                        name: "Database Cluster",
+                        status: "operational",
+                        latency: "—"
+                    },
+                ];
+                setServices(derivedServices);
+
                 setAgentMetrics({
                     cpuUsage: telemetryData.avgCpu,
                     memoryUsage: telemetryData.avgRam,
@@ -74,16 +90,8 @@ export function SystemHealth() {
                     scoringCpuUsage: Math.min(telemetryData.avgCpu * 2.5, 15), // Estimate scoring CPU
                     uptime: devices.length > 0 ? 99.9 : 0, // Simplified uptime calculation
                     lastScored,
-                    modelVersion: "v2.4.1"
+                    modelVersion: "—"
                 });
-
-                const updatedServices = defaultServices.map(service => {
-                    if (service.name === "ML Inference Engine") {
-                        return { ...service, latency: `${Math.round(avgLatency)}ms` };
-                    }
-                    return service;
-                });
-                setServices(updatedServices);
 
             } catch (error) {
                 console.error('Failed to load health data:', error);

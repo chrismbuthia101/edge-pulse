@@ -32,7 +32,7 @@ const stats = [
   { label: "SHAP XAI Engine", icon: Brain },
 ];
 
-const threatEvents = [
+const anomalyEvents = [
   { time: "00:01", event: "Port scan detected", device: "srv-prod-01", severity: "high" },
   { time: "00:03", event: "Unusual outbound traffic", device: "dev-laptop-07", severity: "critical" },
   { time: "00:05", event: "Auth brute-force attempt", device: "ws-finance-03", severity: "high" },
@@ -277,7 +277,7 @@ export function Hero() {
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   {[
                     { label: "Devices", value: "1,247", delta: "+3", color: "text-primary" },
-                    { label: "Threats Blocked", value: "89", delta: "today", color: "text-destructive" },
+                    { label: "Anomalies Blocked", value: "89", delta: "today", color: "text-destructive" },
                     { label: "Avg Response", value: "312ms", delta: "↓18%", color: "text-green-600 dark:text-green-400" },
                   ].map((s) => (
                     <div key={s.label} className="bg-card rounded-xl border border-border p-3">
@@ -288,7 +288,7 @@ export function Hero() {
                   ))}
                 </div>
 
-                {/* Critical threat banner */}
+                {/* Critical anomaly banner */}
                 <motion.div
                   className="flex items-center gap-3 p-3 mb-4 rounded-xl bg-destructive/8 border border-destructive/20"
                   animate={{ opacity: [0.8, 1, 0.8] }}
@@ -350,7 +350,7 @@ export function Hero() {
                 <div>
                   <p className="text-xs font-semibold text-foreground mb-2">Live Event Feed</p>
                   <div className="space-y-1.5">
-                    {threatEvents.map((ev, i) => (
+                    {anomalyEvents.map((ev, i) => (
                       <motion.div
                         key={i}
                         initial={{ opacity: 0, x: -8 }}

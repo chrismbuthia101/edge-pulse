@@ -65,17 +65,6 @@ function computeDeviceState(status: string, lastSeenIso?: string, syncQueueDepth
     return "unsynced";
 }
 
-const FALLBACK_DEVICES = [
-    { id: "1", name: "srv-prod-01", type: "server", status: "online", risk: "high", alerts: 3, os: "Ubuntu 22.04", lastSeen: "Just now", lastSeenIso: new Date(Date.now() - 30000).toISOString(), ip: "10.0.1.10", agent: "v2.4.1", cpu: 67, mem: 82, syncQueueDepth: 0, hashChainOk: true },
-    { id: "2", name: "dev-laptop-07", type: "laptop", status: "online", risk: "critical", alerts: 5, os: "macOS 14.3", lastSeen: "Just now", lastSeenIso: new Date(Date.now() - 60000).toISOString(), ip: "10.0.2.47", agent: "v2.4.1", cpu: 91, mem: 74, syncQueueDepth: 2, hashChainOk: true },
-    { id: "3", name: "ws-finance-03", type: "workstation", status: "online", risk: "medium", alerts: 1, os: "Windows 11", lastSeen: "2m ago", lastSeenIso: new Date(Date.now() - 120000).toISOString(), ip: "10.0.3.23", agent: "v2.4.0", cpu: 34, mem: 55, syncQueueDepth: 0, hashChainOk: true },
-    { id: "4", name: "srv-db-02", type: "server", status: "online", risk: "critical", alerts: 2, os: "RHEL 9", lastSeen: "Just now", lastSeenIso: new Date(Date.now() - 45000).toISOString(), ip: "10.0.1.22", agent: "v2.4.1", cpu: 78, mem: 91, syncQueueDepth: 0, hashChainOk: false },
-    { id: "5", name: "gw-primary", type: "server", status: "online", risk: "medium", alerts: 1, os: "pfSense 2.7", lastSeen: "5m ago", lastSeenIso: new Date(Date.now() - 300000).toISOString(), ip: "10.0.0.1", agent: "v2.4.1", cpu: 23, mem: 41, syncQueueDepth: 5, hashChainOk: true },
-    { id: "6", name: "dev-macbook-12", type: "laptop", status: "online", risk: "low", alerts: 0, os: "macOS 14.3", lastSeen: "12m ago", lastSeenIso: new Date(Date.now() - 720000).toISOString(), ip: "10.0.2.52", agent: "v2.4.1", cpu: 12, mem: 38, syncQueueDepth: 0, hashChainOk: true },
-    { id: "7", name: "srv-backup-01", type: "server", status: "offline", risk: "none", alerts: 0, os: "Debian 12", lastSeen: "2h ago", lastSeenIso: new Date(Date.now() - 7200000).toISOString(), ip: "10.0.1.30", agent: "v2.3.9", cpu: 0, mem: 0, syncQueueDepth: 18, hashChainOk: true },
-    { id: "8", name: "ws-eng-05", type: "workstation", status: "online", risk: "low", alerts: 0, os: "Windows 11", lastSeen: "3m ago", lastSeenIso: new Date(Date.now() - 180000).toISOString(), ip: "10.0.3.35", agent: "v2.4.1", cpu: 45, mem: 62, syncQueueDepth: 0, hashChainOk: true },
-];
-
 type RiskFilter = "all" | "critical" | "high" | "medium" | "low" | "none";
 type StatusFilter = "all" | "reporting" | "silent" | "unsynced" | "offline";
 type SortKey = "name" | "risk" | "state" | "cpu" | "mem" | "syncQueue" | null;
@@ -184,25 +173,23 @@ export default function DevicesPage() {
         }
     }, [user, isAdmin]);
 
-    const rawDevices = storeDevices.length > 0
-        ? storeDevices.map((d) => ({
-            id: d.id,
-            name: d.name,
-            type: d.type ?? "workstation",
-            status: d.status,
-            risk: d.risk ?? "none",
-            alerts: d.alerts_count ?? 0,
-            os: d.os ?? "Unknown",
-            lastSeen: d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "Unknown",
-            lastSeenIso: d.last_seen ?? null,
-            ip: d.ip ?? "—",
-            agent: d.agent_version ?? "—",
-            cpu: d.cpu_percent ?? 0,
-            mem: d.ram_percent ?? 0,
-            syncQueueDepth: d.sync_queue_depth ?? 0,
-            hashChainOk: d.hash_chain_ok ?? true,
-        }))
-        : FALLBACK_DEVICES;
+    const rawDevices = storeDevices.map((d) => ({
+        id: d.id,
+        name: d.name,
+        type: d.type ?? "workstation",
+        status: d.status,
+        risk: d.risk ?? "none",
+        alerts: d.alerts_count ?? 0,
+        os: d.os ?? "Unknown",
+        lastSeen: d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "Unknown",
+        lastSeenIso: d.last_seen ?? null,
+        ip: d.ip ?? "—",
+        agent: d.agent_version ?? "—",
+        cpu: d.cpu_percent ?? 0,
+        mem: d.ram_percent ?? 0,
+        syncQueueDepth: d.sync_queue_depth ?? 0,
+        hashChainOk: d.hash_chain_ok ?? true,
+    }));
 
     const [search, setSearch] = useState("");
     const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
@@ -630,9 +617,39 @@ export default function DevicesPage() {
                             </motion.div>
                         );
                     })}
+
+                    {/* Empty state when no devices */}
+                    {enrichedDevices.length === 0 && (
+                        <div className="px-5 py-16 text-center">
+                            <MonitorSmartphone className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-sm font-medium text-foreground mb-1">No devices enrolled</p>
+                            <p className="text-xs text-muted-foreground mb-4">
+                                Install the EdgePulse agent on your devices to start monitoring
+                            </p>
+                            {isAdmin && (
+                                <Button size="sm" onClick={() => setEnrollOpen(true)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Enroll Device
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Empty state when filter returns no results */}
+                    {enrichedDevices.length > 0 && filtered.length === 0 && (
+                        <div className="px-5 py-16 text-center">
+                            <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-sm font-medium text-foreground mb-1">No devices match your filters</p>
+                            <p className="text-xs text-muted-foreground">
+                                Try adjusting your search or filter criteria
+                            </p>
+                        </div>
+                    )}
                 </div>
                 <div className="px-5 py-3 border-t border-border">
-                    <p className="text-xs text-muted-foreground">Showing {filtered.length} of {enrichedDevices.length} devices</p>
+                    <p className="text-xs text-muted-foreground">
+                        {enrichedDevices.length > 0 ? `Showing ${filtered.length} of ${enrichedDevices.length} devices` : "No devices enrolled"}
+                    </p>
                 </div>
             </div>
         </div>

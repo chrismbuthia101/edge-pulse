@@ -77,7 +77,7 @@ export interface AlertMetrics {
   low: number;
   avgAnomalyScore: number;
   avgInferenceLatency: number;
-  threatsBlocked: number;
+  anomaliesResolved: number;
   resolvedToday: number;
 }
 
@@ -349,7 +349,7 @@ export class AlertRepository extends BaseRepository<Alert> {
           pending: 0, acknowledged: 0, investigated: 0, closed: 0,
           critical: 0, high: 0, medium: 0, low: 0,
           avgAnomalyScore: 0, avgInferenceLatency: 0,
-          threatsBlocked: 0, resolvedToday: 0,
+          anomaliesResolved: 0, resolvedToday: 0,
         };
 
         let scoreSum = 0, scoreCount = 0, latencySum = 0, latencyCount = 0;
@@ -370,7 +370,7 @@ export class AlertRepository extends BaseRepository<Alert> {
           const score = anomalyScore(a);
           if (score !== null) { scoreSum += score; scoreCount++; }
           if ((a.inference_latency_ms ?? 0) > 0) { latencySum += a.inference_latency_ms; latencyCount++; }
-          if (a.status === 'CLOSED' && (a.severity === 'critical' || a.severity === 'high')) metrics.threatsBlocked++;
+          if (a.status === 'CLOSED' && (a.severity === 'critical' || a.severity === 'high')) metrics.anomaliesResolved++;
           if (a.status === 'CLOSED' && a.closed_at && new Date(a.closed_at).toDateString() === today) metrics.resolvedToday++;
         }
 

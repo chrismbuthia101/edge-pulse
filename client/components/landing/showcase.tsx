@@ -14,7 +14,7 @@ const showcaseItems = [
       "A unified operations center that surfaces the alerts that matter, with full context and explainability — so your team can act fast without chasing noise.",
     icon: Monitor,
     features: [
-      "Live threat feed with severity triage",
+      "Live anomaly feed with severity triage",
       "SHAP anomaly score breakdowns",
       "Device fleet management & health",
       "Customizable alert thresholds",

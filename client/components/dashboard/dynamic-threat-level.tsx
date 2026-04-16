@@ -6,20 +6,20 @@ import { Shield, ShieldAlert, ShieldX, Activity } from "lucide-react";
 import { useAlertStore } from "@/stores/alert-store";
 import { useDeviceStore } from "@/stores/device-store";
 
-interface ThreatLevel {
+interface AnomalyLevel {
   level: "low" | "medium" | "high" | "critical";
   score: number;
   trend: "rising" | "stable" | "falling";
-  activeThreats: number;
+  activeAnomalies: number;
   criticalDevices: number;
   recommendation: string;
 }
 
-export function DynamicThreatLevel() {
+export function DynamicAnomalyLevel() {
   const alerts = useAlertStore((s) => s.alerts);
   const devices = useDeviceStore((s) => s.devices);
 
-  const threatLevel: ThreatLevel = useMemo(() => {
+  const anomalyLevel: AnomalyLevel = useMemo(() => {
     // Get recent alerts from last 24 hours
     const now = new Date().getTime();
     const recentAlerts = alerts.filter(
@@ -56,7 +56,7 @@ export function DynamicThreatLevel() {
     else if (scoreDiff < -2) trend = "falling";
     else trend = "stable";
 
-    // Determine threat level
+    // Determine anomaly level
     let level: "low" | "medium" | "high" | "critical";
     if (normalizedScore >= 75) level = "critical";
     else if (normalizedScore >= 50) level = "high";
@@ -72,16 +72,16 @@ export function DynamicThreatLevel() {
     let recommendation: string;
     switch (level) {
       case "critical":
-        recommendation = "Immediate investigation required. Multiple critical threats detected.";
+        recommendation = "Immediate investigation required. Multiple critical anomalies detected.";
         break;
       case "high":
-        recommendation = "Elevated threat level. Monitor closely and consider proactive measures.";
+        recommendation = "Elevated anomaly level. Monitor closely and consider proactive measures.";
         break;
       case "medium":
-        recommendation = "Moderate threat activity. Continue normal monitoring.";
+        recommendation = "Moderate anomaly activity. Continue normal monitoring.";
         break;
       case "low":
-        recommendation = "Low threat level. Systems operating within normal parameters.";
+        recommendation = "Low anomaly level. Systems operating within normal parameters.";
         break;
     }
 
@@ -89,13 +89,13 @@ export function DynamicThreatLevel() {
       level,
       score: Math.round(normalizedScore),
       trend,
-      activeThreats: recentAlerts.length,
+      activeAnomalies: recentAlerts.length,
       criticalDevices,
       recommendation,
     };
   }, [alerts, devices]);
 
-  const getThreatColors = (level: string) => {
+  const getAnomalyColors = (level: string) => {
     switch (level) {
       case "critical":
         return {
@@ -139,7 +139,7 @@ export function DynamicThreatLevel() {
     }
   };
 
-  const colors = getThreatColors(threatLevel.level);
+  const colors = getAnomalyColors(anomalyLevel.level);
   const Icon = colors.icon;
 
   return (
@@ -155,21 +155,21 @@ export function DynamicThreatLevel() {
             <Icon className={`h-4 lg:h-5 w-4 lg:w-5 ${colors.text}`} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Threat Level</h3>
+            <h3 className="text-sm font-semibold text-foreground">Anomaly Level</h3>
             <p className="text-xs text-muted-foreground">Real-time assessment</p>
           </div>
         </div>
         <div className="text-right">
           <div className="flex items-center gap-1">
             <span className={`text-lg lg:text-xl font-bold font-display capitalize ${colors.text}`}>
-              {threatLevel.level}
+              {anomalyLevel.level}
             </span>
             <span className="text-sm text-muted-foreground">
-              {getTrendIcon(threatLevel.trend)}
+              {getTrendIcon(anomalyLevel.trend)}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Score: {threatLevel.score}/100
+            Score: {anomalyLevel.score}/100
           </p>
         </div>
       </div>
@@ -179,16 +179,16 @@ export function DynamicThreatLevel() {
         <div className="relative">
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <motion.div
-              className={`h-full rounded-full transition-all duration-500 ${threatLevel.level === "critical"
-                  ? "bg-destructive"
-                  : threatLevel.level === "high"
-                    ? "bg-orange-500"
-                    : threatLevel.level === "medium"
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
+              className={`h-full rounded-full transition-all duration-500 ${anomalyLevel.level === "critical"
+                ? "bg-destructive"
+                : anomalyLevel.level === "high"
+                  ? "bg-orange-500"
+                  : anomalyLevel.level === "medium"
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
                 }`}
               initial={{ width: 0 }}
-              animate={{ width: `${threatLevel.score}%` }}
+              animate={{ width: `${anomalyLevel.score}%` }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             />
           </div>
@@ -198,13 +198,13 @@ export function DynamicThreatLevel() {
         <div className="grid grid-cols-2 gap-3">
           <div className="text-center p-2 bg-background/50 rounded-lg">
             <p className="text-sm font-bold text-foreground">
-              {threatLevel.activeThreats}
+              {anomalyLevel.activeAnomalies}
             </p>
-            <p className="text-xs text-muted-foreground">Active Threats</p>
+            <p className="text-xs text-muted-foreground">Active Anomalies</p>
           </div>
           <div className="text-center p-2 bg-background/50 rounded-lg">
             <p className="text-sm font-bold text-foreground">
-              {threatLevel.criticalDevices}
+              {anomalyLevel.criticalDevices}
             </p>
             <p className="text-xs text-muted-foreground">Critical Devices</p>
           </div>
@@ -215,7 +215,7 @@ export function DynamicThreatLevel() {
           <div className="flex items-start gap-2">
             <Activity className={`h-4 w-4 ${colors.text} mt-0.5 shrink-0`} />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {threatLevel.recommendation}
+              {anomalyLevel.recommendation}
             </p>
           </div>
         </div>

@@ -19,7 +19,7 @@ interface NetworkNode {
     x: number;
     y: number;
     connections: string[];
-    threatLevel: "low" | "medium" | "high" | "critical";
+    anomalyLevel: "low" | "medium" | "high" | "critical";
     lastSeen: string;
 }
 
@@ -31,14 +31,14 @@ interface NetworkConnection {
 }
 
 const mockNodes: NetworkNode[] = [
-    { id: "gw-01", name: "Gateway Server", type: "server", status: "online", x: 400, y: 200, connections: ["srv-db-01", "srv-web-01"], threatLevel: "low", lastSeen: "Active now" },
-    { id: "srv-db-01", name: "Database Server", type: "server", status: "online", x: 200, y: 100, connections: ["ws-finance-01", "ws-hr-01"], threatLevel: "low", lastSeen: "Active now" },
-    { id: "srv-web-01", name: "Web Server", type: "server", status: "online", x: 600, y: 100, connections: ["ws-dev-01", "ws-dev-02"], threatLevel: "medium", lastSeen: "Active now" },
-    { id: "ws-finance-01", name: "Finance WS-01", type: "workstation", status: "online", x: 100, y: 250, connections: [], threatLevel: "low", lastSeen: "Active now" },
-    { id: "ws-hr-01", name: "HR WS-01", type: "workstation", status: "warning", x: 300, y: 350, connections: [], threatLevel: "high", lastSeen: "2 minutes ago" },
-    { id: "ws-dev-01", name: "Dev WS-01", type: "workstation", status: "online", x: 500, y: 250, connections: ["mobile-01"], threatLevel: "low", lastSeen: "Active now" },
-    { id: "ws-dev-02", name: "Dev WS-02", type: "workstation", status: "offline", x: 700, y: 350, connections: [], threatLevel: "low", lastSeen: "1 hour ago" },
-    { id: "mobile-01", name: "Mobile Device", type: "mobile", status: "online", x: 550, y: 400, connections: [], threatLevel: "medium", lastSeen: "Active now" },
+    { id: "gw-01", name: "Gateway Server", type: "server", status: "online", x: 400, y: 200, connections: ["srv-db-01", "srv-web-01"], anomalyLevel: "low", lastSeen: "Active now" },
+    { id: "srv-db-01", name: "Database Server", type: "server", status: "online", x: 200, y: 100, connections: ["ws-finance-01", "ws-hr-01"], anomalyLevel: "low", lastSeen: "Active now" },
+    { id: "srv-web-01", name: "Web Server", type: "server", status: "online", x: 600, y: 100, connections: ["ws-dev-01", "ws-dev-02"], anomalyLevel: "medium", lastSeen: "Active now" },
+    { id: "ws-finance-01", name: "Finance WS-01", type: "workstation", status: "online", x: 100, y: 250, connections: [], anomalyLevel: "low", lastSeen: "Active now" },
+    { id: "ws-hr-01", name: "HR WS-01", type: "workstation", status: "warning", x: 300, y: 350, connections: [], anomalyLevel: "high", lastSeen: "2 minutes ago" },
+    { id: "ws-dev-01", name: "Dev WS-01", type: "workstation", status: "online", x: 500, y: 250, connections: ["mobile-01"], anomalyLevel: "low", lastSeen: "Active now" },
+    { id: "ws-dev-02", name: "Dev WS-02", type: "workstation", status: "offline", x: 700, y: 350, connections: [], anomalyLevel: "low", lastSeen: "1 hour ago" },
+    { id: "mobile-01", name: "Mobile Device", type: "mobile", status: "online", x: 550, y: 400, connections: [], anomalyLevel: "medium", lastSeen: "Active now" },
 ];
 
 const mockConnections: NetworkConnection[] = [
@@ -74,7 +74,7 @@ export function NetworkTopology() {
         }
     };
 
-    const getThreatColor = (level: string) => {
+    const getAnomalyColor = (level: string) => {
         switch (level) {
             case "critical": return "#dc2626";
             case "high": return "#ea580c";
@@ -129,7 +129,7 @@ export function NetworkTopology() {
                                         cx={node.x} cy={node.y}
                                         r={isHovered || isSelected ? 25 : 20}
                                         fill={getStatusColor(node.status)}
-                                        stroke={getThreatColor(node.threatLevel)}
+                                        stroke={getAnomalyColor(node.anomalyLevel)}
                                         strokeWidth="2"
                                         style={{ cursor: "pointer" }}
                                         whileHover={{ scale: 1.1 }}
@@ -137,8 +137,8 @@ export function NetworkTopology() {
                                         onHoverEnd={() => setHoveredNode(null)}
                                         onClick={() => setSelectedNode(isSelected ? null : node)}
                                     />
-                                    {node.threatLevel !== "low" && (
-                                        <circle cx={node.x + 15} cy={node.y - 15} r="8" fill={getThreatColor(node.threatLevel)} />
+                                    {node.anomalyLevel !== "low" && (
+                                        <circle cx={node.x + 15} cy={node.y - 15} r="8" fill={getAnomalyColor(node.anomalyLevel)} />
                                     )}
                                     <foreignObject x={node.x - 12} y={node.y - 12} width="24" height="24" style={{ pointerEvents: "none" }}>
                                         <div className="w-full h-full flex items-center justify-center">
@@ -174,10 +174,10 @@ export function NetworkTopology() {
                             </div>
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
-                                    <span className="text-muted-foreground">Threat Level:</span>
+                                    <span className="text-muted-foreground">Anomaly Level:</span>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getThreatColor(selectedNode.threatLevel) }} />
-                                        <span className="font-medium capitalize">{selectedNode.threatLevel}</span>
+                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getAnomalyColor(selectedNode.anomalyLevel) }} />
+                                        <span className="font-medium capitalize">{selectedNode.anomalyLevel}</span>
                                     </div>
                                 </div>
                                 <div>
@@ -185,7 +185,7 @@ export function NetworkTopology() {
                                     <div className="font-medium mt-1">{selectedNode.lastSeen}</div>
                                 </div>
                             </div>
-                            {selectedNode.threatLevel !== "low" && (
+                            {selectedNode.anomalyLevel !== "low" && (
                                 <div className="mt-3 pt-3 border-t border-border flex items-center gap-2">
                                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                                     <span className="text-sm text-amber-500">Security attention required</span>

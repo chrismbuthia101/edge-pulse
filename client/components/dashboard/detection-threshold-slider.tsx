@@ -21,9 +21,9 @@ export function DetectionThresholdSlider({ deviceId }: DetectionThresholdSliderP
   });
 
   const thresholdPresets = [
-    { label: "High Sensitivity", value: 0.5, description: "Catch more threats, more false positives" },
+    { label: "High Sensitivity", value: 0.5, description: "Catch more anomalies, more false positives" },
     { label: "Balanced", value: 0.75, description: "Recommended for most environments" },
-    { label: "High Precision", value: 0.9, description: "Fewer false positives, may miss some threats" },
+    { label: "High Precision", value: 0.9, description: "Fewer false positives, may miss some anomalies" },
   ];
 
   useEffect(() => {
