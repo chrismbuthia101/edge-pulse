@@ -72,11 +72,26 @@ class TamperEvidentLogger:
                 entry_content_hash TEXT NOT NULL,
                 previous_entry_hash TEXT NOT NULL,
                 digital_signature TEXT,
+                synced INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT unique_device_sequence UNIQUE (device_id, log_sequence_number)
             )
         """
         await self.db_manager.execute_query(schema)
+        await self._add_synced_column_if_missing()
+
+    async def _add_synced_column_if_missing(self) -> None:
+        """Add synced column if it doesn't exist (for existing databases)."""
+        try:
+            check_query = "SELECT synced FROM tamper_evident_log LIMIT 1"
+            await self.db_manager.execute_query(check_query)
+        except Exception:
+            try:
+                alter_query = "ALTER TABLE tamper_evident_log ADD COLUMN synced INTEGER DEFAULT 0"
+                await self.db_manager.execute_query(alter_query)
+                logger.info("Added synced column to tamper_evident_log")
+            except Exception as e:
+                logger.debug("synced_column_check_error", error=str(e))
 
     async def _load_state(self) -> None:
         """Load current sequence and last hash from database"""
@@ -223,8 +238,8 @@ class TamperEvidentLogger:
                 INSERT INTO tamper_evident_log (
                     log_id, device_id, log_sequence_number, log_entry_type,
                     log_entry_reference_id, entry_timestamp_utc, entry_content_hash,
-                    previous_entry_hash, digital_signature
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    previous_entry_hash, digital_signature, synced
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """
 
             params = (

@@ -430,3 +430,122 @@ class SupabaseSync:
             "connectivity_state":       telemetry.get("connectivity_state", "online"),
             "payload_hash":             telemetry.get("payload_hash", ""),
         }
+
+    # ------------------------------------------------------------------
+    # Health snapshots sync
+    # ------------------------------------------------------------------
+
+    async def sync_health_snapshots(self, snapshots: List[Dict[str, Any]]) -> bool:
+        """Sync device health snapshots to remote database."""
+        if not snapshots:
+            return True
+        if not await self.is_online():
+            raise NetworkError("Supabase is offline")
+
+        try:
+            prepared_snapshots = [self._prepare_health_snapshot(s) for s in snapshots]
+
+            response = await self.client.post(
+                f"{self.supabase_url}/functions/v1/sync-device-data",
+                json={"health_snapshots": prepared_snapshots},
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info(
+                        "health_snapshots_synced",
+                        count=result.get("health_snapshots_synced", len(snapshots)),
+                    )
+                    return True
+                else:
+                    logger.error("health_snapshot_sync_failed", error=result.get("error"))
+                    return False
+            else:
+                logger.error(
+                    "health_snapshot_sync_failed",
+                    status=response.status_code,
+                    response=response.text[:200],
+                )
+                return False
+
+        except Exception as e:
+            logger.error("health_snapshot_sync_error", error=str(e))
+            return False
+
+    def _prepare_health_snapshot(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Map agent health snapshot dict to device_health_snapshots column names."""
+        return {
+            "device_id":            snapshot.get("device_id") or self.device_id,
+            "status":               snapshot.get("status", "ONLINE"),
+            "cpu_usage":            snapshot.get("cpu_usage") or snapshot.get("cpu_percent"),
+            "memory_usage":         snapshot.get("memory_usage") or snapshot.get("memory_percent"),
+            "disk_usage":           snapshot.get("disk_usage"),
+            "network_status":       snapshot.get("network_status", True),
+            "alerts_last_24h":      snapshot.get("alerts_last_24h", 0),
+            "uptime_percentage":    snapshot.get("uptime_percentage", 100.0),
+            "response_time_ms":     snapshot.get("response_time_ms", 0),
+            "error_count":          snapshot.get("error_count", 0),
+            "warning_count":        snapshot.get("warning_count", 0),
+            "last_restart":         snapshot.get("last_restart"),
+        }
+
+    # ------------------------------------------------------------------
+    # Tamper-evident log sync
+    # ------------------------------------------------------------------
+
+    async def sync_tamper_logs(self, logs: List[Dict[str, Any]]) -> bool:
+        """Sync tamper-evident log entries to remote database."""
+        if not logs:
+            return True
+        if not await self.is_online():
+            raise NetworkError("Supabase is offline")
+
+        try:
+            prepared_logs = [self._prepare_tamper_log(l) for l in logs]
+
+            response = await self.client.post(
+                f"{self.supabase_url}/functions/v1/sync-device-data",
+                json={"tamper_logs": prepared_logs},
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info(
+                        "tamper_logs_synced",
+                        count=result.get("tamper_logs_synced", len(logs)),
+                    )
+                    return True
+                else:
+                    logger.error("tamper_log_sync_failed", error=result.get("error"))
+                    return False
+            else:
+                logger.error(
+                    "tamper_log_sync_failed",
+                    status=response.status_code,
+                    response=response.text[:200],
+                )
+                return False
+
+        except Exception as e:
+            logger.error("tamper_log_sync_error", error=str(e))
+            return False
+
+    def _prepare_tamper_log(self, log_entry: Dict[str, Any]) -> Dict[str, Any]:
+        """Map agent tamper log dict to tamper_evident_log column names."""
+        timestamp = log_entry.get("entry_timestamp_utc") or log_entry.get("timestamp")
+        if hasattr(timestamp, "isoformat"):
+            timestamp = timestamp.isoformat()
+
+        return {
+            "log_id":                    log_entry.get("log_id"),
+            "device_id":                 log_entry.get("device_id") or self.device_id,
+            "log_sequence_number":       log_entry.get("log_sequence_number"),
+            "log_entry_type":            log_entry.get("log_entry_type"),
+            "log_entry_reference_id":     log_entry.get("log_entry_reference_id"),
+            "entry_timestamp_utc":       timestamp,
+            "entry_content_hash":         log_entry.get("entry_content_hash"),
+            "previous_entry_hash":        log_entry.get("previous_entry_hash"),
+            "digital_signature":           log_entry.get("digital_signature"),
+        }

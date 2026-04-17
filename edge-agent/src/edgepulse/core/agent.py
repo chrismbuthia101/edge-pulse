@@ -34,6 +34,7 @@ from edgepulse.alerts.notifier import LocalNotifier
 from edgepulse.sync.supabase import SupabaseSync
 from edgepulse.config.privacy import PrivacyController
 from edgepulse.utils.path_manager import PathManager
+from edgepulse.security.tamper_logger import TamperEvidentLogger
 from edgepulse.utils.error_handler import (
     EdgePulseError, ConfigurationError, ModelError,
     DetectionError, SyncError, NetworkError,
@@ -101,6 +102,10 @@ class EdgePulseAgent:
         )
         self.hash_chain = HashChain(self.device_id, PathManager())
         self.metrics = create_metrics_collector("agent", self.device_id)
+        self.tamper_logger: Optional[TamperEvidentLogger] = None
+        self._health_snapshot_interval = 300
+        self._tamper_log_sync_interval = 60
+        self._telemetry_sync_interval = 120
 
         # State
         self._running = False
@@ -206,6 +211,8 @@ class EdgePulseAgent:
                     logger.error("hash_chain_append_failed", event_type="agent_started")
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
+
+            await self._log_tamper_event("agent_started", {"device_id": self.device_id})
 
             logger.info("agent_started", device_id=self.device_id)
 
@@ -529,6 +536,14 @@ class EdgePulseAgent:
             logger.error("sync_client_initialization_failed", error=str(e))
             self._sync_client = None
 
+        try:
+            self.tamper_logger = TamperEvidentLogger(self.device_id, self.database)
+            await self.tamper_logger.initialize()
+            logger.info("tamper_logger_initialized", device_id=self.device_id)
+        except Exception as e:
+            logger.error("tamper_logger_initialization_failed", error=str(e))
+            self.tamper_logger = None
+
     async def _setup_event_handlers(self) -> None:
         async def handle_anomaly(event: Event):
             data = event.data or {}
@@ -713,6 +728,9 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
+            await self._log_tamper_event("anomaly_detected", detection)
+            await self._log_tamper_event("alert_generated", {"alert_id": alert.get("alert_id")})
+
             try:
                 if self.sync_queue:
                     alert_payload = {
@@ -762,6 +780,8 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
+            await self._log_tamper_event("sync_completed", {"count": data.get("count", 0)})
+
         self.event_bus.subscribe(EventType.DETECTION, handle_anomaly)
         self.event_bus.subscribe(EventType.SYNC, handle_sync_completed)
 
@@ -773,6 +793,9 @@ class EdgePulseAgent:
         self._tasks.append(asyncio.create_task(self._health_check_loop()))
         self._tasks.append(asyncio.create_task(self._metrics_collection_loop()))
         self._tasks.append(asyncio.create_task(self._data_cleanup_loop()))
+        self._tasks.append(asyncio.create_task(self._health_snapshot_sync_loop()))
+        self._tasks.append(asyncio.create_task(self._tamper_log_sync_loop()))
+        self._tasks.append(asyncio.create_task(self._telemetry_sync_loop()))
 
     async def _health_check_loop(self) -> None:
         await asyncio.sleep(5)
@@ -828,6 +851,201 @@ class EdgePulseAgent:
                 break
             except Exception as e:
                 logger.error("data_cleanup_error", error=str(e))
+
+    async def _health_snapshot_sync_loop(self) -> None:
+        await asyncio.sleep(30)
+        while self._running:
+            try:
+                if self._sync_client and hasattr(self._sync_client, 'sync_health_snapshots'):
+                    snapshot = await self._collect_health_snapshot()
+                    if snapshot:
+                        success = await self._sync_client.sync_health_snapshots([snapshot])
+                        if success:
+                            logger.debug("health_snapshot_synced", device_id=self.device_id)
+                        else:
+                            logger.warning("health_snapshot_sync_failed", device_id=self.device_id)
+                await asyncio.sleep(self._health_snapshot_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("health_snapshot_sync_error", error=str(e))
+                await asyncio.sleep(60)
+
+    async def _collect_health_snapshot(self) -> Optional[Dict[str, Any]]:
+        try:
+            import psutil
+            boot_time = datetime.fromtimestamp(psutil.boot_time())
+            uptime_seconds = (datetime.utcnow() - boot_time).total_seconds()
+            uptime_percentage = min(100.0, (uptime_seconds / 86400) * 100)
+
+            cpu_percent = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+
+            network_status = True
+            try:
+                psutil.net_io_counters()
+            except Exception:
+                network_status = False
+
+            error_count = 0
+            warning_count = 0
+            for collector in self._collectors:
+                if hasattr(collector, '_error_count'):
+                    error_count += getattr(collector, '_error_count', 0)
+                if hasattr(collector, '_warning_count'):
+                    warning_count += getattr(collector, '_warning_count', 0)
+
+            alert_count = 0
+            try:
+                from edgepulse.shared.schemas import AlertEvent
+                recent_alerts = await self.database.get_recent_alerts(hours=24)
+                alert_count = len(recent_alerts) if recent_alerts else 0
+            except Exception:
+                pass
+
+            snapshot = {
+                "device_id": self.device_id,
+                "status": "ONLINE" if network_status else "WARNING",
+                "cpu_usage": cpu_percent,
+                "memory_usage": memory.percent,
+                "disk_usage": round(disk.percent, 2),
+                "network_status": network_status,
+                "alerts_last_24h": alert_count,
+                "uptime_percentage": round(uptime_percentage, 2),
+                "response_time_ms": 0,
+                "error_count": error_count,
+                "warning_count": warning_count,
+                "last_restart": boot_time.isoformat(),
+            }
+            return snapshot
+        except Exception as e:
+            logger.error("health_snapshot_collection_error", error=str(e))
+            return None
+
+    async def _tamper_log_sync_loop(self) -> None:
+        await asyncio.sleep(15)
+        while self._running:
+            try:
+                if self._sync_client and self.tamper_logger:
+                    if hasattr(self._sync_client, 'sync_tamper_logs'):
+                        unsynced_logs = await self._get_unsynced_tamper_logs()
+                        if unsynced_logs:
+                            success = await self._sync_client.sync_tamper_logs(unsynced_logs)
+                            if success:
+                                await self._mark_tamper_logs_synced(unsynced_logs)
+                                logger.info(
+                                    "tamper_logs_synced",
+                                    device_id=self.device_id,
+                                    count=len(unsynced_logs)
+                                )
+                await asyncio.sleep(self._tamper_log_sync_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("tamper_log_sync_error", error=str(e))
+                await asyncio.sleep(60)
+
+    async def _get_unsynced_tamper_logs(self) -> List[Dict[str, Any]]:
+        try:
+            query = """
+                SELECT log_id, device_id, log_sequence_number, log_entry_type,
+                       log_entry_reference_id, entry_timestamp_utc,
+                       entry_content_hash, previous_entry_hash, digital_signature
+                FROM tamper_evident_log
+                WHERE device_id = ? AND synced = 0
+                ORDER BY log_sequence_number ASC
+                LIMIT 100
+            """
+            results = await self.database.execute_query(query, (self.device_id,))
+            return results if results else []
+        except Exception as e:
+            logger.error("get_unsynced_tamper_logs_error", error=str(e))
+            return []
+
+    async def _mark_tamper_logs_synced(self, logs: List[Dict[str, Any]]) -> None:
+        try:
+            for log in logs:
+                query = """
+                    UPDATE tamper_evident_log
+                    SET synced = 1
+                    WHERE log_id = ? AND device_id = ?
+                """
+                await self.database.execute_query(
+                    query, (log.get("log_id"), self.device_id)
+                )
+        except Exception as e:
+            logger.error("mark_tamper_logs_synced_error", error=str(e))
+
+    async def _telemetry_sync_loop(self) -> None:
+        await asyncio.sleep(20)
+        while self._running:
+            try:
+                if self._sync_client and hasattr(self._sync_client, 'sync_telemetry_events'):
+                    unsynced_telemetry = await self._get_unsynced_telemetry()
+                    if unsynced_telemetry:
+                        success = await self._sync_client.sync_telemetry_events(unsynced_telemetry)
+                        if success:
+                            await self._mark_telemetry_synced(unsynced_telemetry)
+                            logger.info(
+                                "telemetry_synced",
+                                device_id=self.device_id,
+                                count=len(unsynced_telemetry)
+                            )
+                        else:
+                            logger.warning("telemetry_sync_failed", device_id=self.device_id)
+                await asyncio.sleep(self._telemetry_sync_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("telemetry_sync_loop_error", error=str(e))
+                await asyncio.sleep(60)
+
+    async def _get_unsynced_telemetry(self) -> List[Dict[str, Any]]:
+        try:
+            query = """
+                SELECT event_id, device_id, timestamp, event_type,
+                       event_payload, collection_agent_version, payload_hash
+                FROM telemetry_events
+                WHERE device_id = ? AND synced = 0
+                ORDER BY timestamp ASC
+                LIMIT 50
+            """
+            results = await self.database.execute_query(query, (self.device_id,))
+            return results if results else []
+        except Exception as e:
+            logger.error("get_unsynced_telemetry_error", error=str(e))
+            return []
+
+    async def _mark_telemetry_synced(self, events: List[Dict[str, Any]]) -> None:
+        try:
+            query = """
+                UPDATE telemetry_events
+                SET synced = 1
+                WHERE event_id = ? AND device_id = ?
+            """
+            for event in events:
+                await self.database.execute_query(
+                    query, (event.get("event_id"), self.device_id)
+                )
+        except Exception as e:
+            logger.error("mark_telemetry_synced_error", error=str(e))
+
+    async def _log_tamper_event(
+        self,
+        entry_type: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Log an event to the tamper-evident chain for sync."""
+        try:
+            if self.tamper_logger:
+                reference_id = None
+                if metadata:
+                    import json
+                    reference_id = hash(json.dumps(metadata, sort_keys=True)) % 1000000
+                await self.tamper_logger.log_event(entry_type, str(reference_id), metadata)
+        except Exception as e:
+            logger.debug("tamper_log_event_error", error=str(e))
 
     def _initialize_shap_explainer(self) -> None:
         if self._shap_init_attempted:

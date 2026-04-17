@@ -39,6 +39,7 @@ class DatabaseManager:
                 event_payload TEXT NOT NULL,
                 collection_agent_version TEXT NOT NULL,
                 payload_hash TEXT NOT NULL,
+                synced INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """,
@@ -240,6 +241,7 @@ class DatabaseManager:
             for index_sql in self.INDEXES:
                 await conn.execute(index_sql)
 
+            await self._run_migrations(conn)
             await self._create_triggers(conn)
             await conn.commit()
             self._initialized = True
@@ -253,6 +255,32 @@ class DatabaseManager:
             await conn.execute("PRAGMA foreign_keys = ON")
             await conn.execute("PRAGMA journal_mode = WAL")
             yield conn
+
+    async def _run_migrations(self, conn: aiosqlite.Connection) -> None:
+        """Run database migrations for existing tables."""
+        migrations = [
+            ("telemetry_events", """
+                ALTER TABLE telemetry_events ADD COLUMN synced INTEGER DEFAULT 0
+            """),
+            ("alerts", """
+                ALTER TABLE alerts ADD COLUMN synced INTEGER DEFAULT 0
+            """),
+            ("tamper_evident_log", """
+                ALTER TABLE tamper_evident_log ADD COLUMN synced INTEGER DEFAULT 0
+            """),
+        ]
+
+        for table_name, sql in migrations:
+            try:
+                result = await conn.execute(f"SELECT synced FROM {table_name} LIMIT 1")
+                await result.fetchone()
+                logger.debug("migration_skipped", table=table_name, reason="column_exists")
+            except Exception:
+                try:
+                    await conn.execute(sql)
+                    logger.info("migration_applied", table=table_name)
+                except Exception as e:
+                    logger.debug("migration_skipped", table=table_name, reason=str(e))
 
     async def _create_triggers(self, conn: aiosqlite.Connection) -> None:
         triggers = [
@@ -419,6 +447,29 @@ class DatabaseManager:
 
         query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
+
+        async with self.connection() as conn:
+            async with conn.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def get_recent_alerts(
+        self,
+        device_id: Optional[str] = None,
+        hours: int = 24,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Get alerts from the last N hours."""
+        cutoff_time = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        query = "SELECT * FROM alerts WHERE timestamp >= ?"
+        params: list = [cutoff_time]
+
+        if device_id:
+            query += " AND device_id = ?"
+            params.append(device_id)
+
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
 
         async with self.connection() as conn:
             async with conn.execute(query, params) as cursor:

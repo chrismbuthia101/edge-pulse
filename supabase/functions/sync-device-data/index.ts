@@ -14,6 +14,8 @@ interface SyncRequest {
   alerts?: AlertRecord[]
   telemetry?: TelemetryEvent[]
   heartbeat?: DeviceHeartbeat
+  health_snapshots?: HealthSnapshot[]
+  tamper_logs?: TamperLogEntry[]
 }
 
 interface AlertRecord {
@@ -73,6 +75,33 @@ interface DeviceHeartbeat {
   hash_chain_ok?: boolean
 }
 
+interface HealthSnapshot {
+  device_id: string
+  status?: string
+  cpu_usage?: number
+  memory_usage?: number
+  disk_usage?: number
+  network_status?: boolean
+  alerts_last_24h?: number
+  uptime_percentage?: number
+  response_time_ms?: number
+  error_count?: number
+  warning_count?: number
+  last_restart?: string
+}
+
+interface TamperLogEntry {
+  log_id: string
+  device_id: string
+  log_sequence_number: number
+  log_entry_type: string
+  log_entry_reference_id?: string
+  entry_timestamp_utc: string
+  entry_content_hash: string
+  previous_entry_hash: string
+  digital_signature?: string
+}
+
 interface SyncResponse {
   success: boolean
   alerts_synced?: number
@@ -80,6 +109,10 @@ interface SyncResponse {
   telemetry_synced?: number
   telemetry_failed?: number
   heartbeat_updated?: boolean
+  health_snapshots_synced?: number
+  health_snapshots_failed?: number
+  tamper_logs_synced?: number
+  tamper_logs_failed?: number
   error?: string
 }
 
@@ -147,7 +180,11 @@ serve(async (req) => {
       alerts_failed: 0,
       telemetry_synced: 0,
       telemetry_failed: 0,
-      heartbeat_updated: false
+      heartbeat_updated: false,
+      health_snapshots_synced: 0,
+      health_snapshots_failed: 0,
+      tamper_logs_synced: 0,
+      tamper_logs_failed: 0
     }
 
     // Sync alerts
@@ -235,6 +272,66 @@ serve(async (req) => {
         }
       } catch (e) {
         console.error('Heartbeat update exception:', e)
+        response.success = false
+      }
+    }
+
+    // Sync health snapshots
+    if (syncData.health_snapshots && syncData.health_snapshots.length > 0) {
+      try {
+        const snapshots = syncData.health_snapshots.map(snapshot => ({
+          ...snapshot,
+          device_id: deviceId,
+          created_at: new Date().toISOString()
+        }))
+
+        const { error: healthError } = await supabase
+          .from('device_health_snapshots')
+          .insert(snapshots)
+
+        if (healthError) {
+          console.error('Health snapshot sync error:', healthError)
+          response.health_snapshots_failed = syncData.health_snapshots.length
+          response.success = false
+        } else {
+          response.health_snapshots_synced = syncData.health_snapshots.length
+        }
+      } catch (e) {
+        console.error('Health snapshot sync exception:', e)
+        response.health_snapshots_failed = syncData.health_snapshots.length
+        response.success = false
+      }
+    }
+
+    // Sync tamper-evident logs
+    if (syncData.tamper_logs && syncData.tamper_logs.length > 0) {
+      try {
+        const logs = syncData.tamper_logs.map(log => ({
+          device_id: deviceId,
+          log_sequence_number: log.log_sequence_number,
+          log_entry_type: log.log_entry_type,
+          log_entry_reference_id: log.log_entry_reference_id,
+          entry_timestamp_utc: log.entry_timestamp_utc,
+          entry_content_hash: log.entry_content_hash,
+          previous_entry_hash: log.previous_entry_hash,
+          digital_signature: log.digital_signature,
+          created_at: new Date().toISOString()
+        }))
+
+        const { error: tamperError } = await supabase
+          .from('tamper_evident_log')
+          .insert(logs)
+
+        if (tamperError) {
+          console.error('Tamper log sync error:', tamperError)
+          response.tamper_logs_failed = syncData.tamper_logs.length
+          response.success = false
+        } else {
+          response.tamper_logs_synced = syncData.tamper_logs.length
+        }
+      } catch (e) {
+        console.error('Tamper log sync exception:', e)
+        response.tamper_logs_failed = syncData.tamper_logs.length
         response.success = false
       }
     }

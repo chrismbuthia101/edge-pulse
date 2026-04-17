@@ -347,6 +347,14 @@ class SyncFSM:
                 logger.debug("anomaly_scores sync not yet implemented, skipping")
                 return True
 
+            # device_health_snapshots
+            elif record_type == "health_snapshots":
+                return await self.supabase_sync.sync_health_snapshots([record_data])
+
+            # tamper_evident_log
+            elif record_type == "tamper_logs":
+                return await self.supabase_sync.sync_tamper_logs([record_data])
+
             # device heartbeat
             elif record_type == "device_heartbeat":
                 return await self.supabase_sync.update_device_heartbeat(record_data)
