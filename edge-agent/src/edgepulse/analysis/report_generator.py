@@ -53,7 +53,7 @@ class ReportGenerator:
             "alert_id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat(),
             "device_id": self.device_id,
-            "severity": severity,
+            "severity": severity.value,  # Convert enum to string value
             "anomaly_score": float(anomaly_score),
             "anomaly_label": int(anomaly_label),
             "anomaly_type": anomaly_type,

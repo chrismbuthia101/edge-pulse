@@ -2,7 +2,6 @@
 Supabase Sync Client for EdgePulse
 """
 
-import hashlib
 import httpx
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -61,7 +60,7 @@ class SupabaseSync:
         )
 
     async def initialize(self) -> None:
-        """Initialize the async HTTP client"""
+
         if not self.enabled:
             logger.info("supabase_sync_disabled")
             return
@@ -73,8 +72,9 @@ class SupabaseSync:
 
         if self.device_id and self.api_key:
             headers["X-EdgePulse-Device-Id"] = self.device_id
-            headers["X-EdgePulse-Api-Key"] = self._hash_api_key(self.api_key, self.device_id)
+            headers["X-EdgePulse-Api-Key"] = self.api_key
         elif self.supabase_key:
+            # Fallback: unenrolled / legacy mode uses the anon key.
             headers["apikey"] = self.supabase_key
             headers["Authorization"] = f"Bearer {self.supabase_key}"
 
@@ -85,11 +85,6 @@ class SupabaseSync:
 
         await self.check_connectivity()
         logger.info("async_supabase_client_initialized", online=self._online)
-
-    def _hash_api_key(self, api_key: str, device_id: str) -> str:
-        """Hash API key matching the backend's hash algorithm"""
-        hash_input = f"{api_key}ep-v1-{device_id}"
-        return hashlib.sha256(hash_input.encode()).hexdigest()
 
     async def close(self) -> None:
         """Close the async client"""
@@ -122,13 +117,17 @@ class SupabaseSync:
                 headers=extra_headers,
             )
 
+            # 200 = open endpoint, 401 = auth required but server reachable
             self._online = response.status_code in (200, 401)
             self._last_health_check = datetime.utcnow()
 
             if self._online:
                 logger.debug("supabase_connectivity_check_success")
             else:
-                logger.warning("supabase_connectivity_check_failed", status=response.status_code)
+                logger.warning(
+                    "supabase_connectivity_check_failed",
+                    status=response.status_code,
+                )
 
             return self._online
 
@@ -184,19 +183,27 @@ class SupabaseSync:
             if response.status_code == 200:
                 result = response.json()
                 if result.get("success"):
-                    logger.info("alerts_synced_successfully", count=result.get("alerts_synced", len(alerts)))
+                    logger.info(
+                        "alerts_synced_successfully",
+                        count=result.get("alerts_synced", len(alerts)),
+                    )
                     return True
                 else:
                     logger.error("alerts_sync_failed", error=result.get("error"))
                     return False
+
             elif response.status_code == 401:
                 logger.critical(
                     "authentication_failure",
                     device_id=self.device_id,
                     status=response.status_code,
+                    has_api_key=bool(self.api_key),
+                    has_supabase_key=bool(self.supabase_key),
+                    has_device_id=bool(self.device_id),
                 )
                 raise AuthenticationError(
-                    "Device authentication failed – credentials may be invalid or expired"
+                    "Device authentication failed – credentials may be invalid or expired. "
+                    f"Device ID: {self.device_id}, Has API Key: {bool(self.api_key)}"
                 )
             else:
                 logger.error(
@@ -220,7 +227,7 @@ class SupabaseSync:
         return await self.batch_sync_alerts([alert])
 
     # ------------------------------------------------------------------
-    # Telemetry sync — POSTs to /functions/v1/sync-device-data
+    # Telemetry sync
     # ------------------------------------------------------------------
 
     async def batch_sync_telemetry(self, telemetry_data: List[Dict[str, Any]]) -> bool:
@@ -240,7 +247,10 @@ class SupabaseSync:
             if response.status_code == 200:
                 result = response.json()
                 if result.get("success"):
-                    logger.info("telemetry_synced_successfully", count=result.get("telemetry_synced", len(telemetry_data)))
+                    logger.info(
+                        "telemetry_synced_successfully",
+                        count=result.get("telemetry_synced", len(telemetry_data)),
+                    )
                     return True
                 else:
                     logger.error("telemetry_sync_failed", error=result.get("error"))
@@ -258,7 +268,7 @@ class SupabaseSync:
             return False
 
     # ------------------------------------------------------------------
-    # Device heartbeat — POSTs to /functions/v1/sync-device-data
+    # Device heartbeat
     # ------------------------------------------------------------------
 
     async def update_device_heartbeat(self, heartbeat_data: Dict[str, Any]) -> bool:
@@ -268,18 +278,17 @@ class SupabaseSync:
         try:
             target_device_id = heartbeat_data.get("device_id") or self.device_id
 
-            # Prepare heartbeat for Edge Function
             heartbeat_payload = {
-                "device_id":         target_device_id,
-                "name":              heartbeat_data.get("name") or get_device_name(),
-                "status":            heartbeat_data.get("status", "online"),
-                "risk":              heartbeat_data.get("risk", "none"),
-                "cpu_percent":       heartbeat_data.get("cpu_usage") or heartbeat_data.get("cpu_percent"),
-                "ram_percent":       heartbeat_data.get("memory_usage") or heartbeat_data.get("ram_percent"),
-                "sync_queue_depth":  heartbeat_data.get("sync_queue_depth", 0),
-                "alerts_count":      heartbeat_data.get("alerts_count", 0),
-                "agent_version":     heartbeat_data.get("version") or heartbeat_data.get("agent_version", "unknown"),
-                "hash_chain_ok":     heartbeat_data.get("hash_chain_ok", True),
+                "device_id":        target_device_id,
+                "name":             heartbeat_data.get("name") or get_device_name(),
+                "status":           heartbeat_data.get("status", "online"),
+                "risk":             heartbeat_data.get("risk", "none"),
+                "cpu_percent":      heartbeat_data.get("cpu_usage") or heartbeat_data.get("cpu_percent"),
+                "ram_percent":      heartbeat_data.get("memory_usage") or heartbeat_data.get("ram_percent"),
+                "sync_queue_depth": heartbeat_data.get("sync_queue_depth", 0),
+                "alerts_count":     heartbeat_data.get("alerts_count", 0),
+                "agent_version":    heartbeat_data.get("version") or heartbeat_data.get("agent_version", "unknown"),
+                "hash_chain_ok":    heartbeat_data.get("hash_chain_ok", True),
             }
 
             response = await self.client.post(
@@ -293,7 +302,11 @@ class SupabaseSync:
             return False
 
         except Exception as e:
-            logger.error("update_device_heartbeat_error", device_id=self.device_id, error=str(e))
+            logger.error(
+                "update_device_heartbeat_error",
+                device_id=self.device_id,
+                error=str(e),
+            )
             return False
 
     # ------------------------------------------------------------------
@@ -306,7 +319,6 @@ class SupabaseSync:
         if not await self.is_online():
             return []
         try:
-            # Query alert_records with status filter
             url = (
                 f"{self.supabase_url}/rest/v1/alert_records"
                 f"?status=eq.PENDING&order=created_at.desc&limit={limit}"
@@ -377,47 +389,44 @@ class SupabaseSync:
             or "unknown"
         )
         return {
-            "anomaly_score_id":           alert.get("score_id") or alert.get("anomaly_score_id"),
-            "device_id":                  alert.get("device_id") or self.device_id,
-            "device_name":                alert.get("device_name") or get_device_name(),
-            "telemetry_event_id":         alert.get("telemetry_event_id"),
-            "feature_vector_id":          alert.get("feature_vector_id"),
-            "telemetry_source":           alert.get("telemetry_source", "PROCESS"),
-            "title":                      alert.get("title", "Anomaly Detected"),
-            "description":                alert.get("description"),
-            "severity":                   alert.get("severity", "medium"),
-            "category":                   alert.get("category", "Unknown"),
-            "anomaly_score":              alert.get("anomaly_score", 0.0),
-            "confidence":                 alert.get("confidence", 0.0),
-            "model_id":                   alert.get("model_id", "unknown"),
-            "collection_agent_version":   agent_version,
-            "inference_latency_ms":       alert.get("inference_latency_ms", 0),
-            "detection_window_start":    alert.get("detection_window_start"),
-            "detection_window_end":       alert.get("detection_window_end"),
-            "detection_window_minutes":   alert.get("detection_window_minutes"),
-            "explanation_json":           explanation,
-            "status":                     "PENDING",
-            "read":                       False,
-            "net_destination_ip":         alert.get("net_destination_ip"),
-            "net_destination_port":       alert.get("net_destination_port"),
-            "net_protocol":               alert.get("net_protocol"),
-            "net_duration_ms":            alert.get("net_duration_ms"),
-            "proc_name":                  alert.get("proc_name"),
-            "proc_privilege_level":       alert.get("proc_privilege_level"),
-            "proc_pid":                   alert.get("proc_pid"),
+            "anomaly_score_id":         alert.get("score_id") or alert.get("anomaly_score_id"),
+            "device_id":                alert.get("device_id") or self.device_id,
+            "device_name":              alert.get("device_name") or get_device_name(),
+            "telemetry_event_id":       alert.get("telemetry_event_id"),
+            "feature_vector_id":        alert.get("feature_vector_id"),
+            "telemetry_source":         alert.get("telemetry_source", "PROCESS"),
+            "title":                    alert.get("title", "Anomaly Detected"),
+            "description":              alert.get("description"),
+            "severity":                 alert.get("severity", "medium"),
+            "category":                 alert.get("category", "Unknown"),
+            "anomaly_score":            alert.get("anomaly_score", 0.0),
+            "confidence":               alert.get("confidence", 0.0),
+            "model_id":                 alert.get("model_id", "unknown"),
+            "collection_agent_version": agent_version,
+            "inference_latency_ms":     alert.get("inference_latency_ms", 0),
+            "detection_window_start":   alert.get("detection_window_start"),
+            "detection_window_end":     alert.get("detection_window_end"),
+            "detection_window_minutes": alert.get("detection_window_minutes"),
+            "explanation_json":         explanation,
+            "status":                   "PENDING",
+            "read":                     False,
+            "net_destination_ip":       alert.get("net_destination_ip"),
+            "net_destination_port":     alert.get("net_destination_port"),
+            "net_protocol":             alert.get("net_protocol"),
+            "net_duration_ms":          alert.get("net_duration_ms"),
+            "proc_name":                alert.get("proc_name"),
+            "proc_privilege_level":     alert.get("proc_privilege_level"),
+            "proc_pid":                 alert.get("proc_pid"),
         }
 
     def _prepare_telemetry(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         """Map agent telemetry dict to telemetry_events column names."""
-        cpu = telemetry.get("cpu") or {}
-        memory = telemetry.get("memory") or {}
-
         return {
-            "device_id":                  telemetry.get("device_id") or self.device_id,
-            "collected_at":               telemetry.get("timestamp") or telemetry.get("collected_at"),
-            "source":                     telemetry.get("event_type") or telemetry.get("source", "PROCESS"),
-            "payload":                    telemetry.get("payload") or telemetry,
-            "collection_agent_version":   telemetry.get("agent_version") or telemetry.get("collection_agent_version", "unknown"),
-            "connectivity_state":         telemetry.get("connectivity_state", "online"),
-            "payload_hash":               telemetry.get("payload_hash", ""),
+            "device_id":                telemetry.get("device_id") or self.device_id,
+            "collected_at":             telemetry.get("timestamp") or telemetry.get("collected_at"),
+            "source":                   telemetry.get("event_type") or telemetry.get("source", "PROCESS"),
+            "payload":                  telemetry.get("payload") or telemetry,
+            "collection_agent_version": telemetry.get("agent_version") or telemetry.get("collection_agent_version", "unknown"),
+            "connectivity_state":       telemetry.get("connectivity_state", "online"),
+            "payload_hash":             telemetry.get("payload_hash", ""),
         }

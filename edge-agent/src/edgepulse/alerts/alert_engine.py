@@ -184,7 +184,7 @@ class AlertEngine:
             if entry["timestamp"] >= cutoff_time
         )
 
-        return recent_count < self.rate_limit
+        return recent_count <= self.rate_limit
 
     def get_active_alerts(self) -> List[Dict]:
         return self.active_alerts.copy()

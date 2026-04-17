@@ -335,7 +335,7 @@ def _run_enrollment(args) -> int:
     async def do_enrollment():
         result = await enrollment_client.enroll_device(config)
         if result:
-            if enrollment_client.complete_enrollment(result, supabase_url=config.supabase_url):
+            if enrollment_client.complete_enrollment(result, supabase_url=config.supabase_url, supabase_anon_key=config.supabase_anon_key):
                 print()
                 print("✓ Device enrolled successfully!")
                 print(f"  Device ID : {result.device_id}")

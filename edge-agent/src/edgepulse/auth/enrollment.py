@@ -213,7 +213,7 @@ class DeviceEnrollmentClient:
             logger.error("enrollment_unexpected_error", error=str(e))
             return None
 
-    def complete_enrollment(self, response: EnrollmentResponse, supabase_url: Optional[str] = None) -> bool:
+    def complete_enrollment(self, response: EnrollmentResponse, supabase_url: Optional[str] = None, supabase_anon_key: Optional[str] = None) -> bool:
         """Persist credentials via CredentialManager (single write path) and clean up."""
         try:
             credentials = DeviceCredentials(
@@ -227,14 +227,12 @@ class DeviceEnrollmentClient:
                 logger.error("enrollment_credential_store_failed")
                 return False
 
-            # Clear the one-time enrollment token from the store
             self.credential_manager.clear_enrollment_token()
 
-            # Remove config file so it is not re-processed on next start
             self.delete_enrollment_config()
 
-            # Update agent_config.json with the enrolled device_id
-            self._update_agent_config_device_id(response.device_id, supabase_url)
+            # Update agent_config.json with the enrolled device_id and supabase_anon_key
+            self._update_agent_config_device_id(response.device_id, supabase_url, supabase_anon_key)
 
             logger.info("enrollment_complete", device_id=response.device_id)
             return True
@@ -243,8 +241,8 @@ class DeviceEnrollmentClient:
             logger.error("enrollment_complete_error", error=str(e))
             return False
 
-    def _update_agent_config_device_id(self, device_id: str, supabase_url: Optional[str] = None) -> bool:
-        """Update agent_config.json with enrolled device_id and sync URL."""
+    def _update_agent_config_device_id(self, device_id: str, supabase_url: Optional[str] = None, supabase_anon_key: Optional[str] = None) -> bool:
+        """Update agent_config.json with enrolled device_id, sync URL, and supabase_anon_key."""
         try:
             from edgepulse.utils.path_manager import PathManager
 
@@ -258,11 +256,14 @@ class DeviceEnrollmentClient:
 
             config["device_id"] = device_id
 
-            # Update sync URL if provided
-            if supabase_url:
+            # Update sync configuration if provided
+            if supabase_url or supabase_anon_key:
                 if "sync" not in config:
                     config["sync"] = {}
-                config["sync"]["supabase_url"] = supabase_url
+                if supabase_url:
+                    config["sync"]["supabase_url"] = supabase_url
+                if supabase_anon_key:
+                    config["sync"]["supabase_key"] = supabase_anon_key
 
             with open(config_path, 'w') as f:
                 json.dump(config, f, indent=2)

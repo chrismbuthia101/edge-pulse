@@ -1,3 +1,7 @@
+"""
+EdgePulse Agent (core/agent.py)
+"""
+
 import asyncio
 import signal
 import platform
@@ -38,6 +42,9 @@ from edgepulse.shared.metrics import create_metrics_collector, StandardMetrics
 from edgepulse.shared.schemas import DetectionEvent
 
 logger = get_logger(__name__)
+
+_WARMUP_CYCLES = 1
+
 
 class EdgePulseAgent:
     """Async EdgePulse agent with dependency injection and modern architecture"""
@@ -101,6 +108,9 @@ class EdgePulseAgent:
         self._tasks: List[asyncio.Task] = []
         self._pipeline: Optional[AsyncPipeline] = None
         self._sync_client: Optional[Any] = None
+
+        # Warmup cycle counter — alerts are suppressed until this reaches 0.
+        self._warmup_cycles_remaining: int = _WARMUP_CYCLES
 
         self._collectors = collectors or self._create_collectors()
         self._detectors = detectors or self._create_detectors()
@@ -197,7 +207,17 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
-            logger.info("async_agent_started", device_id=self.device_id)
+            logger.info("agent_started", device_id=self.device_id)
+
+            if self._warmup_cycles_remaining > 0:
+                logger.info(
+                    "warmup_mode_active",
+                    warmup_cycles=self._warmup_cycles_remaining,
+                    detail=(
+                        f"Alert generation suppressed for first {self._warmup_cycles_remaining} "
+                        "pipeline cycle(s) while baseline is established."
+                    ),
+                )
 
         except SyncError as e:
             logger.error("agent_start_failed", error=str(e))
@@ -220,7 +240,6 @@ class EdgePulseAgent:
             self._shutdown_event.set()
 
         try:
-            # Cancel background tasks first
             for task in self._tasks:
                 task.cancel()
             await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -251,7 +270,6 @@ class EdgePulseAgent:
                 source="async_agent",
             ))
 
-            # Now safe to close the bus — all events are queued
             await self.event_bus.stop()
 
             logger.info("async_agent_stopped", device_id=self.device_id)
@@ -292,9 +310,6 @@ class EdgePulseAgent:
     # ------------------------------------------------------------------
 
     def _setup_signal_handlers(self) -> None:
-        """
-        Register asyncio-safe signal handlers for SIGINT / SIGTERM.
-        """
         loop = asyncio.get_running_loop()
 
         def request_shutdown() -> None:
@@ -410,18 +425,23 @@ class EdgePulseAgent:
         )
         baseline_loaded = self.normalizer.load_baseline()
         if baseline_loaded:
-            logger.info("Feature normalizer baseline loaded successfully")
+            logger.info("feature_normalizer_baseline_loaded")
+            # Baseline exists — no warmup needed.
+            self._warmup_cycles_remaining = 0
         else:
-            logger.info("No baseline file found - normalizer will learn from data")
-
-        # Initialize SHAP explainer after all components are ready
-        self.shap_explainer = None
-        self._shap_init_attempted = False
+            logger.info(
+                "no_baseline_found",
+                warmup_cycles=self._warmup_cycles_remaining,
+                detail="Normalizer will learn from live data during warmup period.",
+            )
 
         self.report_generator = ReportGenerator(device_id=self.device_id)
 
         if self.settings.alerting.enable_local_notifications:
             self.notifier = LocalNotifier()
+
+        self.shap_explainer = None
+        self._shap_init_attempted = False
 
         primary_detectors = [d for d in self._detectors if hasattr(d, "get_health")]
 
@@ -432,18 +452,18 @@ class EdgePulseAgent:
                 "detector_health_provider_registered",
                 detector=primary.__class__.__name__,
             )
+            self._initialize_shap_explainer()
         else:
             def _no_detector_health():
                 return {
                     "status": "degraded",
                     "is_trained": False,
-                    "action_required": "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent.",
+                    "action_required": (
+                        "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart."
+                    ),
                 }
             register_detector_health_provider(_no_detector_health)
-            logger.warning(
-                "no_trained_detector_health_provider_registered",
-                action_required="Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent.",
-            )
+            logger.warning("no_trained_detector_health_provider_registered")
 
     async def _initialize_sync_client(self) -> None:
         """Initialize Supabase sync client."""
@@ -482,7 +502,7 @@ class EdgePulseAgent:
                 max_retries=3,
             )
             await self._sync_client.initialize()
-            logger.info("async_sync_client_initialized")
+            logger.info("async_supabase_client_initialized")
         except SyncError as e:
             logger.error("sync_client_initialization_failed", error=str(e))
             self._sync_client = None
@@ -500,13 +520,36 @@ class EdgePulseAgent:
             features = data.get("features")
             severity_label = data.get("severity", detection.get("severity", "medium"))
 
+            # ------------------------------------------------------------------
+            # Warmup guard: collect data and update the normalizer baseline
+            # during the first few cycles without firing alerts.
+            # ------------------------------------------------------------------
+            if self._warmup_cycles_remaining > 0:
+                self._warmup_cycles_remaining -= 1
+                logger.info(
+                    "warmup_cycle_suppressed",
+                    cycles_remaining=self._warmup_cycles_remaining,
+                    anomaly_score=detection.get("anomaly_score", 0.0),
+                    detail="Alert suppressed during baseline warmup.",
+                )
+
+                if features is not None and hasattr(self, "normalizer"):
+                    try:
+                        import numpy as np
+                        feat_array = np.asarray(features, dtype=float)
+                        if feat_array.ndim == 1:
+                            feat_array = feat_array.reshape(1, -1)
+                        self.normalizer.update_baseline(feat_array)
+                    except Exception as e:
+                        logger.debug("warmup_baseline_update_error", error=str(e))
+                return
+
             logger.info(
                 "anomaly_detected",
                 severity=severity_label,
                 detector=detection.get("detector"),
             )
 
-            # Save detection to local database
             try:
                 detection_event = DetectionEvent(
                     device_id=self.device_id,
@@ -535,21 +578,22 @@ class EdgePulseAgent:
 
             explanation: Dict[str, Any] = {}
             try:
-                # Lazy initialization of SHAP explainer - only when needed
                 if (
-                    not self._shap_init_attempted 
-                    and self._detectors 
+                    not self._shap_init_attempted
+                    and self._detectors
                     and features is not None
                 ):
                     self._initialize_shap_explainer()
-                
+
                 if (
                     hasattr(self, "shap_explainer")
-                    and getattr(self, "shap_explainer", None)
+                    and self.shap_explainer is not None
                     and features is not None
                 ):
                     anomaly_score = detection.get("anomaly_score", 0.0)
-                    explanation = self.shap_explainer.explain_prediction(features, anomaly_score)
+                    explanation = self.shap_explainer.explain_prediction(
+                        features, anomaly_score
+                    )
             except Exception as e:
                 logger.error("shap_explanation_error", error=str(e))
                 explanation = {}
@@ -581,7 +625,6 @@ class EdgePulseAgent:
             if not alert:
                 return
 
-            # Save alert to local database
             try:
                 from edgepulse.shared.schemas import AlertEvent, SeverityLevel
                 alert_event = AlertEvent(
@@ -734,47 +777,48 @@ class EdgePulseAgent:
                 logger.error("data_cleanup_error", error=str(e))
 
     def _initialize_shap_explainer(self) -> None:
-        """Initialize SHAP explainer with real detector model and features"""
         if self._shap_init_attempted:
             return
-            
+
         self._shap_init_attempted = True
-        
+
+        if not self._detectors:
+            logger.warning("shap_init_skipped: no detectors available")
+            return
+
+        primary_detector = self._detectors[0]
+        model = getattr(primary_detector, 'model', None)
+        if model is None:
+            logger.warning("shap_init_skipped: primary detector has no trained model")
+            return
+
         try:
-            if not self._detectors:
-                logger.warning("No detectors available for SHAP initialization")
-                return
-                
-            primary_detector = self._detectors[0]
-            if not hasattr(primary_detector, 'model') or not primary_detector.model:
-                logger.warning("Primary detector has no model for SHAP initialization")
-                return
-                
-            # Create SHAP explainer
-            self.shap_explainer = SHAPExplainer(model_id=f"{self.device_id}_primary")
-            
-            # Get feature names and create appropriate training data
-            feature_names = self._feature_extractor.get_feature_names()
-            
-            # Create synthetic training data matching the feature schema
             import numpy as np
-            synthetic_data = np.random.normal(0, 1, size=(50, len(feature_names)))
-            
-            # Initialize the explainer
-            success = self.shap_explainer.initialize(
-                model=primary_detector.model,
-                training_data=synthetic_data,
-                feature_names=feature_names
+            self.shap_explainer = SHAPExplainer(
+                model_id=f"{self.device_id}_primary"
             )
-            
+            feature_names = self._feature_extractor.get_feature_names()
+            # Generate a small synthetic background dataset for KernelExplainer.
+            synthetic_bg = np.random.normal(0, 1, size=(50, len(feature_names)))
+
+            success = self.shap_explainer.initialize(
+                model=model,
+                training_data=synthetic_bg,
+                feature_names=feature_names,
+            )
+
             if success:
-                logger.info("SHAP explainer initialized successfully on first use")
+                logger.info(
+                    "shap_explainer_initialized",
+                    device_id=self.device_id,
+                    feature_count=len(feature_names),
+                )
             else:
-                logger.warning("SHAP explainer initialization failed")
+                logger.warning("shap_explainer_initialization_failed")
                 self.shap_explainer = None
-                
+
         except Exception as e:
-            logger.error("SHAP explainer initialization error: %s", e)
+            logger.error("shap_explainer_init_error", error=str(e))
             self.shap_explainer = None
 
     async def _save_state(self) -> None:
@@ -784,7 +828,7 @@ class EdgePulseAgent:
                     await asyncio.to_thread(detector.save_model)
             if hasattr(self, 'normalizer') and self.normalizer.is_fitted:
                 await asyncio.to_thread(self.normalizer.save_baseline)
-            logger.info("agent_state_saved")
+            logger.info("agent_state_saved", device_id=self.device_id)
         except Exception as e:
             logger.error("state_save_error", error=str(e))
 
@@ -793,6 +837,7 @@ class EdgePulseAgent:
     # ------------------------------------------------------------------
 
     def get_status(self) -> Dict[str, Any]:
+        from edgepulse.api.api_server import _get_detector_health
         return {
             "device_id": self.device_id,
             "running": self._running,
@@ -801,7 +846,8 @@ class EdgePulseAgent:
             "sync_enabled": self.settings.should_enable_sync(),
             "ml_enabled": self.settings.should_enable_ml(),
             "pipeline_running": self._pipeline is not None and self._pipeline._running,
+            "warmup_cycles_remaining": self._warmup_cycles_remaining,
             "api_server_info": self.api_server.get_server_info() if self.api_server else None,
             "sync_queue_stats": self.sync_queue.get_stats() if self.sync_queue else None,
-            "detector_health": _get_detector_health()
+            "detector_health": _get_detector_health(),
         }

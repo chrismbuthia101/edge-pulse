@@ -138,8 +138,6 @@ class AsyncPipeline:
     # ------------------------------------------------------------------
 
     async def _run_loop(self) -> None:
-        """Main processing loop.
-        """
         pipeline_metrics = PipelineMetrics(self.metrics)
 
         while self._running:
@@ -177,17 +175,23 @@ class AsyncPipeline:
             logger.warning("no_telemetry_collected")
             return {"status": "no_data"}
 
-        # Save telemetry to database
         if self.database:
             try:
                 await self._save_telemetry(telemetry)
+                await self._save_telemetry_event(telemetry)
             except Exception as e:
                 logger.error("telemetry_save_error", error=str(e))
 
         features = await self._extract_features(telemetry)
-        if features is None or features.size == 0:
+        if features is None or (hasattr(features, "size") and features.size == 0):
             logger.warning("no_features_extracted")
             return {"status": "no_features"}
+
+        if self.database:
+            try:
+                await self._save_features(features)
+            except Exception as e:
+                logger.error("features_save_error", error=str(e))
 
         detections = await self._run_detectors(features)
         alerts_generated = await self._process_detections(detections, features)
@@ -197,7 +201,7 @@ class AsyncPipeline:
             "telemetry_points": len(telemetry) if isinstance(telemetry, list) else 1,
             "features_extracted": (
                 int(features.size)
-                if hasattr(features, 'size')
+                if hasattr(features, "size")
                 else (len(features) if isinstance(features, dict) else 0)
             ),
             "detections": len(detections),
@@ -278,12 +282,10 @@ class AsyncPipeline:
         return structured_telemetry
 
     async def _safe_collect(self, collector: Any) -> Optional[Dict[str, Any]]:
-        """Collect from one collector with a hard timeout.
-        """
         try:
-            if hasattr(collector, 'collect') and asyncio.iscoroutinefunction(collector.collect):
+            if hasattr(collector, "collect") and asyncio.iscoroutinefunction(collector.collect):
                 coro = collector.collect()
-            elif hasattr(collector, 'collect'):
+            elif hasattr(collector, "collect"):
                 coro = asyncio.to_thread(collector.collect)
             else:
                 logger.warning(
@@ -313,9 +315,9 @@ class AsyncPipeline:
     # Feature extraction
     # ------------------------------------------------------------------
 
-    async def _extract_features(self, telemetry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _extract_features(self, telemetry: Dict[str, Any]) -> Optional[Any]:
         try:
-            if hasattr(self.extractor, 'extract_all_features'):
+            if hasattr(self.extractor, "extract_all_features"):
                 if asyncio.iscoroutinefunction(self.extractor.extract_all_features):
                     return await self.extractor.extract_all_features(telemetry)
                 else:
@@ -333,7 +335,7 @@ class AsyncPipeline:
     # Detection
     # ------------------------------------------------------------------
 
-    async def _run_detectors(self, features: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _run_detectors(self, features: Any) -> List[Dict[str, Any]]:
         if not self.detectors:
             return []
 
@@ -408,9 +410,9 @@ class AsyncPipeline:
 
         return detections
 
-    async def _safe_detect(self, detector: Any, features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _safe_detect(self, detector: Any, features: Any) -> Optional[Any]:
         try:
-            if hasattr(detector, 'detect'):
+            if hasattr(detector, "detect"):
                 if asyncio.iscoroutinefunction(detector.detect):
                     return await detector.detect(features)
                 else:
@@ -434,15 +436,13 @@ class AsyncPipeline:
     # ------------------------------------------------------------------
 
     async def _process_detections(
-        self, detections: List[Dict[str, Any]], features: Dict[str, Any]
+        self, detections: List[Dict[str, Any]], features: Any
     ) -> int:
-        """Publish anomaly events and return the count of anomalies detected.
-        """
         alerts_generated = 0
 
         for detection in detections:
-            if detection.get('label') == 1 or detection.get('anomaly_score', 0) > 0.5:
-                severity = detection.get('severity', 'medium')
+            if detection.get("label") == 1 or detection.get("anomaly_score", 0) > 0.5:
+                severity = detection.get("severity", "medium")
                 self.metrics.record_anomaly(severity)
 
                 await self.event_bus.publish(Event(
@@ -456,13 +456,16 @@ class AsyncPipeline:
                     source="async_pipeline",
                 ))
 
-                # FIX: was missing — counter remained 0 forever
                 alerts_generated += 1
 
         return alerts_generated
 
+    # ------------------------------------------------------------------
+    # DB persistence helpers
+    # ------------------------------------------------------------------
+
     async def _save_telemetry(self, telemetry: Dict[str, Any]) -> None:
-        """Save telemetry data to the database."""
+        """Write a row to the `telemetry` summary table."""
         if not self.database:
             return
 
@@ -472,21 +475,72 @@ class AsyncPipeline:
             memory = system_metrics.get("memory", {})
             disk = system_metrics.get("disk", {})
 
+            # Safely extract cpu/memory/disk percent
+            cpu_pct = cpu.get("cpu_percent") or cpu.get("cpu_percent_total")
+            mem_pct = memory.get("memory_percent")
+            disk_pct = None
+            disk_usage = disk.get("disk_usage")
+            if isinstance(disk_usage, dict):
+                # First partition's percent
+                for v in disk_usage.values():
+                    if isinstance(v, dict):
+                        disk_pct = v.get("percent")
+                        break
+            elif isinstance(disk_usage, (int, float)):
+                disk_pct = float(disk_usage)
+
             telemetry_event = TelemetryEvent(
                 device_id=self.device_id,
-                timestamp=telemetry.get("timestamp", datetime.utcnow().isoformat()),
                 component="async_pipeline",
-                cpu_percent=cpu.get("percent"),
-                memory_percent=memory.get("percent"),
-                disk_usage=disk.get("percent"),
+                cpu_percent=cpu_pct,
+                memory_percent=mem_pct,
+                disk_usage=disk_pct,
                 process_count=len(telemetry.get("processes", [])),
                 network_connections=len(telemetry.get("network_connections", [])),
-                metrics_json=telemetry,
+                metrics_json=system_metrics,
             )
             await self.database.insert_telemetry(telemetry_event)
-            logger.debug("telemetry_saved_to_database", device_id=self.device_id)
+            logger.debug("telemetry_saved", device_id=self.device_id)
         except Exception as e:
             logger.error("telemetry_save_error", error=str(e))
+
+    async def _save_telemetry_event(self, telemetry: Dict[str, Any]) -> None:
+        """Write a row to the canonical `telemetry_events` table."""
+        if not self.database:
+            return
+        try:
+            payload = {
+                "cpu": telemetry.get("system_metrics", {}).get("cpu", {}),
+                "memory": telemetry.get("system_metrics", {}).get("memory", {}),
+                "process_count": len(telemetry.get("processes", [])),
+                "network_connections": len(telemetry.get("network_connections", [])),
+                "timestamp": telemetry.get("timestamp"),
+            }
+            await self.database.insert_telemetry_event(
+                device_id=self.device_id,
+                event_type="RESOURCE",
+                payload=payload,
+                agent_version="1.0.0",
+            )
+        except Exception as e:
+            logger.error("telemetry_event_save_error", error=str(e))
+
+    async def _save_features(self, features: Any) -> None:
+        """Persist the feature vector to the `features` table."""
+        if not self.database:
+            return
+        try:
+            feature_names = self.extractor.get_feature_names()
+            await self.database.insert_feature_array(
+                device_id=self.device_id,
+                feature_array=features,
+                feature_names=feature_names,
+                model_version="1.0",
+                normalized=False,
+            )
+            logger.debug("features_saved", device_id=self.device_id)
+        except Exception as e:
+            logger.error("features_save_error", error=str(e))
 
     async def _publish_error_event(self, error_message: str, error_type: str) -> None:
         if self.event_bus._running:

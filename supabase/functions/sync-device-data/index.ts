@@ -32,6 +32,8 @@ interface AlertRecord {
   description?: string
   severity: string
   category: string
+  alert_type?: string
+  detector_type?: string
   confidence: number
   detection_window_start?: string
   detection_window_end?: string
