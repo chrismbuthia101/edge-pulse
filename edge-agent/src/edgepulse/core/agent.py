@@ -465,6 +465,22 @@ class EdgePulseAgent:
             register_detector_health_provider(_no_detector_health)
             logger.warning("no_trained_detector_health_provider_registered")
 
+        # ----------------------------------------------------------------
+        # Register device in local DB
+        # ----------------------------------------------------------------
+        try:
+            from edgepulse.shared.schemas import DeviceInfo, DeviceStatus
+            device_info = DeviceInfo(
+                device_id=self.device_id,
+                status=DeviceStatus.ONLINE,
+                last_seen=datetime.utcnow().isoformat(),
+                version="1.0.0",
+            )
+            await self.database.upsert_device(device_info)
+            logger.info("device_registered_in_db", device_id=self.device_id)
+        except Exception as e:
+            logger.error("device_registration_error", error=str(e))
+
     async def _initialize_sync_client(self) -> None:
         """Initialize Supabase sync client."""
         try:
@@ -591,12 +607,35 @@ class EdgePulseAgent:
                     and features is not None
                 ):
                     anomaly_score = detection.get("anomaly_score", 0.0)
-                    explanation = self.shap_explainer.explain_prediction(
+                    result = self.shap_explainer.explain_prediction(
                         features, anomaly_score
                     )
+                    # Convert StrictExplanationJSON dataclass → plain dict
+                    if hasattr(result, "to_dict"):
+                        explanation = result.to_dict()
+                    elif isinstance(result, dict):
+                        explanation = result
+                    else:
+                        explanation = {}
             except Exception as e:
                 logger.error("shap_explanation_error", error=str(e))
                 explanation = {}
+
+            # Build the shape generate_alert_report expects
+            shap_features = explanation.get("features", [])
+            report_explanation: Dict[str, Any] = {
+                "top_features": [
+                    {
+                        "feature": f.get("feature_name", ""),
+                        "contribution": f.get("attribution_score", 0.0),
+                        "direction": f.get("contribution_type", "neutral"),
+                    }
+                    for f in shap_features[:5]
+                ],
+                "explanation_text": ", ".join(
+                    explanation.get("summary", {}).get("main_factors", [])
+                ) or "No explanation available",
+            }
 
             anomaly_data = {
                 "anomaly_score": detection.get("anomaly_score", 0.0),
@@ -605,12 +644,23 @@ class EdgePulseAgent:
                 "detector": detection.get("detector"),
             }
 
-            report = await asyncio.to_thread(
-                self.report_generator.generate_alert_report,
-                anomaly_data,
-                explanation,
-                {"raw_detection": detection},
-            )
+            try:
+                report = await asyncio.to_thread(
+                    self.report_generator.generate_alert_report,
+                    anomaly_data,
+                    report_explanation,
+                    {"raw_detection": detection},
+                )
+            except Exception as e:
+                logger.error("report_generation_error", error=str(e))
+                # Fall back to a minimal synchronous call with an empty explanation
+                try:
+                    report = self.report_generator.generate_alert_report(
+                        anomaly_data, {}, {"raw_detection": detection}
+                    )
+                except Exception as e2:
+                    logger.error("report_generation_fallback_error", error=str(e2))
+                    return
 
             alert = None
             try:
@@ -635,7 +685,8 @@ class EdgePulseAgent:
                     alert_type=alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                     detector_type=detection.get("detector", "unknown"),
                     explanation=alert.get("explanation", {}),
-                    feature_importance=explanation.get("feature_importance") if explanation else None,
+
+                    feature_importance=report_explanation.get("feature_importance"),
                     acknowledged=False,
                 )
                 await self.database.insert_alert(alert_event)
@@ -670,7 +721,9 @@ class EdgePulseAgent:
                         "device_name": self.device_id,
                         "title": alert.get("anomaly", {}).get("anomaly_type", "Security Alert"),
                         "description": alert.get("anomaly", {}).get("description", "Anomaly detected"),
-                        "severity": str(alert.get("severity", severity_label)).upper(),
+                        "severity": str(alert.get("severity", severity_label)).lower(),
+                        "alert_type": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),  # ← add
+                        "detector_type": detection.get("detector", "unknown"),
                         "status": "PENDING",
                         "category": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                         "confidence": alert.get("anomaly", {}).get("confidence", 0.0),

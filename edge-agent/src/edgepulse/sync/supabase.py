@@ -70,13 +70,13 @@ class SupabaseSync:
             "Prefer": "return=minimal",
         }
 
+        if self.supabase_key:
+            headers["apikey"] = self.supabase_key
+            headers["Authorization"] = f"Bearer {self.supabase_key}"
+
         if self.device_id and self.api_key:
             headers["X-EdgePulse-Device-Id"] = self.device_id
             headers["X-EdgePulse-Api-Key"] = self.api_key
-        elif self.supabase_key:
-            # Fallback: unenrolled / legacy mode uses the anon key.
-            headers["apikey"] = self.supabase_key
-            headers["Authorization"] = f"Bearer {self.supabase_key}"
 
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout),

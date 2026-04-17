@@ -250,6 +250,8 @@ class DatabaseManager:
     async def connection(self):
         async with aiosqlite.connect(self.db_path) as conn:
             conn.row_factory = aiosqlite.Row
+            await conn.execute("PRAGMA foreign_keys = ON")
+            await conn.execute("PRAGMA journal_mode = WAL")
             yield conn
 
     async def _create_triggers(self, conn: aiosqlite.Connection) -> None:
