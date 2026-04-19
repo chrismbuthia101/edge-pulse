@@ -230,7 +230,7 @@ export class CaseRepository extends BaseRepository<Case> {
   async getCaseAlerts(caseId: string): Promise<CaseAlertLink[]> {
     const { data, error } = await this.supabase
       .from('case_alerts')
-      .select('alert_id, alert_severity, alert_status, device_id, created_at, explanation_json')
+      .select('alert_id, alert_severity, alert_status, device_id, device_name, created_at, explanation_json')
       .eq('case_id', caseId)
       .order('created_at', { ascending: false });
 

@@ -37,7 +37,17 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
 
     if (error) throw this.handleError(error);
 
-    return (data || []).map(row => this.transformDeviceHealth(
+    const seenDevices = new Set<string>();
+    const uniqueRows = (data || []).filter((row: unknown) => {
+      const snapshot = row as DeviceHealthSnapshot;
+      if (seenDevices.has(snapshot.device_id)) {
+        return false;
+      }
+      seenDevices.add(snapshot.device_id);
+      return true;
+    });
+
+    return uniqueRows.map(row => this.transformDeviceHealth(
       row as DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
     ));
   }

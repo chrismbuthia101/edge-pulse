@@ -50,7 +50,6 @@ export default function HealthPage() {
         };
     }, [autoRefresh, fetchHealthData, initialize]);
 
-    // Role check AFTER all hooks
     if (!hasRole(["ANALYST", "ADMINISTRATOR"])) {
         return (
             <div className="flex items-center justify-center h-64">

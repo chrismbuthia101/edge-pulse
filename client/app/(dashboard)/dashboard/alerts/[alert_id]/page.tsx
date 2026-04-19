@@ -16,6 +16,7 @@ interface AlertRecord {
   id: string
   anomaly_score_id: string
   device_id: string
+  device_name: string
   alert_severity: string
   alert_status: string
   explanation_json: string | null
@@ -35,7 +36,6 @@ interface AlertRecord {
   read: boolean
 }
 
-// SHAP explanation shape stored in explanation_json
 interface ShapExplanation {
   explanation_type?: string
   summary: {
@@ -80,6 +80,7 @@ export default function AlertDetailPage() {
         id: alertData.id,
         anomaly_score_id: alertData.anomaly_score_id || '',
         device_id: alertData.device_id,
+        device_name: alertData.device_name,
         alert_severity: alertData.severity,
         alert_status: alertData.status,
         explanation_json: JSON.stringify(alertData.explanation_json),
@@ -218,8 +219,8 @@ export default function AlertDetailPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Device ID</p>
-              <p className="text-lg font-semibold font-mono">{alert.device_id}</p>
+              <p className="text-sm font-medium text-muted-foreground">Device</p>
+              <p className="text-lg font-semibold">{alert.device_name}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Created</p>

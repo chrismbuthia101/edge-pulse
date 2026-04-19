@@ -181,7 +181,7 @@ export default function ReportsPage() {
                                         <div className="flex items-center gap-3">
                                             <Badge className={severityColors[alert.severity] || ""}>{alert.severity}</Badge>
                                             <div>
-                                                <div className="text-sm font-medium">{alert.device_id}</div>
+                                                <div className="text-sm font-medium">{alert.device_name || alert.device_id}</div>
                                                 <div className="text-xs text-muted-foreground">{new Date(alert.created_at).toLocaleString()}</div>
                                             </div>
                                         </div>

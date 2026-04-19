@@ -3,10 +3,29 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { Download, FileText, Calendar, Shield, Database, AlertTriangle } from "lucide-react";
+import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { ForensicService, type ExportType } from "@/lib/services/forensic-service";
 import type { ExportQuery } from "@/lib/repositories/forensic-repository";
 import { toast } from "sonner";
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const exportIdSchema = z.enum(["telemetry", "alerts", "hashchain", "features"]);
+
+const triggerDownload = (content: string, rawFilename: string, mimeType: string): void => {
+  const safeFilename = rawFilename.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 255) || 'download';
+
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeFilename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 interface ForensicExportProps {
   deviceId?: string;
@@ -63,8 +82,17 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
   const handleExport = async (exportId: string) => {
     setExporting(exportId);
     try {
-      const startDate = new Date(dateRange.start + 'T00:00:00.000Z');
-      const endDate = new Date(dateRange.end + 'T23:59:59.999Z');
+      const validatedExportId = exportIdSchema.safeParse(exportId);
+      const validatedStartDate = dateSchema.safeParse(dateRange.start);
+      const validatedEndDate = dateSchema.safeParse(dateRange.end);
+
+      if (!validatedExportId.success || !validatedStartDate.success || !validatedEndDate.success) {
+        toast.error('Invalid input format');
+        return;
+      }
+
+      const startDate = new Date(validatedStartDate.data + 'T00:00:00.000Z');
+      const endDate = new Date(validatedEndDate.data + 'T23:59:59.999Z');
 
       const query: ExportQuery = {
         startDate,
@@ -77,8 +105,8 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
 
       const filename = forensicService.generateFilename(
         exportId as ExportType,
-        dateRange.start,
-        dateRange.end,
+        validatedStartDate.data,
+        validatedEndDate.data,
         option.format
       );
 
@@ -88,8 +116,10 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
         { format: option.format as 'JSON' | 'CSV' | 'Parquet', filename }
       );
 
-      // Download the file
-      downloadFile(result.data as string, result.filename, result.mimeType);
+      const sanitizedExportName = option.name.replace(/[^a-zA-Z0-9]/g, '_');
+      const safeFilename = `${sanitizedExportName}_${validatedStartDate.data}_${validatedEndDate.data}.${option.format.toLowerCase()}`;
+
+      triggerDownload(result.data as string, safeFilename, result.mimeType);
 
       toast.success(`Successfully exported ${option.name}`);
     } catch (error) {
@@ -98,18 +128,6 @@ export function ForensicExport({ deviceId }: ForensicExportProps) {
     } finally {
       setExporting(null);
     }
-  };
-
-  const downloadFile = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   return (

@@ -16,7 +16,6 @@ import {
     Bell,
     LogOut,
     HelpCircle,
-    Zap,
     Users,
     FileText,
     Heart,
@@ -33,31 +32,44 @@ import { useAuth } from "@/lib/auth/useAuth";
 import { AuthService } from "@/lib/services/auth-service";
 import { AuthRepository } from "@/lib/repositories/auth-repository";
 
-const navItems = [
+interface NavItem {
+    icon: React.ElementType;
+    label: string;
+    href: string;
+    badge?: string;
+    roles?: string[];
+}
+
+interface NavGroup {
+    group: string;
+    items: NavItem[];
+}
+
+const navItems: NavGroup[] = [
     {
         group: "Overview",
         items: [
             { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-            { icon: Activity, label: "Live Feed", href: "/dashboard/live", badge: "LIVE" },
+            { icon: Activity, label: "Live Telemetry", href: "/dashboard/live", badge: "LIVE" },
         ],
     },
     {
         group: "Security",
         items: [
-            { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "12" },
+            { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
             { icon: Brain, label: "ML Insights", href: "/dashboard/insights", roles: ["ADMINISTRATOR"] },
-            { icon: Shield, label: "Integrity", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: BarChart3, label: "Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: List, label: "Cases", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: Shield, label: "File Integrity", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: BarChart3, label: "Model Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: List, label: "Investigations", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
         ],
     },
     {
         group: "System",
         items: [
             { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
-            { icon: Heart, label: "Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: Wifi, label: "Resilience", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: Heart, label: "Agent Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: Wifi, label: "Network Status", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: FileText, label: "Logs", href: "/dashboard/logs", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: Settings, label: "Settings", href: "/dashboard/settings" },
         ],
@@ -274,38 +286,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                         </div>
                     ))}
                 </nav>
-
-                {/* Anomaly level indicator */}
-                <AnimatePresence>
-                    {!collapsed && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mx-3 mb-3"
-                        >
-                            <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Zap className="h-3.5 w-3.5 text-amber-500" />
-                                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                        Anomaly Level: Medium
-                                    </span>
-                                </div>
-                                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                    <motion.div
-                                        className="h-full bg-amber-500 rounded-full"
-                                        initial={{ width: 0 }}
-                                        animate={{ width: "55%" }}
-                                        transition={{ duration: 1, ease: "easeOut" }}
-                                    />
-                                </div>
-                                <p className="text-[10px] text-muted-foreground mt-1.5">
-                                    12 active alerts · 3 critical
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
 
                 {/* Bottom actions */}
                 <div className="border-t border-border py-3 px-2 space-y-1">

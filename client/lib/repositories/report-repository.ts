@@ -15,6 +15,7 @@ export interface ReportMetrics {
     alert_id: string;
     severity: string;
     device_id: string;
+    device_name: string;
     created_at: string;
     explanation_json: unknown;
   }>;
@@ -82,6 +83,7 @@ export class ReportRepository extends BaseRepository<unknown> {
         const recentAlerts = alertsList.slice(0, 10).map(alert => ({
           alert_id: alert.alert_id,
           severity: alert.severity || 'unknown',
+          device_name: alert.device_name || 'unknown',
           device_id: alert.device_id || 'unknown',
           created_at: alert.created_at,
           explanation_json: alert.explanation_json,

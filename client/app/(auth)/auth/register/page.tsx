@@ -25,6 +25,23 @@ const strengthLabels = ["", "Weak", "Fair", "Good", "Strong", "Excellent"];
 const strengthColors = ["", "bg-destructive", "bg-orange-500", "bg-amber-500", "bg-emerald-500", "bg-primary"];
 const strengthTextColors = ["", "text-destructive", "text-orange-500", "text-amber-500", "text-emerald-500", "text-primary"];
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    const dummy = '\x00'.repeat(b.length);
+    let result = 0;
+    for (let i = 0; i < b.length; i++) {
+      result |= dummy.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    void result;
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 export default function RegisterPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -41,8 +58,8 @@ export default function RegisterPage() {
 
   const metRequirements = passwordRequirements.filter((r) => r.test(password));
   const passwordStrength = metRequirements.length;
-  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
-  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const passwordsMatch = confirmPassword.length > 0 && timingSafeEqual(password, confirmPassword);
+  const passwordsMismatch = confirmPassword.length > 0 && !timingSafeEqual(password, confirmPassword);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -67,7 +84,7 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!timingSafeEqual(password, confirmPassword)) {
       setPasswordError("Passwords do not match");
       return;
     }
