@@ -45,11 +45,6 @@ DEFAULT_THRESHOLD = 0.5
 MAX_CACHE_SIZE = 256
 LIME_SAMPLE_SIZE = 100  # Max training rows used by KernelExplainer / LIME
 
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
 class ExplanationType(str, Enum):
     SHAP = "shap"
     LIME = "lime"
@@ -61,11 +56,6 @@ class ContributionType(str, Enum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
     NEUTRAL = "neutral"
-
-
-# ---------------------------------------------------------------------------
-# Data classes
-# ---------------------------------------------------------------------------
 
 @dataclass
 class FeatureExplanation:
@@ -101,12 +91,6 @@ class ExplanationSummary:
 
 @dataclass
 class StrictExplanationJSON:
-    """
-    Strict JSON schema for anomaly detection explanations.
-
-    Schema version 1.1 adds normalised_attribution and contribution
-    sign breakdowns to the summary.
-    """
     version: str = SCHEMA_VERSION
     explanation_type: ExplanationType = ExplanationType.NONE
     model_id: str = ""
@@ -184,7 +168,7 @@ class _ExplanationCache:
 
     @staticmethod
     def _key(model_id: str, features: "np.ndarray") -> str:
-        raw = model_id + features.tobytes()
+        raw = model_id.encode() + features.tobytes()
         return hashlib.sha256(raw).hexdigest()
 
     def get(self, model_id: str, features: "np.ndarray") -> Optional[StrictExplanationJSON]:
@@ -214,10 +198,6 @@ class _ExplanationCache:
         with self._lock:
             return {"size": len(self._cache), "hits": self.hits, "misses": self.misses}
 
-
-# ---------------------------------------------------------------------------
-# Base explainer
-# ---------------------------------------------------------------------------
 
 class BaseExplainer(ABC):
     """Abstract base class for all XAI explainers."""
@@ -393,15 +373,12 @@ class BaseExplainer(ABC):
         )
 
 
-# ---------------------------------------------------------------------------
-# SHAP explainer
-# ---------------------------------------------------------------------------
-
 class SHAPExplainer(BaseExplainer):
 
     def __init__(self, model_id: str):
         super().__init__(model_id)
         self._explainer: Optional[Any] = None
+        self._uses_kernel: bool = False
 
     def get_explanation_type(self) -> ExplanationType:
         return ExplanationType.SHAP
@@ -419,19 +396,59 @@ class SHAPExplainer(BaseExplainer):
             self._feature_names = self._resolve_feature_names(feature_names, training_data)
             self._training_data = training_data
 
-            # Prefer tree-based explainer; fall back to KernelExplainer
             if hasattr(model, "predict_proba") or hasattr(model, "decision_function"):
-                self._explainer = shap.TreeExplainer(model, training_data)
+                try:
+                    self._explainer = shap.TreeExplainer(model)
+                    self._uses_kernel = False
+                    logger.info(
+                        "SHAPExplainer: using TreeExplainer (path-dependent) for model '%s'",
+                        self.model_id,
+                    )
+                except Exception as tree_exc:
+                    logger.warning(
+                        "SHAPExplainer: TreeExplainer failed ('%s'), "
+                        "falling back to KernelExplainer",
+                        tree_exc,
+                    )
+                    if training_data is None:
+                        logger.error(
+                            "SHAPExplainer: KernelExplainer fallback requires training_data"
+                        )
+                        return False
+                    bg = training_data[:LIME_SAMPLE_SIZE]
+              
+                    predict_fn = (
+                        model.score_samples
+                        if hasattr(model, "score_samples")
+                        else model.predict
+                    )
+                    self._explainer = shap.KernelExplainer(predict_fn, bg)
+                    self._uses_kernel = True
+                    logger.info(
+                        "SHAPExplainer: using KernelExplainer fallback for model '%s'",
+                        self.model_id,
+                    )
             else:
                 if training_data is None:
-                    logger.error("KernelExplainer requires training_data")
+                    logger.error("SHAPExplainer: KernelExplainer requires training_data")
                     return False
                 bg = training_data[:LIME_SAMPLE_SIZE]
-                self._explainer = shap.KernelExplainer(model.predict, bg)
+                predict_fn = (
+                    model.score_samples
+                    if hasattr(model, "score_samples")
+                    else model.predict
+                )
+                self._explainer = shap.KernelExplainer(predict_fn, bg)
+                self._uses_kernel = True
+                logger.info(
+                    "SHAPExplainer: using KernelExplainer for model '%s'",
+                    self.model_id,
+                )
 
             self.is_initialized = True
             logger.info("SHAPExplainer ready for model '%s'", self.model_id)
             return True
+
         except Exception as exc:
             logger.exception("SHAPExplainer.initialize failed: %s", exc)
             return False
@@ -440,16 +457,23 @@ class SHAPExplainer(BaseExplainer):
         input_2d = features.reshape(1, -1)
         shap_values = self._explainer.shap_values(input_2d)
 
-        # Handle multi-output (list of arrays) – take class-1 or first class
         if isinstance(shap_values, list):
-            shap_values = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+            if len(shap_values) > 1:
+                arr = np.asarray(shap_values[1], dtype=float)
+            elif len(shap_values) == 1:
+                arr = np.asarray(shap_values[0], dtype=float)
+            else:
+                return np.zeros(len(self._feature_names), dtype=float)
+        else:
+            arr = np.asarray(shap_values, dtype=float)
 
-        return np.asarray(shap_values).flatten()
+        # Flatten (1, n_features) → (n_features,)
+        if arr.ndim == 2 and arr.shape[0] == 1:
+            arr = arr[0]
+        elif arr.ndim > 1:
+            arr = arr.flatten()
 
-
-# ---------------------------------------------------------------------------
-# LIME explainer
-# ---------------------------------------------------------------------------
+        return arr
 
 class LIMEExplainer(BaseExplainer):
 
@@ -491,23 +515,25 @@ class LIMEExplainer(BaseExplainer):
             return False
 
     def _compute_attributions(self, features: "np.ndarray") -> "np.ndarray":
+        # Choose a predict function that returns continuous values for LIME.
+        if hasattr(self._model, "score_samples"):
+            predict_fn = self._model.score_samples
+        elif hasattr(self._model, "decision_function"):
+            predict_fn = self._model.decision_function
+        else:
+            predict_fn = self._model.predict
+
         exp = self._explainer.explain_instance(
             features,
-            self._model.predict,
+            predict_fn,
             num_features=len(self._feature_names),
         )
-        # explain_instance returns (feature_index_or_label, weight) pairs
         attributions = np.zeros(len(self._feature_names))
         for item, weight in exp.as_list():
             idx = item if isinstance(item, int) else None
             if idx is not None and 0 <= idx < len(attributions):
                 attributions[idx] = weight
         return attributions
-
-
-# ---------------------------------------------------------------------------
-# Manager
-# ---------------------------------------------------------------------------
 
 class ExplainableAIManager:
     """
@@ -521,14 +547,10 @@ class ExplainableAIManager:
     def __init__(self, model_id: str, cache_size: int = MAX_CACHE_SIZE):
         self.model_id = model_id
         self._primary: Optional[BaseExplainer] = None
-        self._fallback: Optional[BaseExplainer] = None
+        self._fallback_explainer: Optional[BaseExplainer] = None
         self._cache = _ExplanationCache(maxsize=cache_size)
         self._lock = threading.Lock()
         self.is_initialized = False
-
-    # ------------------------------------------------------------------
-    # Initialisation
-    # ------------------------------------------------------------------
 
     def initialize(
         self,
@@ -540,12 +562,12 @@ class ExplainableAIManager:
         enable_cache: bool = True,
     ) -> bool:
         primary_method = ExplanationType(primary_method)
-        
-        # Only determine fallback method if fallback is enabled
-        fallback_method = None
+
+        fallback_method: Optional[ExplanationType] = None
         if enable_fallback:
             fallback_method = (
-                ExplanationType.LIME if primary_method == ExplanationType.SHAP else ExplanationType.SHAP
+                ExplanationType.LIME if primary_method == ExplanationType.SHAP
+                else ExplanationType.SHAP
             )
 
         _method_map = {
@@ -555,7 +577,7 @@ class ExplainableAIManager:
 
         ok_primary = ok_fallback = False
 
-        # Initialize primary explainer
+        # Initialize primary
         cls_p, avail_p = _method_map.get(primary_method, (None, False))
         if cls_p and avail_p:
             explainer = cls_p(self.model_id)
@@ -565,16 +587,18 @@ class ExplainableAIManager:
             else:
                 logger.warning("Primary %s explainer failed to initialise", primary_method)
 
-        # Initialize fallback explainer only if enabled
+        # Initialize fallback
         if enable_fallback and fallback_method:
             cls_f, avail_f = _method_map.get(fallback_method, (None, False))
             if cls_f and avail_f:
                 explainer = cls_f(self.model_id)
                 ok_fallback = explainer.initialize(model, training_data, feature_names)
                 if ok_fallback:
-                    self._fallback = explainer
+                    self._fallback_explainer = explainer
                 else:
-                    logger.warning("Fallback %s explainer failed to initialise", fallback_method)
+                    logger.warning(
+                        "Fallback %s explainer failed to initialise", fallback_method
+                    )
 
         if not enable_cache:
             self._cache = None  # type: ignore[assignment]
@@ -583,7 +607,11 @@ class ExplainableAIManager:
         if not self.is_initialized:
             logger.error("No XAI explainer available for model '%s'", self.model_id)
         else:
-            available = [e.get_explanation_type() for e in (self._primary, self._fallback) if e]
+            available = [
+                e.get_explanation_type()
+                for e in (self._primary, self._fallback_explainer)
+                if e
+            ]
             logger.info("ExplainableAIManager ready. Methods: %s", available)
         return self.is_initialized
 
@@ -599,8 +627,9 @@ class ExplainableAIManager:
         use_cache: bool = True,
     ) -> StrictExplanationJSON:
         if not self.is_initialized:
-            return self._minimal_fallback(anomaly_score, detection_threshold,
-                                          error="Manager not initialised")
+            return self._minimal_fallback(
+                anomaly_score, detection_threshold, error="Manager not initialised"
+            )
 
         features = np.asarray(features, dtype=float)
 
@@ -608,7 +637,6 @@ class ExplainableAIManager:
         if use_cache and self._cache is not None:
             cached = self._cache.get(self.model_id, features)
             if cached is not None:
-                # Update score/threshold in case they differ
                 cached.anomaly_score = anomaly_score
                 cached.detection_threshold = detection_threshold
                 cached.is_anomaly = anomaly_score >= detection_threshold
@@ -633,7 +661,6 @@ class ExplainableAIManager:
         detection_threshold: float = DEFAULT_THRESHOLD,
         use_cache: bool = True,
     ) -> List[StrictExplanationJSON]:
-        """Explain a batch of predictions. Each row in feature_matrix is one sample."""
         feature_matrix = np.asarray(feature_matrix, dtype=float)
         if feature_matrix.ndim == 1:
             feature_matrix = feature_matrix.reshape(1, -1)
@@ -657,7 +684,11 @@ class ExplainableAIManager:
         return self.is_initialized
 
     def get_available_methods(self) -> List[ExplanationType]:
-        return [e.get_explanation_type() for e in (self._primary, self._fallback) if e]
+        return [
+            e.get_explanation_type()
+            for e in (self._primary, self._fallback_explainer)
+            if e
+        ]
 
     def cache_stats(self) -> Dict[str, int]:
         if self._cache is None:
@@ -678,7 +709,10 @@ class ExplainableAIManager:
         anomaly_score: float,
         detection_threshold: float,
     ) -> StrictExplanationJSON:
-        for explainer, label in ((self._primary, "primary"), (self._fallback, "fallback")):
+        for explainer, label in (
+            (self._primary, "primary"),
+            (self._fallback_explainer, "fallback"),
+        ):
             if explainer is None:
                 continue
             try:
@@ -690,8 +724,9 @@ class ExplainableAIManager:
                 logger.warning("%s explainer raised: %s", label, exc)
 
         logger.error("All explainers failed; returning minimal explanation")
-        return self._minimal_fallback(anomaly_score, detection_threshold,
-                                      error="All explainers failed")
+        return self._minimal_fallback(
+            anomaly_score, detection_threshold, error="All explainers failed"
+        )
 
     def _minimal_fallback(
         self,
@@ -733,5 +768,4 @@ def _calibrated_confidence(anomaly_score: float, threshold: float) -> float:
     the score sits above/below the threshold rather than raw distance from 0.5.
     """
     distance = abs(anomaly_score - threshold)
-    # Sigmoid-style scaling: full confidence at 0.4+ away from threshold
     return min(1.0, distance / 0.4)

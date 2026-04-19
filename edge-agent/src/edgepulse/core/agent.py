@@ -27,7 +27,11 @@ from edgepulse.features.feature_normalizer import DeviceNormalizer
 from edgepulse.detectors.isolation_forest_detector import IsolationForestDetector
 from edgepulse.detectors.autoencoder_reconstruction_detector import AutoencoderDetector
 from edgepulse.detectors.ensemble_detector import EnsembleDetector
-from edgepulse.analysis.explainable_ai import SHAPExplainer
+from edgepulse.analysis.explainable_ai import (
+    ExplainableAIManager,
+    ExplanationType,
+    StrictExplanationJSON,
+)
 from edgepulse.analysis.report_generator import ReportGenerator
 from edgepulse.alerts.alert_engine import AlertEngine
 from edgepulse.alerts.notifier import LocalNotifier
@@ -121,6 +125,9 @@ class EdgePulseAgent:
         self._detectors = detectors or self._create_detectors()
         self._feature_extractor = feature_extractor or self._create_feature_extractor()
         self._alert_engine = alert_engine or self._create_alert_engine()
+
+        self._explainer_manager: Optional[ExplainableAIManager] = None
+        self._explainer_init_attempted: bool = False
 
         logger.info("async_agent_initialized", device_id=self.device_id)
 
@@ -435,7 +442,6 @@ class EdgePulseAgent:
         baseline_loaded = self.normalizer.load_baseline()
         if baseline_loaded:
             logger.info("feature_normalizer_baseline_loaded")
-            # Baseline exists — no warmup needed.
             self._warmup_cycles_remaining = 0
         else:
             logger.info(
@@ -449,9 +455,6 @@ class EdgePulseAgent:
         if self.settings.alerting.enable_local_notifications:
             self.notifier = LocalNotifier()
 
-        self.shap_explainer = None
-        self._shap_init_attempted = False
-
         primary_detectors = [d for d in self._detectors if hasattr(d, "get_health")]
 
         if primary_detectors:
@@ -461,7 +464,8 @@ class EdgePulseAgent:
                 "detector_health_provider_registered",
                 detector=primary.__class__.__name__,
             )
-            self._initialize_shap_explainer()
+            # Initialise the explainer now that we have a trained model.
+            self._initialize_explainer()
         else:
             def _no_detector_health():
                 return {
@@ -474,9 +478,7 @@ class EdgePulseAgent:
             register_detector_health_provider(_no_detector_health)
             logger.warning("no_trained_detector_health_provider_registered")
 
-        # ----------------------------------------------------------------
         # Register device in local DB
-        # ----------------------------------------------------------------
         try:
             from edgepulse.shared.schemas import DeviceInfo, DeviceStatus
             device_info = DeviceInfo(
@@ -489,6 +491,63 @@ class EdgePulseAgent:
             logger.info("device_registered_in_db", device_id=self.device_id)
         except Exception as e:
             logger.error("device_registration_error", error=str(e))
+
+    def _initialize_explainer(self) -> None:
+        """
+        Initialise ExplainableAIManager (SHAP primary, LIME fallback).
+        """
+        if self._explainer_init_attempted:
+            return
+        self._explainer_init_attempted = True
+
+        if not self._detectors:
+            logger.warning("explainer_init_skipped: no detectors")
+            return
+
+        primary_detector = self._detectors[0]
+        model = getattr(primary_detector, "model", None)
+        if model is None:
+            logger.warning("explainer_init_skipped: primary detector has no trained model")
+            return
+
+        try:
+            import numpy as np
+
+            feature_names = self._feature_extractor.get_feature_names()
+            n_features = len(feature_names)
+
+            synthetic_bg = np.random.normal(
+                0.0, 0.5, size=(100, n_features)
+            ).astype(np.float32)
+
+            manager = ExplainableAIManager(
+                model_id=f"{self.device_id}_primary",
+                cache_size=256,
+            )
+            ok = manager.initialize(
+                model=model,
+                training_data=synthetic_bg,
+                feature_names=feature_names,
+                primary_method=ExplanationType.SHAP,
+                enable_fallback=True,   # LIME kicks in if SHAP fails
+                enable_cache=True,
+            )
+
+            if ok:
+                self._explainer_manager = manager
+                logger.info(
+                    "explainer_initialized",
+                    device_id=self.device_id,
+                    methods=[m.value for m in manager.get_available_methods()],
+                    feature_count=n_features,
+                )
+            else:
+                logger.warning("explainer_initialization_failed", device_id=self.device_id)
+                self._explainer_manager = None
+
+        except Exception as exc:
+            logger.error("explainer_init_error", error=str(exc))
+            self._explainer_manager = None
 
     async def _initialize_sync_client(self) -> None:
         """Initialize Supabase sync client."""
@@ -556,8 +615,7 @@ class EdgePulseAgent:
             severity_label = data.get("severity", detection.get("severity", "medium"))
 
             # ------------------------------------------------------------------
-            # Warmup guard: collect data and update the normalizer baseline
-            # during the first few cycles without firing alerts.
+            # Warmup guard
             # ------------------------------------------------------------------
             if self._warmup_cycles_remaining > 0:
                 self._warmup_cycles_remaining -= 1
@@ -585,6 +643,7 @@ class EdgePulseAgent:
                 detector=detection.get("detector"),
             )
 
+            # Persist detection event
             try:
                 detection_event = DetectionEvent(
                     device_id=self.device_id,
@@ -611,37 +670,52 @@ class EdgePulseAgent:
                 labels={'severity': severity_label},
             )
 
+            explanation_obj: Optional[StrictExplanationJSON] = None
             explanation: Dict[str, Any] = {}
-            try:
-                if (
-                    not self._shap_init_attempted
-                    and self._detectors
-                    and features is not None
-                ):
-                    self._initialize_shap_explainer()
 
-                if (
-                    hasattr(self, "shap_explainer")
-                    and self.shap_explainer is not None
-                    and features is not None
-                ):
+            if self._explainer_manager is not None and features is not None:
+                try:
+                    import numpy as np
+                    feat_array = np.asarray(features, dtype=float).flatten()
                     anomaly_score = detection.get("anomaly_score", 0.0)
-                    result = self.shap_explainer.explain_prediction(
-                        features, anomaly_score
+                    explanation_obj = self._explainer_manager.explain_prediction(
+                        feat_array, anomaly_score
                     )
-                    # Convert StrictExplanationJSON dataclass → plain dict
-                    if hasattr(result, "to_dict"):
-                        explanation = result.to_dict()
-                    elif isinstance(result, dict):
-                        explanation = result
-                    else:
-                        explanation = {}
-            except Exception as e:
-                logger.error("shap_explanation_error", error=str(e))
-                explanation = {}
+                    explanation = explanation_obj.to_dict()
+                    logger.debug(
+                        "explanation_generated",
+                        explanation_type=explanation.get("explanation_type"),
+                        feature_count=len(explanation.get("features", [])),
+                        top_factors=explanation.get("summary", {}).get("main_factors", [])[:3],
+                    )
+                except Exception as e:
+                    logger.error("explanation_generation_error", error=str(e))
+                    explanation = {}
+            else:
+                if self._explainer_manager is None:
+                    logger.debug("explanation_skipped: explainer not available")
+                if features is None:
+                    logger.debug("explanation_skipped: no features in event")
 
-            # Build the shape generate_alert_report expects
             shap_features = explanation.get("features", [])
+
+            feature_importance: Dict[str, float] = {
+                f.get("feature_name", f"feature_{i}"): f.get("attribution_score", 0.0)
+                for i, f in enumerate(shap_features)
+                if f.get("feature_name") and f.get("attribution_score", 0.0) != 0.0
+            }
+
+            summary_factors = (
+                explanation.get("summary", {}).get("main_factors", [])
+                if explanation
+                else []
+            )
+            explanation_text = (
+                ", ".join(summary_factors)
+                if summary_factors
+                else "No explanation available"
+            )
+
             report_explanation: Dict[str, Any] = {
                 "top_features": [
                     {
@@ -651,9 +725,8 @@ class EdgePulseAgent:
                     }
                     for f in shap_features[:5]
                 ],
-                "explanation_text": ", ".join(
-                    explanation.get("summary", {}).get("main_factors", [])
-                ) or "No explanation available",
+                "explanation_text": explanation_text,
+                "feature_importance": feature_importance,
             }
 
             anomaly_data = {
@@ -672,7 +745,6 @@ class EdgePulseAgent:
                 )
             except Exception as e:
                 logger.error("report_generation_error", error=str(e))
-                # Fall back to a minimal synchronous call with an empty explanation
                 try:
                     report = self.report_generator.generate_alert_report(
                         anomaly_data, {}, {"raw_detection": detection}
@@ -703,9 +775,8 @@ class EdgePulseAgent:
                     anomaly_score=alert.get("anomaly_score", 0.0),
                     alert_type=alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                     detector_type=detection.get("detector", "unknown"),
-                    explanation=alert.get("explanation", {}),
-
-                    feature_importance=report_explanation.get("feature_importance"),
+                    explanation=explanation if explanation else alert.get("explanation", {}),
+                    feature_importance=feature_importance if feature_importance else None,
                     acknowledged=False,
                 )
                 await self.database.insert_alert(alert_event)
@@ -744,15 +815,20 @@ class EdgePulseAgent:
                         "title": alert.get("anomaly", {}).get("anomaly_type", "Security Alert"),
                         "description": alert.get("anomaly", {}).get("description", "Anomaly detected"),
                         "severity": str(alert.get("severity", severity_label)).lower(),
-                        "alert_type": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),  # ← add
+                        "alert_type": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                         "detector_type": detection.get("detector", "unknown"),
                         "status": "PENDING",
                         "category": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                         "confidence": alert.get("anomaly", {}).get("confidence", 0.0),
                         "anomaly_score": alert.get("anomaly_score", 0.0),
+                        "explanation_json": explanation if explanation else {},
+                        "feature_importance": feature_importance if feature_importance else {},
                         "model_id": f"iforest-{self.device_id[:8]}",
                         "collection_agent_version": "1.0.0",
-                        "inference_latency_ms": 0,
+                        "inference_latency_ms": (
+                            explanation.get("summary", {}).get("processing_time_ms", 0)
+                            if explanation else 0
+                        ),
                         "telemetry_source": "PROCESS",
                         "created_at": datetime.utcnow().isoformat() + "Z",
                         "updated_at": datetime.utcnow().isoformat() + "Z",
@@ -912,7 +988,6 @@ class EdgePulseAgent:
 
             alert_count = 0
             try:
-                from edgepulse.shared.schemas import AlertEvent
                 recent_alerts = await self.database.get_recent_alerts(hours=24)
                 alert_count = len(recent_alerts) if recent_alerts else 0
             except Exception:
@@ -1061,51 +1136,6 @@ class EdgePulseAgent:
         except Exception as e:
             logger.debug("tamper_log_event_error", error=str(e))
 
-    def _initialize_shap_explainer(self) -> None:
-        if self._shap_init_attempted:
-            return
-
-        self._shap_init_attempted = True
-
-        if not self._detectors:
-            logger.warning("shap_init_skipped: no detectors available")
-            return
-
-        primary_detector = self._detectors[0]
-        model = getattr(primary_detector, 'model', None)
-        if model is None:
-            logger.warning("shap_init_skipped: primary detector has no trained model")
-            return
-
-        try:
-            import numpy as np
-            self.shap_explainer = SHAPExplainer(
-                model_id=f"{self.device_id}_primary"
-            )
-            feature_names = self._feature_extractor.get_feature_names()
-            # Generate a small synthetic background dataset for KernelExplainer.
-            synthetic_bg = np.random.normal(0, 1, size=(50, len(feature_names)))
-
-            success = self.shap_explainer.initialize(
-                model=model,
-                training_data=synthetic_bg,
-                feature_names=feature_names,
-            )
-
-            if success:
-                logger.info(
-                    "shap_explainer_initialized",
-                    device_id=self.device_id,
-                    feature_count=len(feature_names),
-                )
-            else:
-                logger.warning("shap_explainer_initialization_failed")
-                self.shap_explainer = None
-
-        except Exception as e:
-            logger.error("shap_explainer_init_error", error=str(e))
-            self.shap_explainer = None
-
     async def _save_state(self) -> None:
         try:
             for detector in self._detectors:
@@ -1123,6 +1153,13 @@ class EdgePulseAgent:
 
     def get_status(self) -> Dict[str, Any]:
         from edgepulse.api.api_server import _get_detector_health
+        explainer_info: Dict[str, Any] = {"available": False}
+        if self._explainer_manager is not None:
+            explainer_info = {
+                "available": self._explainer_manager.is_initialized,
+                "methods": [m.value for m in self._explainer_manager.get_available_methods()],
+                "cache_stats": self._explainer_manager.cache_stats(),
+            }
         return {
             "device_id": self.device_id,
             "running": self._running,
@@ -1132,6 +1169,7 @@ class EdgePulseAgent:
             "ml_enabled": self.settings.should_enable_ml(),
             "pipeline_running": self._pipeline is not None and self._pipeline._running,
             "warmup_cycles_remaining": self._warmup_cycles_remaining,
+            "explainer": explainer_info,
             "api_server_info": self.api_server.get_server_info() if self.api_server else None,
             "sync_queue_stats": self.sync_queue.get_stats() if self.sync_queue else None,
             "detector_health": _get_detector_health(),
