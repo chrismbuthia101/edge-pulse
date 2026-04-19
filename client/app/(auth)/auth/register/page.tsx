@@ -61,7 +61,7 @@ export default function RegisterPage() {
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!email || !emailRegex.test(email)) {
       setEmailError("Please enter a valid email address");
       return;
@@ -88,9 +88,24 @@ export default function RegisterPage() {
     setIsLoading(false);
 
     if (error) {
-      if (error.message.toLowerCase().includes("email")) {
+      const errorMsg = error.message.toLowerCase();
+      const statusCode = (error as { status?: number; statusCode?: number }).status || (error as { status?: number; statusCode?: number }).statusCode;
+
+      if (statusCode === 429 || errorMsg.includes("rate limit") || errorMsg.includes("over_email_send_rate_limit")) {
+        toast.error("Too many attempts. Please try again in 15 minutes.", {
+          duration: 5000,
+        });
+        return;
+      }
+
+      if (errorMsg.includes("user already registered") || errorMsg.includes("already exists")) {
+        setEmailError("This email is already registered. Please log in instead.");
+        return;
+      }
+
+      if (errorMsg.includes("email") && !errorMsg.includes("already")) {
         setEmailError(error.message);
-      } else if (error.message.toLowerCase().includes("password")) {
+      } else if (errorMsg.includes("password")) {
         setPasswordError(error.message);
       } else {
         toast.error(error.message);
@@ -114,7 +129,7 @@ export default function RegisterPage() {
   };
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!email || !emailRegex.test(email)) {
       setEmailError("Please enter a valid email address");
     } else {

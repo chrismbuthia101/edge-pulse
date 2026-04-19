@@ -47,12 +47,10 @@ export class LogIntegrityService {
 
   async getHashChainStatuses(): Promise<HashChainStatus[]> {
     try {
-      // Use the repository method to get hash chain statuses
       return await this.repository.getHashChainStatuses();
     } catch (error) {
       console.error('Failed to fetch hash chain statuses:', error);
-      // Return mock data on error
-      return this.getMockHashChainStatuses();
+      return [];
     }
   }
 
@@ -74,8 +72,7 @@ export class LogIntegrityService {
 
   async getTamperAlerts(): Promise<TamperAlert[]> {
     try {
-      // In a real implementation, this would fetch from the database
-      return this.getMockTamperAlerts();
+      return await this.repository.getTamperAlerts();
     } catch (error) {
       console.error('Failed to fetch tamper alerts:', error);
       return [];
@@ -106,7 +103,17 @@ export class LogIntegrityService {
       };
     } catch (error) {
       console.error('Failed to fetch integrity metrics:', error);
-      return this.getMockIntegrityMetrics();
+      // Return empty metrics on error
+      return {
+        total_devices: 0,
+        verified_devices: 0,
+        compromised_devices: 0,
+        total_entries: 0,
+        verified_entries: 0,
+        last_verification: new Date().toISOString(),
+        verification_rate: 0,
+        average_chain_length: 0
+      };
     }
   }
 
@@ -158,89 +165,6 @@ export class LogIntegrityService {
       this.subscription.unsubscribe();
       this.subscription = null;
     }
-  }
-
-  private getMockHashChainStatuses(): HashChainStatus[] {
-    return [
-      {
-        device_id: "device-1",
-        device_name: "Server-01",
-        total_entries: 1247,
-        verified: true,
-        broken_at_sequence: null,
-        last_verified_at: new Date().toISOString(),
-      },
-      {
-        device_id: "device-2",
-        device_name: "Workstation-05",
-        total_entries: 892,
-        verified: false,
-        broken_at_sequence: 845,
-        last_verified_at: new Date(Date.now() - 3600000).toISOString(),
-      },
-      {
-        device_id: "device-3",
-        device_name: "Laptop-12",
-        total_entries: 456,
-        verified: true,
-        broken_at_sequence: null,
-        last_verified_at: new Date(Date.now() - 1800000).toISOString(),
-      },
-    ];
-  }
-
-  private getMockTamperAlerts(): TamperAlert[] {
-    return [
-      {
-        id: "alert-1",
-        device_id: "device-2",
-        device_name: "Workstation-05",
-        alert_type: "CHAIN_BREAK",
-        severity: "HIGH",
-        message: "Hash chain integrity compromised - unexpected hash sequence detected",
-        sequence_number: 845,
-        detected_at: new Date(Date.now() - 3600000).toISOString(),
-        status: "ACTIVE",
-        affected_entries: 47
-      },
-      {
-        id: "alert-2",
-        device_id: "device-1",
-        device_name: "Server-01",
-        alert_type: "SIGNATURE_MISMATCH",
-        severity: "MEDIUM",
-        message: "Digital signature verification failed for log entry",
-        sequence_number: 1245,
-        detected_at: new Date(Date.now() - 7200000).toISOString(),
-        status: "INVESTIGATING",
-        affected_entries: 2
-      },
-      {
-        id: "alert-3",
-        device_id: "device-3",
-        device_name: "Laptop-12",
-        alert_type: "SEQUENCE_GAP",
-        severity: "LOW",
-        message: "Gap detected in log sequence numbers",
-        sequence_number: 432,
-        detected_at: new Date(Date.now() - 10800000).toISOString(),
-        status: "RESOLVED",
-        affected_entries: 1
-      }
-    ];
-  }
-
-  private getMockIntegrityMetrics(): IntegrityMetrics {
-    return {
-      total_devices: 3,
-      verified_devices: 2,
-      compromised_devices: 1,
-      total_entries: 2595,
-      verified_entries: 2247,
-      last_verification: new Date().toISOString(),
-      verification_rate: 67,
-      average_chain_length: 865
-    };
   }
 
   // Helper methods for UI

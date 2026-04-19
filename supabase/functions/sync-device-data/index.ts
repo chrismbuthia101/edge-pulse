@@ -100,6 +100,7 @@ interface TamperLogEntry {
   entry_content_hash: string
   previous_entry_hash: string
   digital_signature?: string
+  reference_id?: string
 }
 
 interface SyncResponse {

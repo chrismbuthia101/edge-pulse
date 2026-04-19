@@ -1,6 +1,7 @@
 import { BaseRepository } from '@/lib/repositories/base-repository';
 import type { TamperLogEntry, VerificationResult, LogDevice, HashChainStatus } from '@/lib/supabase/types';
 import type { Database } from '@/lib/supabase/types/database';
+import type { TamperAlert } from '@/lib/services/log-integrity-service';
 
 type TamperEvidentLog = Database['public']['Tables']['tamper_evident_log']['Row'];
 
@@ -10,50 +11,39 @@ export class LogsRepository extends BaseRepository {
   }
 
   async getDevices(): Promise<string[]> {
-    const { data, error } = await this.supabase
+    const { data: logData } = await this.supabase
       .from("tamper_evident_log")
       .select("device_id")
       .order("device_id");
 
-    if (error) throw error;
+    const devicesFromLogs = new Set((logData || []).map((log) => log.device_id));
 
-    const uniqueDevices = [...new Set((data || []).map((log) => log.device_id))];
-    return uniqueDevices;
+    const { data: registryData, error: registryError } = await this.supabase
+      .from("device_registry")
+      .select("id");
+
+    if (!registryError && registryData) {
+      registryData.forEach(device => devicesFromLogs.add(device.id));
+    }
+
+    return Array.from(devicesFromLogs);
   }
 
   async getLogDevices(): Promise<LogDevice[]> {
     const { data, error } = await this.supabase
-      .from("tamper_evident_log")
-      .select(`
-        device_id,
-        log_sequence_number,
-        entry_timestamp_utc
-      `)
-      .order("device_id, log_sequence_number", { ascending: true });
+      .from("log_device_summary")
+      .select("*")
+      .order("device_name");
 
     if (error) throw error;
 
-    // Group by device_id and get latest info
-    const deviceMap = new Map<string, LogDevice>();
-
-    (data || []).forEach((log) => {
-      const existing = deviceMap.get(log.device_id);
-      if (!existing || log.log_sequence_number > existing.last_log_sequence) {
-        deviceMap.set(log.device_id, {
-          device_id: log.device_id,
-          log_count: (existing?.log_count || 0) + 1,
-          last_log_sequence: log.log_sequence_number,
-          last_entry_timestamp: log.entry_timestamp_utc,
-        });
-      } else {
-        deviceMap.set(log.device_id, {
-          ...existing,
-          log_count: existing.log_count + 1,
-        });
-      }
-    });
-
-    return Array.from(deviceMap.values());
+    return (data || []).map((row) => ({
+      device_id: row.device_id,
+      device_name: row.device_name || `Device-${row.device_id.slice(-4)}`,
+      log_count: row.log_count || 0,
+      last_log_sequence: row.last_log_sequence || 0,
+      last_entry_timestamp: row.last_entry_timestamp,
+    }));
   }
 
   async getLogs(deviceId: string, options?: {
@@ -160,7 +150,6 @@ export class LogsRepository extends BaseRepository {
 
   async getHashChainStatuses(): Promise<HashChainStatus[]> {
     try {
-      // Get the latest log entry for each device to determine status
       const { data, error } = await this.supabase
         .from('tamper_evident_log')
         .select('device_id, log_sequence_number, verified, created_at')
@@ -168,7 +157,6 @@ export class LogsRepository extends BaseRepository {
 
       if (error) throw error;
 
-      // Process data to get status per device
       const deviceStatuses = new Map<string, HashChainStatus>();
 
       data?.forEach(log => {
@@ -185,42 +173,34 @@ export class LogsRepository extends BaseRepository {
         }
       });
 
+      if (deviceStatuses.size === 0) {
+        const { data: devices, error: deviceError } = await this.supabase
+          .from('device_registry')
+          .select('id, name, created_at');
+
+        if (!deviceError && devices) {
+          devices.forEach(device => {
+            deviceStatuses.set(device.id, {
+              device_id: device.id,
+              device_name: device.name || `Device-${device.id.slice(-4)}`,
+              total_entries: 0,
+              verified: false,
+              broken_at_sequence: null,
+              last_verified_at: null,
+            });
+          });
+        }
+      }
+
       return Array.from(deviceStatuses.values());
     } catch (error) {
       console.error('Failed to fetch hash chain statuses:', error);
-      // Return mock data on error
-      return [
-        {
-          device_id: "device-1",
-          device_name: "Server-01",
-          total_entries: 1247,
-          verified: true,
-          broken_at_sequence: null,
-          last_verified_at: new Date().toISOString(),
-        },
-        {
-          device_id: "device-2",
-          device_name: "Workstation-05",
-          total_entries: 892,
-          verified: false,
-          broken_at_sequence: 845,
-          last_verified_at: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          device_id: "device-3",
-          device_name: "Laptop-12",
-          total_entries: 456,
-          verified: true,
-          broken_at_sequence: null,
-          last_verified_at: new Date(Date.now() - 1800000).toISOString(),
-        },
-      ];
+      return [];
     }
   }
 
   async verifyDeviceChain(deviceId: string): Promise<void> {
     try {
-      // Update the verified flag for all logs of a device
       const { error } = await this.supabase
         .from('tamper_evident_log')
         .update({ verified: true })
@@ -230,6 +210,72 @@ export class LogsRepository extends BaseRepository {
     } catch (error) {
       console.error(`Failed to verify device ${deviceId}:`, error);
       throw error;
+    }
+  }
+
+  async getTamperAlerts(): Promise<TamperAlert[]> {
+    try {
+      const { data: logs, error } = await this.supabase
+        .from('tamper_evident_log')
+        .select('*')
+        .order('entry_timestamp_utc', { ascending: false });
+
+      if (error) throw error;
+
+      const alerts: TamperAlert[] = [];
+      const deviceLogs = new Map<string, TamperEvidentLog[]>();
+
+      (logs || []).forEach(log => {
+        if (!deviceLogs.has(log.device_id)) {
+          deviceLogs.set(log.device_id, []);
+        }
+        deviceLogs.get(log.device_id)!.push(log);
+      });
+
+      for (const [deviceId, deviceLogList] of deviceLogs) {
+        deviceLogList.sort((a, b) => a.log_sequence_number - b.log_sequence_number);
+
+        for (let i = 1; i < deviceLogList.length; i++) {
+          const current = deviceLogList[i];
+          const previous = deviceLogList[i - 1];
+
+          if (current.log_sequence_number !== previous.log_sequence_number + 1) {
+            alerts.push({
+              id: `seq-gap-${deviceId}-${current.log_sequence_number}`,
+              device_id: deviceId,
+              device_name: `Device-${deviceId.slice(-4)}`,
+              alert_type: 'SEQUENCE_GAP',
+              severity: 'HIGH',
+              message: `Gap detected in log sequence: expected ${previous.log_sequence_number + 1}, got ${current.log_sequence_number}`,
+              sequence_number: current.log_sequence_number,
+              detected_at: current.entry_timestamp_utc,
+              status: 'ACTIVE',
+              affected_entries: current.log_sequence_number - previous.log_sequence_number - 1
+            });
+          }
+
+          // Check for hash chain breaks
+          if (current.previous_entry_hash !== previous.entry_content_hash) {
+            alerts.push({
+              id: `hash-break-${deviceId}-${current.log_sequence_number}`,
+              device_id: deviceId,
+              device_name: `Device-${deviceId.slice(-4)}`,
+              alert_type: 'CHAIN_BREAK',
+              severity: 'CRITICAL',
+              message: `Hash chain integrity compromised at entry #${current.log_sequence_number}`,
+              sequence_number: current.log_sequence_number,
+              detected_at: current.entry_timestamp_utc,
+              status: 'ACTIVE',
+              affected_entries: deviceLogList.length - i + 1
+            });
+          }
+        }
+      }
+
+      return alerts;
+    } catch (error) {
+      console.error('Failed to fetch tamper alerts:', error);
+      return [];
     }
   }
 

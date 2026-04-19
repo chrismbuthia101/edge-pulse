@@ -163,6 +163,8 @@ class EdgePulseAgent:
 
             await self._setup_event_handlers()
 
+            await self._initialize_tamper_logger()
+
             if self.settings.should_enable_sync():
                 await self._initialize_sync_client()
 
@@ -212,7 +214,7 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
-            await self._log_tamper_event("agent_started", {"device_id": self.device_id})
+            await self._log_tamper_event("SYSTEM", {"device_id": self.device_id})
 
             logger.info("agent_started", device_id=self.device_id)
 
@@ -536,6 +538,8 @@ class EdgePulseAgent:
             logger.error("sync_client_initialization_failed", error=str(e))
             self._sync_client = None
 
+    async def _initialize_tamper_logger(self) -> None:
+        """Initialize tamper-evident logger for local audit logging."""
         try:
             self.tamper_logger = TamperEvidentLogger(self.device_id, self.database)
             await self.tamper_logger.initialize()
@@ -728,8 +732,8 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
-            await self._log_tamper_event("anomaly_detected", detection)
-            await self._log_tamper_event("alert_generated", {"alert_id": alert.get("alert_id")})
+            await self._log_tamper_event("ANOMALY", detection)
+            await self._log_tamper_event("ALERT_EVENT", {"alert_id": alert.get("alert_id")})
 
             try:
                 if self.sync_queue:
@@ -780,10 +784,20 @@ class EdgePulseAgent:
             except Exception as e:
                 logger.error("hash_chain_error", error=str(e))
 
-            await self._log_tamper_event("sync_completed", {"count": data.get("count", 0)})
+            await self._log_tamper_event("SYNC", {"count": data.get("count", 0)})
+
+        async def handle_telemetry(event: Event):
+            data = event.data or {}
+            telemetry = data.get("telemetry", {})
+            await self._log_tamper_event("TELEMETRY", {
+                "process_count": telemetry.get("process_count", 0),
+                "network_connections": telemetry.get("network_connections", 0),
+                "source": data.get("source", "unknown")
+            })
 
         self.event_bus.subscribe(EventType.DETECTION, handle_anomaly)
         self.event_bus.subscribe(EventType.SYNC, handle_sync_completed)
+        self.event_bus.subscribe(EventType.TELEMETRY, handle_telemetry)
 
     # ------------------------------------------------------------------
     # Background tasks

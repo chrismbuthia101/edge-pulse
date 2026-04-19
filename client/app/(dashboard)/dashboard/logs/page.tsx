@@ -21,7 +21,7 @@ import { useLogsStore } from "@/stores/logs-store";
 export default function LogsPage() {
     const { hasRole } = useAuth();
     const {
-        devices,
+        logDevices,
         selectedDevice,
         loading,
         verifying,
@@ -140,9 +140,9 @@ export default function LogsPage() {
                         </SelectTrigger>
                         <SelectContent position="popper" className="w-[--radix-select-trigger-width]">
                             <SelectItem value="all">All Devices</SelectItem>
-                            {devices.map((device) => (
-                                <SelectItem key={device} value={device}>
-                                    {device}
+                            {logDevices.map((device) => (
+                                <SelectItem key={device.device_id} value={device.device_id}>
+                                    {device.device_name}
                                 </SelectItem>
                             ))}
                         </SelectContent>

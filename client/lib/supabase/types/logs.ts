@@ -21,6 +21,7 @@ export interface VerificationResult {
 
 export interface LogDevice {
     device_id: string;
+    device_name: string;
     log_count: number;
     last_log_sequence: number;
     last_entry_timestamp: string;

@@ -522,6 +522,13 @@ class AsyncPipeline:
                 payload=payload,
                 agent_version="1.0.0",
             )
+          
+            await self.event_bus.publish(Event(
+                type=EventType.TELEMETRY,
+                data={"telemetry": payload, "source": "async_pipeline"},
+                timestamp=datetime.utcnow(),
+                source="async_pipeline",
+            ))
         except Exception as e:
             logger.error("telemetry_event_save_error", error=str(e))
 
