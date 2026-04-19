@@ -179,7 +179,34 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
 
     const { data, error } = await query;
     if (error) throw this.handleError(error);
-    return data as unknown as TelemetryEvent[];
+
+    if (!data || !Array.isArray(data)) {
+      return [];
+    }
+
+    const telemetryData = data as unknown as TelemetryEvent[];
+
+    const deviceIds = [...new Set(telemetryData.map((t) => t.device_id))];
+
+    const { data: devices, error: devicesError } = await this.supabase
+      .from('device_registry')
+      .select('id, name')
+      .in('id', deviceIds);
+
+    if (devicesError) {
+      console.error('[LiveRepository] Error fetching devices:', devicesError);
+    }
+
+    const deviceMap = new Map(
+      (devices ?? []).map((d: { id: string; name: string }) => [d.id, d.name])
+    );
+
+    const enrichedData = telemetryData.map((telemetry) => ({
+      ...telemetry,
+      device_name: deviceMap.get(telemetry.device_id),
+    }));
+
+    return enrichedData;
   }
 
   subscribeToLiveFeed(callbacks: LiveSubscriptionCallbacks = {}): () => void {
@@ -195,7 +222,6 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
         (payload) => {
           try {
             if (payload.new) {
-              // Normalize alert_id to id for Alert interface compatibility
               const normalizedAlert = {
                 ...payload.new,
                 id: payload.new.alert_id,
@@ -220,10 +246,21 @@ export class LiveRepository extends BaseRepository<Alert | TelemetryEvent> {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'telemetry_events' },
-        (payload) => {
+        async (payload) => {
           try {
             if (payload.new) {
-              onNewTelemetry?.(payload.new as TelemetryEvent);
+              const { data: device } = await this.supabase
+                .from('device_registry')
+                .select('name')
+                .eq('id', payload.new.device_id)
+                .single();
+
+              const telemetryWithDeviceName = {
+                ...payload.new,
+                device_name: device?.name,
+              } as TelemetryEvent;
+
+              onNewTelemetry?.(telemetryWithDeviceName);
             }
           } catch (error) {
             onError?.(error instanceof Error ? error : new Error('Unknown error in telemetry subscription'));

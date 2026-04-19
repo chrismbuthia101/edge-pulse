@@ -51,7 +51,7 @@ export default function LivePage() {
         ok: "text-green-500 bg-green-500/10 border-green-500/25",
     };
 
-    const eventTypes: readonly ["all", "threat", "auth", "device", "ok"] = ["all", "threat", "auth", "device", "ok"];
+    const eventTypes: readonly ["all", "anomaly", "auth", "device", "ok"] = ["all", "anomaly", "auth", "device", "ok"];
 
     const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
 

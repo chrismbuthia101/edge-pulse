@@ -7,10 +7,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import { AlertTriangle, Clock, User, Activity, ArrowLeft } from 'lucide-react'
+import { AlertTriangle, Clock, User, Activity, ArrowLeft, MonitorSmartphone, Cpu, Zap, Network, Shield } from 'lucide-react'
 import { ShapChart } from '@/components/charts/ShapChart'
 import { useAuth } from '@/lib/auth/useAuth'
 import { useAlertStore } from '@/stores/alert-store'
+import { useDeviceStore } from '@/stores/device-store'
+import { UserRepository } from '@/lib/repositories/user-repository'
+import { DeviceRepository } from '@/lib/repositories/device-repository'
 
 interface AlertRecord {
   id: string
@@ -54,14 +57,20 @@ interface ShapExplanation {
   final_score?: number
 }
 
+const userRepository = new UserRepository()
+const deviceRepository = new DeviceRepository()
+
 export default function AlertDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { user, hasRole } = useAuth()
+  const { devices } = useDeviceStore()
 
   const [alert, setAlert] = useState<AlertRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [acknowledging, setAcknowledging] = useState(false)
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
+  const [deviceName, setDeviceName] = useState<string>('')
 
   const alertId = params.alert_id as string
 
@@ -75,7 +84,6 @@ export default function AlertDetailPage() {
         throw new Error('Alert not found')
       }
 
-      // Transform Alert to AlertRecord format
       const alertRecord: AlertRecord = {
         id: alertData.id,
         anomaly_score_id: alertData.anomaly_score_id || '',
@@ -101,13 +109,51 @@ export default function AlertDetailPage() {
       }
 
       setAlert(alertRecord)
+
+      const userIds = [
+        alertData.acknowledged_by,
+        alertData.investigated_by,
+        alertData.closed_by
+      ].filter(Boolean) as string[]
+
+      const names: Record<string, string> = {}
+      await Promise.all(
+        userIds.map(async (userId) => {
+          try {
+            const userData = await userRepository.getUserById(userId)
+            if (userData) {
+              names[userId] = userData.full_name
+            }
+          } catch (error) {
+            console.error(`Failed to fetch user ${userId}:`, error)
+          }
+        })
+      )
+      setUserNames(names)
+
+      if (alertData.device_id) {
+        const device = devices.find(d => d.id === alertData.device_id)
+        if (device) {
+          setDeviceName(device.name)
+        } else {
+          try {
+            const fetchedDevice = await deviceRepository.findById(alertData.device_id)
+            setDeviceName(fetchedDevice?.name || alertData.device_name || 'Unknown Device')
+          } catch (error) {
+            console.error('Failed to fetch device:', error)
+            setDeviceName(alertData.device_name || 'Unknown Device')
+          }
+        }
+      } else {
+        setDeviceName(alertData.device_name || 'Unknown Device')
+      }
     } catch (error) {
       console.error('Failed to fetch alert:', error)
       router.push('/dashboard/alerts')
     } finally {
       setLoading(false)
     }
-  }, [alertId, router])
+  }, [alertId, router, devices])
 
   useEffect(() => {
     if (alertId) fetchAlert()
@@ -141,21 +187,31 @@ export default function AlertDetailPage() {
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status.toLowerCase()) {
-      case 'pending': return 'default'
-      case 'acknowledged': return 'secondary'
-      case 'investigated': return 'outline'
-      case 'closed': return 'secondary'
+      case 'pending': return 'destructive'
+      case 'acknowledged': return 'default'
+      case 'investigated': return 'secondary'
+      case 'closed': return 'outline'
       default: return 'default'
+    }
+  }
+
+  const telemetrySourceIcon = (source?: string) => {
+    switch (source) {
+      case 'PROCESS': return <Activity className="h-4 w-4" />
+      case 'NETWORK': return <Network className="h-4 w-4" />
+      case 'FILE': return <Shield className="h-4 w-4" />
+      case 'RESOURCE': return <Cpu className="h-4 w-4" />
+      default: return <Zap className="h-4 w-4" />
     }
   }
 
   if (loading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-muted rounded w-1/4 mb-4"></div>
-          <div className="h-32 bg-muted rounded mb-4"></div>
-          <div className="h-64 bg-muted rounded"></div>
+      <div className="container mx-auto py-8 max-w-6xl">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/4"></div>
+          <div className="h-32 bg-muted rounded-xl"></div>
+          <div className="h-64 bg-muted rounded-xl"></div>
         </div>
       </div>
     )
@@ -163,7 +219,7 @@ export default function AlertDetailPage() {
 
   if (!alert) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-8 max-w-6xl">
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-2xl font-semibold mb-2">Alert Not Found</h2>
@@ -186,7 +242,7 @@ export default function AlertDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
+    <div className="container mx-auto py-8 max-w-6xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -195,7 +251,7 @@ export default function AlertDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-semibold">Alert Details</h1>
-            <p className="text-sm text-muted-foreground">Alert ID: {alert.id}</p>
+            <p className="text-sm text-muted-foreground">ID: {alert.id.slice(0, 8)}...</p>
           </div>
         </div>
         {alert.alert_status === 'PENDING' && hasRole(['ANALYST', 'ADMINISTRATOR']) && (
@@ -216,31 +272,66 @@ export default function AlertDetailPage() {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <CardContent className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold mb-2">{alert.title}</h3>
+            {alert.description && (
+              <p className="text-sm text-muted-foreground">{alert.description}</p>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Device</p>
-              <p className="text-lg font-semibold">{alert.device_name}</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</p>
+              <div className="flex items-center gap-2">
+                <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">{deviceName || alert.device_name || 'Unknown Device'}</p>
+              </div>
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Created</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</p>
+              <p className="text-sm">{alert.category || 'N/A'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</p>
+              <div className="flex items-center gap-2">
+                {telemetrySourceIcon(alert.source)}
+                <p className="text-sm">{alert.source || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Latency</p>
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm">{alert.inference_latency_ms}ms</p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</p>
               <p className="text-sm">{new Date(alert.created_at).toLocaleString()}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Updated</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Updated</p>
               <p className="text-sm">{new Date(alert.updated_at).toLocaleString()}</p>
             </div>
           </div>
 
           <Separator />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {alert.acknowledged_by && (
               <div className="flex items-center space-x-2">
                 <User className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Acknowledged By</p>
-                  <p className="text-sm">{alert.acknowledged_by}</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Acknowledged By</p>
+                  <p className="text-sm font-medium">{userNames[alert.acknowledged_by] || alert.acknowledged_by}</p>
                 </div>
               </div>
             )}
@@ -248,8 +339,35 @@ export default function AlertDetailPage() {
               <div className="flex items-center space-x-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Acknowledged At</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Acknowledged At</p>
                   <p className="text-sm">{new Date(alert.acknowledged_at).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+            {alert.investigated_by && (
+              <div className="flex items-center space-x-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Investigated By</p>
+                  <p className="text-sm font-medium">{userNames[alert.investigated_by] || alert.investigated_by}</p>
+                </div>
+              </div>
+            )}
+            {alert.investigated_at && (
+              <div className="flex items-center space-x-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Investigated At</p>
+                  <p className="text-sm">{new Date(alert.investigated_at).toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+            {alert.closed_by && (
+              <div className="flex items-center space-x-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Closed By</p>
+                  <p className="text-sm font-medium">{userNames[alert.closed_by] || alert.closed_by}</p>
                 </div>
               </div>
             )}
@@ -257,7 +375,7 @@ export default function AlertDetailPage() {
               <div className="flex items-center space-x-2">
                 <Activity className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Closed At</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Closed At</p>
                   <p className="text-sm">{new Date(alert.closed_at).toLocaleString()}</p>
                 </div>
               </div>

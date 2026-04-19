@@ -4,19 +4,19 @@ import { LiveService } from '@/lib/services/live-service';
 import type { Alert, TelemetryEvent } from '@/lib/supabase/types';
 import { toast } from 'sonner';
 
-type EventType = "all" | "threat" | "auth" | "device" | "ok";
+type EventType = "all" | "anomaly" | "auth" | "device" | "ok";
 
 interface LiveEvent {
-    id: string;
-    type: EventType;
-    iconName: "AlertTriangle" | "Shield" | "MonitorSmartphone" | "Lock";
-    color: string;
-    bg: string;
-    title: string;
-    device: string;
-    time: string;
-    severity: string;
-    rawCreatedAt: string;
+  id: string;
+  type: EventType;
+  iconName: "AlertTriangle" | "Shield" | "MonitorSmartphone" | "Lock";
+  color: string;
+  bg: string;
+  title: string;
+  device: string;
+  time: string;
+  severity: string;
+  rawCreatedAt: string;
 }
 
 interface LiveStore {
@@ -47,53 +47,53 @@ interface LiveStore {
 
 // Helper functions
 function alertToLiveEvent(alert: Alert): LiveEvent {
-    const severity = alert.severity;
-    const isCritical = severity === "critical";
-    const isHigh = severity === "high";
-    const isThreat = isCritical || isHigh;
-    const source = alert.telemetry_source ?? "";
-    const isAuth = source === "PROCESS" && !isThreat;
+  const severity = alert.severity;
+  const isCritical = severity === "critical";
+  const isHigh = severity === "high";
+  const isThreat = isCritical || isHigh;
+  const source = alert.telemetry_source ?? "";
+  const isAuth = source === "PROCESS" && !isThreat;
 
-    return {
-        id: alert.id,
-        type: isThreat ? "threat" : isAuth ? "auth" : "ok",
-        iconName: isThreat ? "AlertTriangle" : isAuth ? "Lock" : "Shield",
-        color: isCritical
-            ? "text-destructive"
-            : isHigh
-                ? "text-orange-500"
-                : isAuth
-                    ? "text-amber-500"
-                    : "text-green-500",
-        bg: isCritical
-            ? "bg-destructive/10 border-destructive/20"
-            : isHigh
-                ? "bg-orange-500/10 border-orange-500/20"
-                : isAuth
-                    ? "bg-amber-500/10 border-amber-500/20"
-                    : "bg-green-500/10 border-green-500/20",
-        title: alert.title ?? "Security event",
-        device: alert.device_name ?? "Unknown",
-        time: new Date(alert.created_at).toLocaleTimeString(),
-        severity: severity === "low" ? "info" : severity,
-        rawCreatedAt: alert.created_at,
-    };
+  return {
+    id: alert.id,
+    type: isThreat ? "anomaly" : isAuth ? "auth" : "ok",
+    iconName: isThreat ? "AlertTriangle" : isAuth ? "Lock" : "Shield",
+    color: isCritical
+      ? "text-destructive"
+      : isHigh
+        ? "text-orange-500"
+        : isAuth
+          ? "text-amber-500"
+          : "text-green-500",
+    bg: isCritical
+      ? "bg-destructive/10 border-destructive/20"
+      : isHigh
+        ? "bg-orange-500/10 border-orange-500/20"
+        : isAuth
+          ? "bg-amber-500/10 border-amber-500/20"
+          : "bg-green-500/10 border-green-500/20",
+    title: alert.title ?? "Security event",
+    device: alert.device_name ?? "Unknown",
+    time: new Date(alert.created_at).toLocaleTimeString(),
+    severity: severity === "low" ? "info" : severity,
+    rawCreatedAt: alert.created_at,
+  };
 }
 
 function telemetryToLiveEvent(telemetry: TelemetryEvent): LiveEvent {
-    const isDevice = telemetry.source === "RESOURCE";
-    return {
-        id: telemetry.id,
-        type: isDevice ? "device" : "ok",
-        iconName: isDevice ? "MonitorSmartphone" : "Shield",
-        color: isDevice ? "text-primary" : "text-green-500",
-        bg: isDevice ? "bg-primary/10 border-primary/20" : "bg-green-500/10 border-green-500/20",
-        title: `Telemetry received (${telemetry.source})`,
-        device: telemetry.device_id,
-        time: new Date(telemetry.collected_at).toLocaleTimeString(),
-        severity: "info",
-        rawCreatedAt: telemetry.collected_at,
-    };
+  const isDevice = telemetry.source === "RESOURCE";
+  return {
+    id: telemetry.id,
+    type: isDevice ? "device" : "ok",
+    iconName: isDevice ? "MonitorSmartphone" : "Shield",
+    color: isDevice ? "text-primary" : "text-green-500",
+    bg: isDevice ? "bg-primary/10 border-primary/20" : "bg-green-500/10 border-green-500/20",
+    title: `Telemetry received (${telemetry.source})`,
+    device: telemetry.device_name ?? telemetry.device_id,
+    time: new Date(telemetry.collected_at).toLocaleTimeString(),
+    severity: "info",
+    rawCreatedAt: telemetry.collected_at,
+  };
 }
 
 const liveRepository = new LiveRepository();
@@ -113,23 +113,23 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
   initialize: async () => {
     try {
       set({ loading: true, error: null });
-      
+
       const { alerts, telemetry, stats } = await liveService.initializeLiveFeed();
-      
+
       // Convert to live events
       const alertEvents = alerts.map(alertToLiveEvent);
       const telemetryEvents = telemetry
         .filter(t => t.source === "RESOURCE") // Only show device telemetry
         .map(telemetryToLiveEvent);
-      
+
       const allEvents = [...alertEvents, ...telemetryEvents]
         .sort((a, b) => new Date(b.rawCreatedAt).getTime() - new Date(a.rawCreatedAt).getTime())
         .slice(0, 100);
 
-      set({ 
-        events: allEvents, 
-        todayStats: stats, 
-        loading: false 
+      set({
+        events: allEvents,
+        todayStats: stats,
+        loading: false
       });
 
       // Subscribe to live updates
@@ -159,7 +159,7 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
   },
 
   setFilter: (filter) => set({ filter }),
-  
+
   setPaused: (paused) => set({ paused }),
 
   clearError: () => set({ error: null }),
@@ -167,7 +167,7 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
   exportCSV: () => {
     const { events, filter } = get();
     const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
-    
+
     const rows = [
       ["Time", "Title", "Device", "Severity", "Type"],
       ...filtered.map((e) => [
@@ -178,7 +178,7 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
         e.type,
       ]),
     ];
-    
+
     const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

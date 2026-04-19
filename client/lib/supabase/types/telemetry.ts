@@ -3,6 +3,7 @@ import { TelemetrySource, ConnectivityState } from '@/lib/supabase/types/shared'
 export interface TelemetryEvent {
   id: string;
   device_id: string;
+  device_name?: string;
   collected_at: string;
   received_at: string | null;
   source: TelemetrySource;

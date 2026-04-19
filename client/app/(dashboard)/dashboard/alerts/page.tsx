@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ChevronRight,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAlertStore } from "@/stores/alert-store";
+import { useDeviceStore } from "@/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { AlertStatus } from "@/lib/supabase/types";
 import { toast } from "sonner";
@@ -34,6 +36,13 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 const severityConfig = {
     critical: {
@@ -140,19 +149,21 @@ function AlertRulesModal({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 export default function AlertsPage() {
+    const router = useRouter();
     useEffect(() => {
         document.title = "Security Alerts - EdgePulse";
     }, []);
 
     const { user, isAdmin } = useAuth();
     const { alerts, bulkAcknowledge } = useAlertStore();
+    const { devices } = useDeviceStore();
     const initializedRef = useRef(false);
     const lastUserIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!user) return;
         if (alerts.length > 0 && lastUserIdRef.current === user.id && initializedRef.current) return;
-        
+
         initializedRef.current = true;
         lastUserIdRef.current = user.id;
         const { refreshAlertsForUser } = useAlertStore.getState();
@@ -162,6 +173,7 @@ export default function AlertsPage() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
     const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
     const [search, setSearch] = useState("");
+    const [selectedDevice, setSelectedDevice] = useState<string>("ALL");
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [rulesOpen, setRulesOpen] = useState(false);
     const [bulkLoading, setBulkLoading] = useState(false);
@@ -177,9 +189,10 @@ export default function AlertsPage() {
             const matchesSearch =
                 a.title.toLowerCase().includes(search.toLowerCase()) ||
                 a.device_name?.toLowerCase().includes(search.toLowerCase());
-            return matchesStatus && matchesSeverity && matchesSearch;
+            const matchesDevice = selectedDevice === "ALL" || a.device_id === selectedDevice;
+            return matchesStatus && matchesSeverity && matchesSearch && matchesDevice;
         });
-    }, [alerts, statusFilter, severityFilter, search]);
+    }, [alerts, statusFilter, severityFilter, search, selectedDevice]);
 
     const counts = useMemo(() => ({
         PENDING: alerts.filter((a) => a.status === "PENDING").length,
@@ -188,7 +201,17 @@ export default function AlertsPage() {
         critical: alerts.filter((a) => a.severity === "critical" && a.status !== "CLOSED").length,
     }), [alerts]);
 
-    // Resolve alert to next status
+    const uniqueDevices = useMemo(() => {
+        const deviceMap = new Map<string, string>();
+        alerts.forEach((a) => {
+            if (a.device_id) {
+                const deviceName = devices.find(d => d.id === a.device_id)?.name || a.device_name || a.device_id;
+                deviceMap.set(a.device_id, deviceName);
+            }
+        });
+        return Array.from(deviceMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    }, [alerts, devices]);
+
     const handleResolve = async (e: React.MouseEvent, alertId: string, currentStatus: AlertStatus) => {
         e.stopPropagation();
         const next = nextStatus[currentStatus];
@@ -202,7 +225,6 @@ export default function AlertsPage() {
         }
     };
 
-    // Dismiss alert
     const handleDismiss = async (e: React.MouseEvent, alertId: string) => {
         e.stopPropagation();
         try {
@@ -213,7 +235,6 @@ export default function AlertsPage() {
         }
     };
 
-    // Bulk mark all reviewed
     const handleMarkAllReviewed = async () => {
         const pending = alerts.filter((a) => a.status === "PENDING");
         if (pending.length === 0) { toast.info("No pending alerts to review"); return; }
@@ -230,7 +251,6 @@ export default function AlertsPage() {
         }
     };
 
-    // CSV export
     const handleExportCSV = () => {
         const rows = [
             ["ID", "Title", "Device", "Severity", "Status", "Anomaly Score", "Category", "Source", "Created At"],
@@ -267,6 +287,10 @@ export default function AlertsPage() {
         return `${Math.floor(h / 24)}d ago`;
     };
 
+    const getDeviceName = (alert: typeof alerts[0]) => {
+        const device = devices.find(d => d.id === alert.device_id);
+        return device?.name || alert.device_name || alert.device_id || "Unknown Device";
+    };
     return (
         <div className="max-w-[1200px] space-y-6">
             {/* Header */}
@@ -335,6 +359,19 @@ export default function AlertsPage() {
                     />
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+                        <SelectTrigger className="h-9 text-sm w-[180px]">
+                            <SelectValue placeholder="All devices" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">All devices</SelectItem>
+                            {uniqueDevices.map(([deviceId, deviceName]) => (
+                                <SelectItem key={deviceId} value={deviceId}>
+                                    {deviceName}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                     <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
                         {(["ALL", "PENDING", "IN_REVIEW", "CLOSED"] as const).map((f) => (
                             <button
@@ -421,7 +458,7 @@ export default function AlertsPage() {
                                             <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                                                 <span className="flex items-center gap-1">
                                                     <MonitorSmartphone className="h-3 w-3" />
-                                                    {alert.device_name}
+                                                    {getDeviceName(alert)}
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="h-3 w-3" />
@@ -577,7 +614,12 @@ export default function AlertsPage() {
                                                     </div>
 
                                                     <div className="flex gap-2 pt-1">
-                                                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="gap-1.5 h-7 text-xs"
+                                                            onClick={() => router.push(`/dashboard/alerts/${alert.id}`)}
+                                                        >
                                                             <Eye className="h-3 w-3" />
                                                             Full Analysis
                                                         </Button>
