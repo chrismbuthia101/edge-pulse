@@ -1,416 +1,276 @@
 "use client";
 
 import Link from "next/link";
-import { motion, Variants, easeOut, useScroll, useTransform, useReducedMotion } from "framer-motion";
-import { ArrowRight, Shield, Zap, Brain, Activity, AlertTriangle, Cpu, Wifi } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useMemo, useState, useEffect } from "react";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { Shield, Zap, Brain, ArrowRight, Play } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { y: 24, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: { duration: 0.6, ease: easeOut },
-  },
-};
-
-const stats = [
-  { label: "< 500ms Detection", icon: Zap },
-  { label: "100% Edge Native", icon: Shield },
-  { label: "SHAP XAI Engine", icon: Brain },
+const ANOMALY_EVENTS = [
+  { time: "00:01", event: "Process injection blocked", device: "srv-prod-01", score: 0.97, sev: "critical" },
+  { time: "00:03", event: "Lateral movement detected", device: "ws-finance-03", score: 0.91, sev: "critical" },
+  { time: "00:05", event: "Outbound data exfiltration", device: "dev-laptop-07", score: 0.88, sev: "high" },
+  { time: "00:08", event: "Auth brute-force attempt", device: "gw-primary", score: 0.79, sev: "high" },
 ];
 
-const anomalyEvents = [
-  { time: "00:01", event: "Port scan detected", device: "srv-prod-01", severity: "high" },
-  { time: "00:03", event: "Unusual outbound traffic", device: "dev-laptop-07", severity: "critical" },
-  { time: "00:05", event: "Auth brute-force attempt", device: "ws-finance-03", severity: "high" },
-  { time: "00:08", event: "Process injection blocked", device: "srv-prod-02", severity: "critical" },
+const SHAP_FEATURES = [
+  { label: "CPU spike", pct: 87, positive: true },
+  { label: "Network anomaly", pct: 71, positive: true },
+  { label: "Disk I/O pattern", pct: 54, positive: true },
+  { label: "Process tree", pct: 38, positive: false },
 ];
 
 export function Hero() {
-  const shouldReduceMotion = useReducedMotion();
-  const { scrollY } = useScroll();
-  const parallaxY = useTransform(scrollY, [0, 1000], [0, -150]);
-  const parallaxScale = useTransform(scrollY, [0, 1000], [1, 0.8]);
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const y = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
+  const opacity = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
+  const [visible, setVisible] = useState(0);
 
-  const particles = useMemo(
-    () =>
-      [...Array(30)].map((_, i) => {
-        const seed = i * 1234;
-        return {
-          id: i,
-          left: ((seed * 9301 + 49297) % 233280) / 233280 * 100,
-          top: ((seed * 233280 + 9301) % 233280) / 233280 * 100,
-          xMovement: ((seed * 49297 + 233280) % 60) - 30,
-          yMovement: ((seed * 1234 + 49297) % 40) - 20,
-          duration: 8 + ((seed * 9301) % 10),
-          delay: ((seed * 49297) % 8),
-          size: 1 + ((seed * 1111) % 4),
-          type: (i % 3 === 0 ? "glow" : i % 3 === 1 ? "float" : "pulse") as "glow" | "float" | "pulse",
-        };
-      }),
-    []
-  );
-
-  // Reduce particles on mobile for performance
-  const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const t = setInterval(() => setVisible((v) => (v < ANOMALY_EVENTS.length ? v + 1 : v)), 800);
+    return () => clearInterval(t);
   }, []);
 
-  const displayParticles = isMobile ? particles.slice(0, 8) : particles;
-
-  interface Particle {
-    id: number;
-    left: number;
-    top: number;
-    xMovement: number;
-    yMovement: number;
-    duration: number;
-    delay: number;
-    size: number;
-    type: "glow" | "float" | "pulse";
-  };
-
-  // Disable animations when reduced motion is preferred
-  const getAnimationVariants = (p: Particle) => {
-    if (shouldReduceMotion) return {};
-    return {
-      glow: {
-        y: [0, -100, 0],
-        x: [0, p.xMovement, 0],
-        opacity: [0, 0.8, 0],
-        scale: [1, 1.5, 1],
-      },
-      float: {
-        y: [0, -60, 0],
-        x: [0, p.xMovement * 0.5, 0],
-        opacity: [0, 0.6, 0],
-        rotate: [0, 180, 360],
-      },
-      pulse: {
-        y: [0, -40, 0],
-        x: [0, p.xMovement * 0.3, 0],
-        opacity: [0, 0.4, 0],
-        scale: [1, 0.5, 1],
-      },
-    };
-  };
-
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden pt-20">
-      {/* Background — theme-aware subtle texture */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Soft radial glow — primary color, works in both modes */}
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/8 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px]" />
+    <section ref={ref} className="relative min-h-screen flex items-center overflow-hidden bg-[#020617]">
+      {/* ── Deep background layers ── */}
+      {/* Noise grain overlay */}
+      <div className="absolute inset-0 opacity-[0.015] pointer-events-none"
+        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize: "200px 200px" }} />
 
-        {/* Grid pattern */}
-        <svg className="absolute inset-0 w-full h-full">
-          <defs>
-            <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#hero-grid)" />
-        </svg>
+      {/* Grid */}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "72px 72px" }} />
 
-        {/* Enhanced floating particles with different types */}
-        {displayParticles.map((p: Particle) => {
-          const variants = getAnimationVariants(p);
-          const currentVariant = shouldReduceMotion ? {} : variants[p.type];
+      {/* Radial glows */}
+      <div className="absolute top-[-20%] left-[-10%] w-[900px] h-[900px] rounded-full opacity-20 pointer-events-none"
+        style={{ background: "radial-gradient(circle, #0891b2 0%, transparent 70%)", filter: "blur(80px)" }} />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[700px] h-[700px] rounded-full opacity-15 pointer-events-none"
+        style={{ background: "radial-gradient(circle, #1d4ed8 0%, transparent 70%)", filter: "blur(80px)" }} />
+      <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] rounded-full opacity-10 pointer-events-none"
+        style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(60px)" }} />
 
-          return (
-            <motion.div
-              key={p.id}
-              className={`absolute rounded-full ${p.type === "glow"
-                ? "bg-primary/60 blur-sm"
-                : p.type === "float"
-                  ? "bg-primary/40"
-                  : "bg-primary/30"
-                }`}
-              style={{
-                left: `${p.left}%`,
-                top: `${p.top}%`,
-                width: p.size,
-                height: p.size,
-              }}
-              animate={shouldReduceMotion ? {} : currentVariant}
-              transition={shouldReduceMotion ? {} : {
-                duration: p.duration,
-                repeat: Infinity,
-                delay: p.delay,
-                ease: "easeInOut",
-                times: [0, 0.5, 1]
-              }}
-            />
-          );
-        })}
-      </div>
+      {/* Animated rings */}
+      {[0, 1, 2].map((i) => (
+        <motion.div key={i}
+          className="absolute top-1/2 left-1/2 rounded-full border border-cyan-500/10 pointer-events-none"
+          style={{ width: `${500 + i * 250}px`, height: `${500 + i * 250}px`, x: "-50%", y: "-50%" }}
+          animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.1, 0.3] }}
+          transition={{ duration: 4 + i * 1.5, repeat: Infinity, delay: i * 0.8 }}
+        />
+      ))}
 
-      {/* Main content — two columns with parallax */}
-      <motion.div
-        style={{
-          y: shouldReduceMotion ? 0 : parallaxY,
-          scale: shouldReduceMotion ? 1 : parallaxScale
-        }}
-        className="relative z-10 w-full max-w-7xl mx-auto px-6 py-16"
-      >
+      <motion.div style={{ y, opacity }} className="relative z-10 w-full max-w-7xl mx-auto px-6 pt-28 pb-16">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
 
-          {/* ── Left column: copy ── */}
-          <motion.div variants={shouldReduceMotion ? {} : containerVariants} initial="hidden" animate="visible">
-            {/* Pill badge */}
-            <motion.div variants={shouldReduceMotion ? {} : itemVariants} className="mb-6">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/25 bg-primary/8 text-primary text-xs font-semibold tracking-wide uppercase">
-                <span className={`w-1.5 h-1.5 rounded-full bg-primary ${shouldReduceMotion ? '' : 'animate-pulse'}`} />
-                ML-Powered Edge Security
+          {/* ── LEFT: Copy ── */}
+          <div>
+            {/* Badge */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-8">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
               </span>
+              <span className="text-xs font-semibold text-cyan-400 uppercase tracking-widest">Live Threat Detection Active</span>
             </motion.div>
 
             {/* Headline */}
-            <motion.h1
-              variants={shouldReduceMotion ? {} : itemVariants}
-              className="text-4xl md:text-5xl lg:text-[3.4rem] font-display font-bold tracking-tight leading-[1.1] mb-6 text-foreground"
-            >
-              Intelligent Edge{" "}
-              <span className="relative">
-                <span className="bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                  Security.
-                </span>
-              </span>
+            <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7 }}
+              className="text-5xl md:text-6xl lg:text-[4rem] font-black tracking-tight leading-[1.05] text-white mb-6">
+              Stop threats
               <br />
-              <span className="text-foreground/70">Zero Trust.</span>{" "}
-              <span className="text-foreground/50 text-3xl md:text-4xl lg:text-[2.6rem]">Zero Latency.</span>
+              <span className="relative inline-block">
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-cyan-400 via-blue-400 to-violet-400">
+                  before they land.
+                </span>
+                {/* underline glow */}
+                <span className="absolute -bottom-1 left-0 right-0 h-px bg-linear-to-r from-cyan-400 via-blue-400 to-violet-400 opacity-50" />
+              </span>
             </motion.h1>
 
-            {/* Subheading */}
-            <motion.p
-              variants={shouldReduceMotion ? {} : itemVariants}
-              className="text-base md:text-lg text-muted-foreground leading-relaxed mb-8 max-w-lg"
-            >
-              Revolutionary AI-powered threat detection that operates entirely at the edge.
-              Real-time responses, complete data privacy, and transparent explainable AI —
-              built for enterprise scale.
+            <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+              className="text-lg text-white/50 leading-relaxed mb-10 max-w-lg">
+              ML-powered behavioral detection running entirely at the edge. Zero cloud round-trips.
+              Full explainability. Sub-500ms response — even offline.
             </motion.p>
 
-            {/* CTA buttons */}
-            <motion.div variants={shouldReduceMotion ? {} : itemVariants} whileHover={shouldReduceMotion ? {} : { x: 4 }} transition={{ duration: 0.2, type: "spring", stiffness: 400 }} className="flex flex-wrap gap-3 mb-10">
-              <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow" asChild>
-                <Link href="/auth/register">
-                  <Shield className="h-4 w-4" />
-                  Start Protected
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" className="gap-2" asChild>
-                <Link href="/auth/login">
-                  <Activity className="h-4 w-4" />
-                  Live Demo
-                </Link>
-              </Button>
+            {/* CTAs */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+              className="flex flex-wrap gap-4 mb-14">
+              <Link href="/auth/register"
+                className="group relative inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold text-white overflow-hidden">
+                <div className="absolute inset-0 bg-linear-to-r from-cyan-500 to-blue-600" />
+                <div className="absolute inset-0 bg-linear-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 shadow-lg shadow-cyan-500/30 group-hover:shadow-cyan-500/50 transition-shadow duration-300" />
+                <span className="relative">Start Protected</span>
+                <ArrowRight className="relative h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+
+              <Link href="/auth/login"
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold text-white/80 border border-white/10 hover:bg-white/5 hover:text-white hover:border-white/20 transition-all duration-200">
+                <Play className="h-3.5 w-3.5 fill-current" />
+                Watch Demo
+              </Link>
             </motion.div>
 
-            {/* Stats row */}
-            <motion.div variants={shouldReduceMotion ? {} : itemVariants} className="flex flex-wrap gap-6">
-              {stats.map((stat) => (
-                <div key={stat.label} className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <stat.icon className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
+            {/* Stats */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+              className="grid grid-cols-3 gap-6">
+              {[
+                { val: "< 500ms", label: "Detection latency" },
+                { val: "99.9%", label: "Accuracy rate" },
+                { val: "2MB", label: "Agent footprint" },
+              ].map((s) => (
+                <div key={s.label} className="border-l border-white/10 pl-4">
+                  <div className="text-2xl font-black text-white">{s.val}</div>
+                  <div className="text-xs text-white/40 mt-0.5">{s.label}</div>
                 </div>
               ))}
             </motion.div>
-          </motion.div>
+          </div>
 
-          {/* ── Right column: dashboard mockup ── */}
-          <motion.div
-            initial={{ opacity: 0, x: 40, y: 10 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: easeOut }}
-            className="relative"
-          >
-            {/* Glow behind card */}
-            <div className="absolute inset-0 bg-primary/10 rounded-3xl blur-3xl scale-95 -z-10" />
+          {/* ── RIGHT: Dashboard mockup ── */}
+          <motion.div initial={{ opacity: 0, x: 60 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4, duration: 0.8 }}
+            className="relative">
+            {/* Glow behind */}
+            <div className="absolute inset-4 bg-linear-to-br from-cyan-500/20 to-blue-600/20 rounded-3xl blur-3xl pointer-events-none" />
 
-            {/* Main dashboard card */}
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl shadow-black/10 dark:shadow-black/40 overflow-hidden">
-
-              {/* Window chrome */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
+            {/* Main card */}
+            <div className="relative rounded-2xl border border-white/10 bg-[#0a1628]/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60">
+              {/* Window bar */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-white/2">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
+                  <div className="w-3 h-3 rounded-full bg-red-500/70" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/70" />
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 bg-background rounded-md border border-border">
-                  <Shield className="h-3 w-3 text-primary" />
-                  <span className="text-xs font-mono text-muted-foreground">edgepulse.local / dashboard</span>
+                <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white/5 border border-white/8">
+                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-xs font-mono text-white/40">edgepulse — live</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-xs text-muted-foreground">Live</span>
-                </div>
+                <div className="w-16" />
               </div>
 
-              {/* Dashboard content */}
-              <div className="p-4 bg-background/50">
+              <div className="p-5 space-y-4">
+                {/* Critical alert banner */}
+                <motion.div
+                  animate={{ borderColor: ["rgba(239,68,68,0.3)", "rgba(239,68,68,0.6)", "rgba(239,68,68,0.3)"] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
+                  <div className="shrink-0 w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                    <Shield className="h-4 w-4 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-red-400">CRITICAL — Process Injection Blocked</p>
+                    <p className="text-xs text-white/40 truncate">srv-prod-01 · Confidence 0.97 · 0ms response</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-mono text-white/30">NOW</span>
+                </motion.div>
 
-                {/* Top stat row */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { label: "Devices", value: "1,247", delta: "+3", color: "text-primary" },
-                    { label: "Anomalies Blocked", value: "89", delta: "today", color: "text-destructive" },
-                    { label: "Avg Response", value: "312ms", delta: "↓18%", color: "text-green-600 dark:text-green-400" },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-card rounded-xl border border-border p-3">
-                      <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
-                      <p className={`text-lg font-bold font-mono ${s.color}`}>{s.value}</p>
-                      <p className="text-xs text-muted-foreground/70">{s.delta}</p>
+                {/* Anomaly score */}
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-xs text-white/50 font-medium">Anomaly Score</span>
+                    <span className="text-xs font-bold text-red-400 font-mono">0.97</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                    <motion.div className="h-full rounded-full"
+                      style={{ background: "linear-gradient(90deg, #f59e0b, #ef4444)" }}
+                      initial={{ width: 0 }} animate={{ width: "97%" }}
+                      transition={{ duration: 1.5, delay: 0.8, ease: "easeOut" }} />
+                  </div>
+                </div>
+
+                {/* SHAP features */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">SHAP Feature Attribution</p>
+                  {SHAP_FEATURES.map((f, i) => (
+                    <div key={f.label} className="flex items-center gap-3">
+                      <span className="text-xs text-white/50 w-28 shrink-0">{f.label}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                        <motion.div className={`h-full rounded-full ${f.positive ? "bg-red-500" : "bg-cyan-500"}`}
+                          initial={{ width: 0 }} animate={{ width: `${f.pct}%` }}
+                          transition={{ duration: 0.8, delay: 1 + i * 0.12, ease: "easeOut" }} />
+                      </div>
+                      <span className="text-xs font-mono text-white/30 w-8 text-right">{f.pct}%</span>
                     </div>
                   ))}
                 </div>
 
-                {/* Critical anomaly banner */}
-                <motion.div
-                  className="flex items-center gap-3 p-3 mb-4 rounded-xl bg-destructive/8 border border-destructive/20"
-                  animate={{ opacity: [0.8, 1, 0.8] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-destructive">CRITICAL — Process Injection Detected</p>
-                    <p className="text-xs text-muted-foreground truncate">dev-laptop-07 · Confidence 0.97 · Blocked automatically</p>
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground shrink-0">0ms</span>
-                </motion.div>
-
-                {/* Anomaly score bar */}
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-medium text-foreground">Anomaly Score</span>
-                    <span className="text-xs font-mono font-bold text-destructive">0.97</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-linear-to-r from-yellow-500 via-orange-500 to-destructive rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: "97%" }}
-                      transition={{ duration: 1.2, delay: 0.8, ease: "easeOut" }}
-                    />
-                  </div>
-                </div>
-
-                {/* SHAP contribution bars */}
-                <div className="mb-4">
-                  <p className="text-xs font-semibold text-foreground mb-2">SHAP Feature Contributions</p>
-                  <div className="space-y-2">
-                    {[
-                      { label: "CPU Spike", pct: 34, color: "bg-destructive" },
-                      { label: "Network Anomaly", pct: 28, color: "bg-orange-500" },
-                      { label: "Disk I/O", pct: 19, color: "bg-yellow-500" },
-                      { label: "Memory Usage", pct: 11, color: "bg-primary" },
-                    ].map((f, i) => (
-                      <div key={f.label} className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-28 shrink-0">{f.label}</span>
-                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <motion.div
-                            className={`h-full ${f.color} rounded-full`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${f.pct}%` }}
-                            transition={{ duration: 0.8, delay: 1 + i * 0.1, ease: "easeOut" }}
-                          />
-                        </div>
-                        <span className="text-xs font-mono text-muted-foreground w-8 text-right">{f.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Live event feed */}
                 <div>
-                  <p className="text-xs font-semibold text-foreground mb-2">Live Event Feed</p>
+                  <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Live Feed</p>
                   <div className="space-y-1.5">
-                    {anomalyEvents.map((ev, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 1.2 + i * 0.15 }}
-                        className="flex items-center gap-2 text-xs"
-                      >
-                        <span className="font-mono text-muted-foreground/60 w-10 shrink-0">{ev.time}</span>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ev.severity === "critical" ? "bg-destructive" : "bg-orange-500"}`} />
-                        <span className="text-muted-foreground flex-1 truncate">{ev.event}</span>
-                        <span className="font-mono text-muted-foreground/50 truncate">{ev.device}</span>
+                    {ANOMALY_EVENTS.slice(0, visible).map((ev, i) => (
+                      <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-2 text-xs">
+                        <span className="font-mono text-white/25 w-8">{ev.time}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ev.sev === "critical" ? "bg-red-400" : "bg-orange-400"}`} />
+                        <span className="text-white/60 flex-1 truncate">{ev.event}</span>
+                        <span className="font-mono text-white/25">{ev.device}</span>
                       </motion.div>
                     ))}
                   </div>
                 </div>
+
+                {/* Bottom stat row */}
+                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-white/5">
+                  {[
+                    { label: "Devices", val: "1,247", color: "text-cyan-400" },
+                    { label: "Blocked today", val: "89", color: "text-red-400" },
+                    { label: "Avg response", val: "312ms", color: "text-green-400" },
+                  ].map((s) => (
+                    <div key={s.label} className="text-center">
+                      <div className={`text-base font-bold font-mono ${s.color}`}>{s.val}</div>
+                      <div className="text-[10px] text-white/30">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Enhanced floating accent cards with improved animations */}
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 1, duration: 0.5, type: "spring", stiffness: 300 }}
-              whileHover={{ y: -8, scale: 1.05, rotate: 2 }}
-              className="absolute -top-4 -right-4 bg-card border border-border rounded-xl px-3 py-2 shadow-lg hover-lift"
-            >
+            {/* Floating badges */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1 }}
+              className="absolute -top-5 -right-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-white/10 backdrop-blur-xl shadow-xl">
               <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ rotate: [0, 360] }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                >
-                  <Cpu className="h-3.5 w-3.5 text-primary" />
-                </motion.div>
-                <span className="text-xs font-semibold text-foreground">Edge Agent</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <div className="w-7 h-7 rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                  <Zap className="h-3.5 w-3.5 text-white fill-white" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Edge Agent</div>
+                  <div className="text-[10px] text-white/40">2MB · Offline ready</div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">2.1MB · Offline Ready</p>
             </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 1.2, duration: 0.5, type: "spring", stiffness: 300 }}
-              whileHover={{ y: -8, scale: 1.05, rotate: -2 }}
-              className="absolute -bottom-4 -left-4 bg-card border border-border rounded-xl px-3 py-2 shadow-lg hover-lift"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.25 }}
+              className="absolute -bottom-5 -left-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-white/10 backdrop-blur-xl shadow-xl">
               <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Wifi className="h-3.5 w-3.5 text-primary" />
-                </motion.div>
-                <span className="text-xs font-semibold text-foreground">Zero Cloud Dependency</span>
+                <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                  <Brain className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">SHAP Explained</div>
+                  <div className="text-[10px] text-white/40">Every decision transparent</div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">All inference runs locally</p>
             </motion.div>
           </motion.div>
-
         </div>
+
+        {/* Trust logos row */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+          className="mt-24 pt-12 border-t border-white/5">
+          <p className="text-center text-xs text-white/25 uppercase tracking-widest mb-8">
+            Trusted by security teams at
+          </p>
+          <div className="flex items-center justify-center gap-12 flex-wrap opacity-30">
+            {["MERIDIAN", "TECHCORP", "AXIOM GLOBAL", "SENTINEL", "NEXUS SEC"].map((name) => (
+              <span key={name} className="text-sm font-bold tracking-widest text-white">{name}</span>
+            ))}
+          </div>
+        </motion.div>
       </motion.div>
     </section>
   );

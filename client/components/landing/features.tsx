@@ -1,189 +1,128 @@
 "use client";
 
 import React from "react";
-import { motion, Variants, useInView } from "framer-motion";
-import { Shield, Zap, Brain, Lock, ArrowRight } from "lucide-react";
+import { motion, useInView } from "framer-motion";
+import { Shield, Zap, Brain, Lock, Eye, Activity } from "lucide-react";
 
 const features = [
   {
     icon: Shield,
     title: "Real-time Defense",
-    description:
-      "Advanced ML algorithms detect and neutralize threats in milliseconds before they can propagate across your network.",
-    accent: "text-primary",
-    bg: "bg-primary/8",
-    border: "border-primary/15 hover:border-primary/30",
+    description: "ML algorithms neutralize threats in milliseconds before they propagate — fully autonomous blocking.",
+    color: "from-cyan-500 to-blue-600",
+    glow: "rgba(6,182,212,0.15)",
+    border: "rgba(6,182,212,0.2)",
   },
   {
     icon: Brain,
     title: "Explainable AI",
-    description:
-      "SHAP-powered insights provide complete transparency for every detection decision — no black boxes, ever.",
-    accent: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-500/8",
-    border: "border-violet-500/15 hover:border-violet-500/30",
+    description: "SHAP-powered insights reveal exactly why every detection was made. No black boxes, ever.",
+    color: "from-violet-500 to-purple-600",
+    glow: "rgba(139,92,246,0.15)",
+    border: "rgba(139,92,246,0.2)",
   },
   {
     icon: Zap,
     title: "Edge Native",
-    description:
-      "Ultra-lightweight 2MB agents with zero cloud dependency. Full inference runs locally with minimal resource footprint.",
-    accent: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-500/8",
-    border: "border-amber-500/15 hover:border-amber-500/30",
+    description: "2MB agents with zero cloud dependency. Full inference at the device level. Works air-gapped.",
+    color: "from-amber-400 to-orange-500",
+    glow: "rgba(251,191,36,0.15)",
+    border: "rgba(251,191,36,0.2)",
   },
   {
     icon: Lock,
     title: "Privacy First",
-    description:
-      "Your sensitive telemetry data never leaves your infrastructure. Compliance-ready by design for GDPR, HIPAA, and SOC 2.",
-    accent: "text-emerald-600 dark:text-emerald-400",
-    bg: "bg-emerald-500/8",
-    border: "border-emerald-500/15 hover:border-emerald-500/30",
+    description: "Sensitive telemetry never leaves your infrastructure. GDPR, HIPAA & SOC 2 ready by design.",
+    color: "from-emerald-500 to-teal-600",
+    glow: "rgba(16,185,129,0.15)",
+    border: "rgba(16,185,129,0.2)",
+  },
+  {
+    icon: Eye,
+    title: "Full Visibility",
+    description: "Unified dashboard with live anomaly feed, device health, and forensic export — all in one pane.",
+    color: "from-rose-500 to-pink-600",
+    glow: "rgba(244,63,94,0.15)",
+    border: "rgba(244,63,94,0.2)",
+  },
+  {
+    icon: Activity,
+    title: "Offline Resilience",
+    description: "Queue-and-sync architecture keeps detecting threats even when connectivity drops.",
+    color: "from-sky-500 to-indigo-600",
+    glow: "rgba(14,165,233,0.15)",
+    border: "rgba(14,165,233,0.2)",
   },
 ];
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { y: 24, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: { duration: 0.55, ease: "easeOut" },
-  },
-};
-
 export function Features() {
   const ref = React.useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-100px" });
+  const isInView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section ref={ref} id="features" className="py-24 bg-muted/30 border-y border-border">
-      <div className="max-w-6xl mx-auto px-6">
-        {/* Section header with enhanced animation */}
+    <section ref={ref} id="features" className="relative py-32 bg-[#020617] overflow-hidden">
+      {/* Grid */}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)", backgroundSize: "72px 72px" }} />
+
+      {/* Glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full opacity-10 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse, #0891b2, transparent)", filter: "blur(80px)" }} />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-6">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, type: "spring", stiffness: 300 }}
-          className="max-w-2xl mb-16"
-        >
-          <motion.span
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={isInView ? { opacity: 1, scale: 1 } : {}}
-            transition={{ delay: 0.1, duration: 0.4 }}
-            className="inline-block text-xs font-semibold uppercase tracking-widest text-primary mb-3"
-          >
-            Platform Features
-          </motion.span>
-          <motion.h2
-            initial={{ opacity: 0, x: -20 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4 leading-tight"
-          >
-            Next-generation security,{" "}
-            <span className="text-primary">built for the edge</span>
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, x: -20 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ delay: 0.3, duration: 0.5 }}
-            className="text-muted-foreground text-base leading-relaxed"
-          >
-            Cutting-edge technology designed for the modern enterprise threat landscape —
-            without the complexity, latency, or privacy tradeoffs of cloud-dependent solutions.
-          </motion.p>
+          transition={{ duration: 0.6 }}
+          className="text-center mb-20">
+          <span className="inline-block text-xs font-bold uppercase tracking-widest text-cyan-400 mb-4">
+            Platform Capabilities
+          </span>
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-5 leading-tight">
+            Security designed for
+            <span className="block text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">
+              the modern edge.
+            </span>
+          </h2>
+          <p className="text-lg text-white/40 max-w-2xl mx-auto">
+            Enterprise-grade protection without cloud dependency, latency penalties, or privacy tradeoffs.
+          </p>
         </motion.div>
 
-        {/* Enhanced feature grid with interactive animations */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate={isInView ? "visible" : "hidden"}
-          className="grid md:grid-cols-2 lg:grid-cols-4 gap-5"
-        >
-          {features.map((feature, index) => (
+        {/* Feature grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {features.map((f, i) => (
             <motion.div
-              key={index}
-              variants={itemVariants}
-              whileHover={{
-                y: -8,
-                scale: 1.02,
-                transition: { duration: 0.2, type: "spring", stiffness: 400 }
-              }}
-              whileTap={{ scale: 0.98 }}
-              className={`group relative bg-card rounded-2xl border ${feature.border} p-6 transition-all duration-300 hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/30 overflow-hidden`}
+              key={f.title}
+              initial={{ opacity: 0, y: 40 }}
+              animate={isInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, delay: i * 0.1 }}
             >
-              {/* Animated background gradient on hover */}
-              <motion.div
-                className={`absolute inset-0 ${feature.bg} opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
-                initial={false}
-                animate={{ opacity: 0 }}
-                whileHover={{ opacity: 1 }}
-              />
+              <div className="group relative h-full rounded-2xl p-7 border border-white/5 bg-white/2 hover:bg-white/4 transition-all duration-500 overflow-hidden cursor-default">
+                {/* Hover glow */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
+                  style={{ background: `radial-gradient(circle at 30% 30%, ${f.glow}, transparent 70%)` }} />
 
-              {/* Icon with enhanced animation */}
-              <motion.div
-                className={`relative w-11 h-11 rounded-xl ${feature.bg} border ${feature.border} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}
-                whileHover={{ rotate: [0, -5, 5, 0] }}
-                transition={{ duration: 0.5 }}
-              >
-                <feature.icon className={`w-5 h-5 ${feature.accent} group-hover:scale-110 transition-transform duration-300`} />
-                {/* Subtle glow effect on hover */}
-                <motion.div
-                  className={`absolute inset-0 rounded-xl ${feature.accent.replace('text-', 'bg-').replace('600', '500').replace('400', '500')} opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-300`}
-                />
-              </motion.div>
+                {/* Border glow on hover */}
+                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{ boxShadow: `inset 0 0 0 1px ${f.border}` }} />
 
-              {/* Content with staggered animation */}
-              <div className="relative">
-                <motion.h3
-                  className="text-base font-semibold text-foreground mb-2 group-hover:${feature.accent} transition-colors duration-300"
-                  whileHover={{ x: 2 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {feature.title}
-                </motion.h3>
-                <motion.p
-                  className="text-sm text-muted-foreground leading-relaxed mb-4"
-                  whileHover={{ y: -1 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {feature.description}
-                </motion.p>
+                {/* Icon */}
+                <div className={`relative w-12 h-12 rounded-xl bg-linear-to-br ${f.color} flex items-center justify-center mb-6 shadow-lg`}
+                  style={{ boxShadow: `0 0 20px ${f.glow}` }}>
+                  <f.icon className="w-5 h-5 text-white" />
+                </div>
 
-                {/* Enhanced learn more link */}
-                <motion.div
-                  className={`flex items-center gap-1 text-xs font-medium ${feature.accent} opacity-0 group-hover:opacity-100 transition-all duration-300`}
-                  initial={{ x: -10 }}
-                  whileHover={{ x: 0 }}
-                >
-                  <span>Learn more</span>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2, type: "spring", stiffness: 400 }}
-                  >
-                    <ArrowRight className="h-3 w-3" />
-                  </motion.div>
-                </motion.div>
+                <h3 className="text-base font-bold text-white mb-3">{f.title}</h3>
+                <p className="text-sm text-white/45 leading-relaxed">{f.description}</p>
+
+                {/* Corner accent */}
+                <div className={`absolute bottom-0 right-0 w-24 h-24 rounded-tl-3xl opacity-0 group-hover:opacity-10 transition-opacity duration-500 bg-linear-to-br ${f.color}`} />
               </div>
-
-              {/* Subtle particle effect on hover */}
-              <motion.div
-                className="absolute top-2 right-2 w-1 h-1 rounded-full bg-primary opacity-0 group-hover:opacity-60"
-                animate={{ scale: [1, 1.5, 1], opacity: [0.6, 1, 0.6] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              />
             </motion.div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );
