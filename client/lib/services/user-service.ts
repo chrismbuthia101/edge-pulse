@@ -31,14 +31,10 @@ export interface UserSubscriptionOptions {
   onError?: (error: Error) => void;
 }
 
-// ─── Service ───────────────────────────────────────────────────────────────────
-
 export class UserService {
   private channelName: string | null = null;
 
   constructor(private readonly repository: UserRepository) { }
-
-  // ── Queries ────────────────────────────────────────────────────────────────
 
   async getUsers(options: GetUsersOptions = {}): Promise<AnalystUser[]> {
     return this.repository.findUsers({
@@ -64,8 +60,6 @@ export class UserService {
     return this.repository.searchUsers(query, options);
   }
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
   async createUser(userData: CreateUserOptions): Promise<AnalystUser> {
     return this.repository.createUser(userData);
   }
@@ -77,18 +71,9 @@ export class UserService {
     return this.repository.updateUserStatus(id, options.isActive);
   }
 
-  async updateUserRole(
-    id: string,
-    options: UpdateUserRoleOptions
-  ): Promise<AnalystUser> {
-    return this.repository.updateUserRole(id, options.role);
-  }
-
   async deleteUser(id: string): Promise<void> {
     return this.repository.deleteUser(id);
   }
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToUsers(callbacks: UserSubscriptionOptions): void {
     if (this.channelName) {

@@ -22,10 +22,9 @@ interface UserStore {
   setFilterStatus: (status: string) => void;
   setFilterApprovalStatus: (status: string) => void;
   toggleUserStatus: (userId: string, isActive: boolean) => Promise<void>;
-  changeUserRole: (userId: string, newRole: "ANALYST" | "ADMINISTRATOR") => Promise<void>;
-  approveUser: (userId: string, role: "ANALYST" | "ADMINISTRATOR") => Promise<void>;
+  approveUser: (userId: string) => Promise<void>;
   rejectUser: (userId: string, reason: string) => Promise<void>;
-  reapproveUser: (userId: string, role: "ANALYST" | "ADMINISTRATOR") => Promise<void>;
+  reapproveUser: (userId: string) => Promise<void>;
   createUser: (userData: { full_name: string; role: "ANALYST" | "ADMINISTRATOR"; department?: string; email?: string }) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   clearError: () => void;
@@ -125,37 +124,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  changeUserRole: async (userId: string, newRole: "ANALYST" | "ADMINISTRATOR") => {
-    const { users } = get();
-    const oldUser = users.find(u => u.user_id === userId);
-    const oldRole = oldUser?.role;
-
-    set({
-      users: users.map(user =>
-        user.user_id === userId
-          ? { ...user, role: newRole }
-          : user
-      )
-    });
-
-    try {
-      await userService.updateUserRole(userId, { role: newRole });
-      toast.success(`User role changed to ${newRole} successfully`);
-    } catch (err) {
-      console.error("Failed to change user role:", err);
-      toast.error("Failed to change user role");
-
-      if (oldRole) {
-        set({
-          users: users.map(user =>
-            user.user_id === userId
-              ? { ...user, role: oldRole }
-              : user
-          )
-        });
-      }
-    }
-  },
 
   createUser: async (userData: { full_name: string; role: "ANALYST" | "ADMINISTRATOR"; department?: string; email?: string }) => {
     const { users } = get();
@@ -188,20 +156,27 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  approveUser: async (userId: string, role: "ANALYST" | "ADMINISTRATOR") => {
+  approveUser: async (userId: string) => {
     const { users, pendingUsers } = get();
     const pendingUser = pendingUsers.find(u => u.user_id === userId);
+    const existingUser = users.find(u => u.user_id === userId);
+    const role = "ANALYST";
 
     if (pendingUser) {
       set({
         pendingUsers: pendingUsers.filter(u => u.user_id !== userId),
-
-        users: [...users, {
-          ...pendingUser,
-          role,
-          approval_status: "APPROVED" as const,
-          is_active: true
-        }]
+        users: existingUser
+          ? users.map(user =>
+            user.user_id === userId
+              ? { ...user, role, approval_status: "APPROVED" as const, is_active: true }
+              : user
+          )
+          : [...users, {
+            ...pendingUser,
+            role,
+            approval_status: "APPROVED" as const,
+            is_active: true
+          }]
       });
     } else {
       set({
@@ -227,21 +202,29 @@ export const useUserStore = create<UserStore>((set, get) => ({
   rejectUser: async (userId: string, reason: string) => {
     const { users, pendingUsers } = get();
     const pendingUser = pendingUsers.find(u => u.user_id === userId);
+    const existingUser = users.find(u => u.user_id === userId);
 
     if (pendingUser) {
       set({
         pendingUsers: pendingUsers.filter(u => u.user_id !== userId),
-        users: [...users, {
-          ...pendingUser,
-          approval_status: "REJECTED" as const,
-          is_active: false
-        }]
+        users: existingUser
+          ? users.map(user =>
+            user.user_id === userId
+              ? { ...user, approval_status: "REJECTED" as const, is_active: false, rejection_reason: reason }
+              : user
+          )
+          : [...users, {
+            ...pendingUser,
+            approval_status: "REJECTED" as const,
+            is_active: false,
+            rejection_reason: reason
+          }]
       });
     } else {
       set({
         users: users.map(user =>
           user.user_id === userId
-            ? { ...user, approval_status: "REJECTED" as const, is_active: false }
+            ? { ...user, approval_status: "REJECTED" as const, is_active: false, rejection_reason: reason }
             : user
         )
       });
@@ -258,9 +241,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  reapproveUser: async (userId: string, role: "ANALYST" | "ADMINISTRATOR") => {
+  reapproveUser: async (userId: string) => {
     const { users } = get();
     const previousUser = users.find(u => u.user_id === userId);
+    const role = "ANALYST";
 
     set({
       users: users.map(user =>

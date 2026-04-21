@@ -55,8 +55,6 @@ interface AnomalyPoint {
 
 type DeviceState = "reporting" | "silent" | "unsynced" | "offline" | "installed";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function computeDeviceState(
     status: string,
     lastSeenIso: string | null | undefined,

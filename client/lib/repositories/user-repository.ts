@@ -165,22 +165,6 @@ export class UserRepository extends BaseRepository<AnalystUser> {
     }
   }
 
-  async updateUserRole(id: string, role: "ANALYST" | "ADMINISTRATOR"): Promise<AnalystUser> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .update({ role, updated_at: new Date().toISOString() })
-        .eq('user_id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
   async createUser(userData: Omit<AnalystUser, 'user_id' | 'created_at' | 'updated_at'>): Promise<AnalystUser> {
     const now = new Date().toISOString();
     try {
@@ -316,7 +300,6 @@ export class UserRepository extends BaseRepository<AnalystUser> {
     }
   }
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
   subscribeToUsers(
     filters: Partial<UserQueryOptions> = {},
     callbacks: UserSubscriptionCallbacks = {}

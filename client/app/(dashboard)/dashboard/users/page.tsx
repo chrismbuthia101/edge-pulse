@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Users, UserPlus, Search, MoreHorizontal, Shield,
@@ -18,6 +18,11 @@ import {
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter,
+    DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useUserStore } from "@/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
 
@@ -48,11 +53,13 @@ export default function UsersPage() {
         setFilterStatus,
         setFilterApprovalStatus,
         toggleUserStatus,
-        changeUserRole,
         approveUser,
         rejectUser,
         reapproveUser
     } = useUserStore();
+    const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+    const [rejectionReason, setRejectionReason] = useState("");
 
     useEffect(() => {
         initialize();
@@ -168,25 +175,18 @@ export default function UsersPage() {
                                         <div className="flex gap-2 shrink-0">
                                             <Button
                                                 size="sm"
-                                                onClick={() => approveUser(user.user_id, "ANALYST")}
+                                                onClick={() => approveUser(user.user_id)}
                                                 className="bg-green-600 hover:bg-green-700"
                                             >
                                                 Approve as Analyst
                                             </Button>
                                             <Button
                                                 size="sm"
-                                                variant="outline"
-                                                onClick={() => approveUser(user.user_id, "ADMINISTRATOR")}
-                                                className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                                            >
-                                                Approve as Admin
-                                            </Button>
-                                            <Button
-                                                size="sm"
                                                 variant="destructive"
                                                 onClick={() => {
-                                                    const reason = prompt("Rejection reason (optional):") || "No reason provided";
-                                                    rejectUser(user.user_id, reason);
+                                                    setSelectedUserId(user.user_id);
+                                                    setRejectionReason("");
+                                                    setRejectDialogOpen(true);
                                                 }}
                                             >
                                                 Reject
@@ -293,18 +293,9 @@ export default function UsersPage() {
                                                                 : <><CheckCircle className="h-4 w-4 mr-2" />Activate</>
                                                             }
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() => changeUserRole(
-                                                                user.user_id,
-                                                                user.role === "ADMINISTRATOR" ? "ANALYST" : "ADMINISTRATOR"
-                                                            )}
-                                                        >
-                                                            <Shield className="h-4 w-4 mr-2" />
-                                                            Change to {user.role === "ADMINISTRATOR" ? "Analyst" : "Administrator"}
-                                                        </DropdownMenuItem>
                                                         {user.approval_status === "REJECTED" && (
                                                             <DropdownMenuItem
-                                                                onClick={() => reapproveUser(user.user_id, "ANALYST")}
+                                                                onClick={() => reapproveUser(user.user_id)}
                                                             >
                                                                 <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
                                                                 Reapprove User
@@ -329,6 +320,45 @@ export default function UsersPage() {
                     </CardContent>
                 </Card>
             </motion.div>
+
+            {/* Rejection Reason Dialog */}
+            <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reject User</DialogTitle>
+                        <DialogDescription>
+                            Please provide a reason for rejecting this user.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Textarea
+                        placeholder="Enter rejection reason..."
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        rows={4}
+                    />
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setRejectDialogOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (selectedUserId) {
+                                    rejectUser(selectedUserId, rejectionReason || "No reason provided");
+                                }
+                                setRejectDialogOpen(false);
+                                setSelectedUserId(null);
+                                setRejectionReason("");
+                            }}
+                        >
+                            Reject User
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
