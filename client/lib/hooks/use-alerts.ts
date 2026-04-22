@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { useAlertStore } from "@/stores/alert-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
 import type { Alert, AlertStatus } from "@/lib/supabase/types";
 
 export type AlertFilter = "ALL" | "PENDING" | "IN_REVIEW" | "CLOSED";

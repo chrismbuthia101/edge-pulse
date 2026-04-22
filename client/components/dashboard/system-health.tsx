@@ -4,8 +4,8 @@ import { motion } from "framer-motion";
 import { HeartPulse, Cpu, MemoryStick, Zap, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMemo, useEffect, useState } from "react";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { TelemetryService } from "@/lib/services/telemetry-service";
 import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 

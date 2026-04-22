@@ -12,7 +12,7 @@ import {
     RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAlertStore } from "@/stores/alert-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
 
 export function ModelPerformance() {
     const alerts = useAlertStore((s) => s.alerts);

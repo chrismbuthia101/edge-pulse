@@ -32,8 +32,8 @@ import {
     RadialBarChart,
     RadialBar,
 } from "recharts";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
 
 function AnomalyTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {

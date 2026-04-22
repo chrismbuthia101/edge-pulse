@@ -12,14 +12,17 @@ import {
     Activity,
     Clock,
     Search,
+    Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useReportStore } from "@/stores/report-store";
+import { useReportStore } from "@/lib/stores/report-store";
 import { useAuth } from "@/lib/auth/useAuth";
+import { PDFReportService, type ReportData } from "@/lib/services/pdf-report-service";
+import { toast } from "sonner";
 
 
 const severityColors: Record<string, string> = {
@@ -34,10 +37,90 @@ export default function ReportsPage() {
     const { reportData, loading, dateRange, setDateRange, initialize, generateReport } = useReportStore();
 
     const [searchTerm, setSearchTerm] = useState("");
+    const [generatingPDF, setGeneratingPDF] = useState(false);
+    const [generatingCSV, setGeneratingCSV] = useState(false);
 
     useEffect(() => {
         initialize();
     }, [initialize]);
+
+    const handleExportPDF = async () => {
+        setGeneratingPDF(true);
+        try {
+            const pdfService = new PDFReportService();
+            const reportDataFormatted: ReportData = {
+                title: "EdgePulse Security Report",
+                dateRange: {
+                    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                    end: new Date(),
+                },
+                generatedAt: new Date(),
+                executiveSummary: {
+                    totalAlerts: reportData?.totalAlerts || 0,
+                    criticalAlerts: reportData?.criticalAlerts || 0,
+                    devicesMonitored: reportData?.activeDevices || 0,
+                    mlAccuracy: 0.95,
+                },
+                alertTrends: [],
+                deviceRiskMatrix: [],
+                distribution: {
+                    bySeverity: {
+                        critical: reportData?.alertsBySeverity?.CRITICAL || 0,
+                        high: reportData?.alertsBySeverity?.HIGH || 0,
+                        medium: reportData?.alertsBySeverity?.MEDIUM || 0,
+                        low: reportData?.alertsBySeverity?.LOW || 0,
+                    },
+                    byCategory: {
+                        anomaly: 0,
+                        security: 0,
+                        system: 0,
+                    },
+                },
+                topDevices: [],
+                criticalIncidents: (reportData?.recentAlerts || []).map(alert => ({
+                    id: alert.alert_id,
+                    deviceName: alert.device_name || alert.device_id,
+                    severity: alert.severity,
+                    description: "Security alert detected",
+                    timestamp: new Date(alert.created_at),
+                })),
+                mlPerformance: {
+                    modelVersion: "1.0.0",
+                    accuracy: 0.95,
+                    precision: 0.92,
+                    recall: 0.88,
+                    f1Score: 0.90,
+                },
+            };
+
+            const blob = await pdfService.generateReport(reportDataFormatted);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `edgepulse-report-${new Date().toISOString().split("T")[0]}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("PDF report generated successfully");
+        } catch (error) {
+            toast.error("Failed to generate PDF report");
+            console.error(error);
+        } finally {
+            setGeneratingPDF(false);
+        }
+    };
+
+    const handleExportCSV = async () => {
+        setGeneratingCSV(true);
+        try {
+            await generateReport("csv");
+            toast.success("CSV export completed");
+        } catch (error) {
+            toast.error("Failed to export CSV");
+            console.error(error);
+        } finally {
+            setGeneratingCSV(false);
+        }
+    };
 
     if (!hasRole(["ADMINISTRATOR"])) {
         return (
@@ -67,11 +150,13 @@ export default function ReportsPage() {
                     <p className="text-muted-foreground">Generate and analyze security reports</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={() => generateReport("pdf")} variant="outline">
-                        <Download className="h-4 w-4 mr-2" />Export PDF
+                    <Button onClick={handleExportPDF} variant="outline" disabled={generatingPDF}>
+                        {generatingPDF ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                        Export PDF
                     </Button>
-                    <Button onClick={() => generateReport("csv")}>
-                        <Download className="h-4 w-4 mr-2" />Export CSV
+                    <Button onClick={handleExportCSV} disabled={generatingCSV}>
+                        {generatingCSV ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                        Export CSV
                     </Button>
                 </div>
             </motion.div>

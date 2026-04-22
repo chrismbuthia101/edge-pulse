@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useDeviceStore } from "@/stores/device-store";
-import { useAlertStore } from "@/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
 import { TelemetryService } from "@/lib/services/telemetry-service";
 import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 import { toast } from "sonner";

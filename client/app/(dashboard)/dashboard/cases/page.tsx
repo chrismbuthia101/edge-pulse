@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCaseStore } from "@/stores/case-store";
+import { useCaseStore } from "@/lib/stores/case-store";
 import { useAuth } from "@/lib/auth/useAuth";
 
 const severityColors = {

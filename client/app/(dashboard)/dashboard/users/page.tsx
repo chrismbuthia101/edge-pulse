@@ -23,7 +23,7 @@ import {
     DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useUserStore } from "@/stores/user-store";
+import { useUserStore } from "@/lib/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
 
 const roleColors: Record<string, string> = {

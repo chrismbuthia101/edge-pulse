@@ -13,8 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ModelPerformance } from "@/components/dashboard/model-performance";
 import { Activity, Cpu, MemoryStick, Zap } from "lucide-react";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import { AnomalyService, anomalyRepository } from "@/lib/services/anomaly-service";
 import { TelemetryService } from "@/lib/services/telemetry-service";

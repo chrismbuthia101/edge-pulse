@@ -23,8 +23,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { AlertStatus } from "@/lib/supabase/types";
 import { toast } from "sonner";

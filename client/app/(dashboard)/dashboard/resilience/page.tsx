@@ -32,8 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSyncQueueStore } from "@/stores/sync-queue-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useSyncQueueStore } from "@/lib/stores/sync-queue-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { cn } from "@/lib/utils";
 
 interface ConnectionMetrics {

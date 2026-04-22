@@ -16,6 +16,7 @@ import {
   XCircle,
   Info,
   Search,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLogIntegrityStore } from "@/stores/log-integrity-store";
+import { useLogIntegrityStore } from "@/lib/stores/log-integrity-store";
+import { useLogsStore } from "@/lib/stores/logs-store";
 import { cn } from "@/lib/utils";
 
 export default function IntegrityMonitoringPage() {
@@ -47,9 +49,30 @@ export default function IntegrityMonitoringPage() {
     integrityMetrics,
   } = useLogIntegrityStore();
 
+  const {
+    logDevices,
+    selectedDevice: logSelectedDevice,
+    loading: logsLoading,
+    verifying: logsVerifying,
+    verificationResult,
+    searchTerm,
+    entryTypeFilter,
+    initialize: initializeLogs,
+    setSelectedDevice: setLogSelectedDevice,
+    setEntryTypeFilter,
+    setSearchTerm,
+    refreshLogs,
+    verifyChain,
+    exportLogs,
+    getFilteredLogs
+  } = useLogsStore();
+
   useEffect(() => {
     initialize();
-  }, [initialize]);
+    initializeLogs();
+  }, [initialize, initializeLogs]);
+
+  const filteredLogs = getFilteredLogs();
 
   const filteredAlerts = useMemo(() => {
     return tamperAlerts?.filter(alert => {
@@ -269,9 +292,10 @@ export default function IntegrityMonitoringPage() {
 
       {/* Main Content */}
       <Tabs defaultValue="alerts" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="alerts">Tamper Alerts</TabsTrigger>
           <TabsTrigger value="chains">Hash Chains</TabsTrigger>
+          <TabsTrigger value="logs">Log Viewer</TabsTrigger>
           <TabsTrigger value="metrics">Integrity Metrics</TabsTrigger>
         </TabsList>
 
@@ -408,6 +432,204 @@ export default function IntegrityMonitoringPage() {
               ))
             )}
           </div>
+        </TabsContent>
+
+        {/* Log Viewer Tab */}
+        <TabsContent value="logs" className="space-y-4">
+          {/* Filters */}
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1">
+                  <Select value={logSelectedDevice} onValueChange={setLogSelectedDevice}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select device" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Devices</SelectItem>
+                      {logDevices.map((device) => (
+                        <SelectItem key={device.device_id} value={device.device_id}>
+                          {device.device_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1">
+                  <Select value={entryTypeFilter} onValueChange={setEntryTypeFilter}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Filter by type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="TELEMETRY">Telemetry</SelectItem>
+                      <SelectItem value="ALERT">Alerts</SelectItem>
+                      <SelectItem value="DETECTION">Detections</SelectItem>
+                      <SelectItem value="SYNC">Sync</SelectItem>
+                      <SelectItem value="SYSTEM">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search logs..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refreshLogs()}
+                    disabled={logsLoading || logSelectedDevice === "all"}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${logsLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportLogs()}
+                    disabled={logSelectedDevice === "all"}
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Export
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Verification Status */}
+          {verificationResult && (
+            <Card className="border-border">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {verificationResult.is_valid ? (
+                      <CheckCircle2 className="h-8 w-8 text-green-500" />
+                    ) : (
+                      <AlertTriangle className="h-8 w-8 text-destructive" />
+                    )}
+                    <div>
+                      <h3 className="font-semibold">
+                        Chain {verificationResult.is_valid ? "Valid" : "Invalid"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {verificationResult.entries_checked} entries checked
+                      </p>
+                    </div>
+                  </div>
+                  {!verificationResult.is_valid && verificationResult.break_reason && (
+                    <div className="text-right">
+                      <p className="text-sm text-destructive">
+                        {verificationResult.break_reason}
+                      </p>
+                      {verificationResult.first_broken_sequence && (
+                        <p className="text-xs text-muted-foreground">
+                          Sequence: #{verificationResult.first_broken_sequence}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Logs Terminal */}
+          {logsLoading ? (
+            <Card className="border-border">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading logs...</p>
+              </CardContent>
+            </Card>
+          ) : logSelectedDevice === "all" ? (
+            <Card className="border-border">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Terminal className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  Select a Device
+                </h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  Choose a device to view its tamper-evident log entries
+                </p>
+              </CardContent>
+            </Card>
+          ) : filteredLogs.length === 0 ? (
+            <Card className="border-border">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Activity className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  No logs found
+                </h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  {searchTerm || entryTypeFilter !== "all"
+                    ? "Try adjusting your search or filters"
+                    : "No tamper log entries available for this device"}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="bg-slate-950 dark:bg-slate-950 rounded-lg p-4 font-mono text-xs space-y-2 max-h-[600px] overflow-y-auto">
+                  {filteredLogs.map((log) => {
+                    const getEntryTypeColor = (type: string) => {
+                      const colors: Record<string, string> = {
+                        'TELEMETRY': 'text-blue-400',
+                        'ALERT': 'text-red-400',
+                        'DETECTION': 'text-orange-400',
+                        'SYNC': 'text-green-400',
+                        'SYSTEM': 'text-purple-400',
+                      };
+                      return colors[type] || 'text-gray-400';
+                    };
+
+                    return (
+                      <div key={log.log_id} className="flex gap-4 text-slate-300">
+                        <span className="text-slate-500 shrink-0">
+                          #{String(log.log_sequence_number).padStart(6, '0')}
+                        </span>
+                        <span className={getEntryTypeColor(log.log_entry_type) + " shrink-0"}>
+                          {log.log_entry_type.padEnd(10, ' ')}
+                        </span>
+                        <span className="text-slate-400 shrink-0">
+                          {new Date(log.entry_timestamp_utc).toLocaleString()}
+                        </span>
+                        <span className="text-slate-500 shrink-0">
+                          SHA: {log.entry_content_hash.substring(0, 12)}...
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Verify Chain Button */}
+          {logSelectedDevice !== "all" && (
+            <div className="flex justify-center">
+              <Button
+                onClick={() => verifyChain()}
+                disabled={logsVerifying}
+                size="lg"
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                {logsVerifying ? "Verifying..." : "Verify Chain Integrity"}
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         {/* Hash Chains Tab */}

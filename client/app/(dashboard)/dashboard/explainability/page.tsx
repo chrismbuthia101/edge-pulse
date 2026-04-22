@@ -33,8 +33,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -150,7 +150,7 @@ export default function ExplainabilityPage() {
 
   const mockExplanationResults: ExplanationResult[] = useMemo(() => {
     return filteredAlerts.slice(0, 5).map((alert, index) => {
-     
+
       const seed = alert.anomaly_score * 1000 + index;
       const hash = (x: number) => {
         x = ((x >> 16) ^ x) * 0x45d9f3b;

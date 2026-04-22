@@ -17,12 +17,17 @@ import {
     Link2,
     Link2Off,
     Clock,
-    Activity
+    Activity,
+    Copy,
+    Loader2,
+    CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useDeviceStore } from "@/stores/device-store";
+import { Label } from "@/components/ui/label";
+import { useDeviceStore } from "@/lib/stores/device-store";
+import { useDeviceEnrollmentStore } from "@/lib/stores/device-enrollment-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -98,38 +103,250 @@ function HashChainBadge({ ok }: { ok: boolean }) {
     );
 }
 
+type EnrollmentStep = "token" | "install" | "enroll" | "success";
+
 function EnrollDeviceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const [step, setStep] = useState<EnrollmentStep>("token");
+    const [tokenName, setTokenName] = useState("");
+    const [maxUses, setMaxUses] = useState(1);
+    const [createdToken, setCreatedToken] = useState<string>("");
+    const [loading, setLoading] = useState(false);
+
+    const { createToken: createTokenFromStore } = useDeviceEnrollmentStore();
+
+    const handleCreateToken = async () => {
+        if (!tokenName.trim()) return;
+        setLoading(true);
+        const result = await createTokenFromStore(tokenName, maxUses);
+        setLoading(false);
+        if (result) {
+            const tokenSecret = (result as { tokenSecret?: string }).tokenSecret;
+            setCreatedToken(tokenSecret || result.tokenId || "");
+            setStep("install");
+        }
+    };
+
+    const handleCopyToClipboard = async (text: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success(`${label} copied to clipboard`);
+        } catch {
+            toast.error(`Failed to copy ${label.toLowerCase()}`);
+        }
+    };
+
+    const resetModal = () => {
+        setStep("token");
+        setTokenName("");
+        setMaxUses(1);
+        setCreatedToken("");
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="max-w-lg">
+        <Dialog open={open} onOpenChange={(open) => {
+            if (!open) {
+                resetModal();
+                onClose();
+            }
+        }}>
+            <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Enroll a Device</DialogTitle>
+                    <DialogTitle>
+                        {step === "token" && "Generate Enrollment Token"}
+                        {step === "install" && "Installation Guide"}
+                        {step === "enroll" && "Enroll Device"}
+                        {step === "success" && "Device Enrolled"}
+                    </DialogTitle>
                     <DialogDescription>
-                        Install the EdgePulse agent on a device to start monitoring it.
+                        {step === "token" && "Create a one-time enrollment token to secure device registration."}
+                        {step === "install" && "Follow these steps to install and configure the EdgePulse agent."}
+                        {step === "enroll" && "Run the enrollment command on your device to complete registration."}
+                        {step === "success" && "Your device has been successfully enrolled and is now being monitored."}
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4">
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Linux / macOS</p>
-                        <div className="bg-muted rounded-lg p-3 font-mono text-xs text-foreground">
-                            curl -fsSL https://install.edgepulse.io | sudo bash -s -- --token YOUR_TOKEN
+
+                {/* Step 1: Generate Token */}
+                {step === "token" && (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="tokenName">Token Name</Label>
+                            <Input
+                                id="tokenName"
+                                placeholder="e.g., Office Laptops"
+                                value={tokenName}
+                                onChange={(e) => setTokenName(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="maxUses">Max Uses</Label>
+                            <Input
+                                id="maxUses"
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={maxUses}
+                                onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
+                            />
                         </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Windows (PowerShell)</p>
-                        <div className="bg-muted rounded-lg p-3 font-mono text-xs text-foreground">
-                            iwr https://install.edgepulse.io/win | iex; Install-EdgePulse -Token YOUR_TOKEN
+                )}
+
+                {/* Step 2: Installation Guide */}
+                {step === "install" && (
+                    <div className="space-y-4">
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm">
+                            <p className="font-semibold text-amber-600 dark:text-amber-400 mb-1">Important: Save your token</p>
+                            <p className="text-muted-foreground text-xs">This token is only shown once. Copy it now before proceeding.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Your Enrollment Token</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    value={createdToken}
+                                    readOnly
+                                    className="font-mono text-xs"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => handleCopyToClipboard(createdToken, "Token")}
+                                >
+                                    <Copy className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 pt-4 border-t border-border">
+                            <p className="text-sm font-semibold">Step 1: Download and Install .deb</p>
+                            <div className="bg-muted rounded-lg p-3 font-mono text-xs">
+                                <p className="text-muted-foreground mb-2"># Download the .deb package from your dashboard or build from source</p>
+                                <p className="text-foreground">sudo dpkg -i edgepulse-agent_VERSION_amd64.deb</p>
+                                <p className="text-foreground">sudo apt-get install -f</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <p className="text-sm font-semibold">Step 2: Configure enrollment</p>
+                            <div className="bg-muted rounded-lg p-3">
+                                <p className="text-xs text-muted-foreground mb-2">Edit /etc/edgepulse/enrollment.json:</p>
+                                <pre className="font-mono text-xs bg-card p-3 rounded overflow-x-auto">
+                                    {`{
+  "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",
+  "enrollment_token": "${createdToken}",
+  "supabase_anon_key": "YOUR_ANON_KEY",
+  "device_hostname": null,
+  "device_os": null,
+  "agent_version": null,
+  "timeout_seconds": 30
+}`}
+                                </pre>
+                            </div>
                         </div>
                     </div>
-                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs text-muted-foreground">
-                        <strong className="text-foreground">Note:</strong> The agent requires admin/root privileges. After installation, the device appears within 30 seconds.
+                )}
+
+                {/* Step 3: Enroll Command */}
+                {step === "enroll" && (
+                    <div className="space-y-4">
+                        <div className="space-y-3">
+                            <p className="text-sm font-semibold">Step 3: Enroll the device</p>
+                            <div className="bg-muted rounded-lg p-3">
+                                <p className="text-xs text-muted-foreground mb-2">Run this command on your device:</p>
+                                <div className="flex gap-2 items-center">
+                                    <code className="font-mono text-xs bg-card p-3 rounded flex-1">
+                                        sudo /opt/edgepulse/venv/bin/edge-agent enroll
+                                    </code>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => handleCopyToClipboard("sudo /opt/edgepulse/venv/bin/edge-agent enroll", "Command")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <p className="text-sm font-semibold">Step 4: Start the agent</p>
+                            <div className="bg-muted rounded-lg p-3">
+                                <p className="text-xs text-muted-foreground mb-2">Start the EdgePulse agent service:</p>
+                                <div className="flex gap-2 items-center">
+                                    <code className="font-mono text-xs bg-card p-3 rounded flex-1">
+                                        sudo systemctl start edgepulse-agent
+                                    </code>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => handleCopyToClipboard("sudo systemctl start edgepulse-agent", "Command")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <p className="text-sm font-semibold">Step 5: Verify status</p>
+                            <div className="bg-muted rounded-lg p-3">
+                                <p className="text-xs text-muted-foreground mb-2">Check that the agent is running:</p>
+                                <div className="flex gap-2 items-center">
+                                    <code className="font-mono text-xs bg-card p-3 rounded flex-1">
+                                        sudo systemctl status edgepulse-agent
+                                    </code>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => handleCopyToClipboard("sudo systemctl status edgepulse-agent", "Command")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Close</Button>
-                    <Button onClick={() => { navigator.clipboard.writeText("YOUR_TOKEN"); toast.success("Token copied"); }}>
-                        Copy Token
-                    </Button>
+                )}
+
+                {/* Step 4: Success */}
+                {step === "success" && (
+                    <div className="space-y-4">
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-6 text-center">
+                            <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                            <h3 className="text-lg font-semibold text-foreground mb-2">Enrollment Complete</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Your device is now enrolled and will appear in the device list within 30 seconds.
+                            </p>
+                        </div>
+                        <div className="text-center">
+                            <Button onClick={() => onClose()}>
+                                View Device List
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                <DialogFooter className="gap-2">
+                    {step === "token" && (
+                        <>
+                            <Button variant="outline" onClick={onClose}>Cancel</Button>
+                            <Button onClick={handleCreateToken} disabled={loading || !tokenName.trim()}>
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate Token"}
+                            </Button>
+                        </>
+                    )}
+                    {step === "install" && (
+                        <>
+                            <Button variant="outline" onClick={() => setStep("token")}>Back</Button>
+                            <Button onClick={() => setStep("enroll")}>Next: Enroll Device</Button>
+                        </>
+                    )}
+                    {step === "enroll" && (
+                        <>
+                            <Button variant="outline" onClick={() => setStep("install")}>Back</Button>
+                            <Button onClick={() => setStep("success")}>Complete</Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

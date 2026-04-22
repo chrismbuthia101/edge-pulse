@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useDeviceEnrollmentStore } from "@/stores/device-enrollment-store";
+import { useDeviceEnrollmentStore } from "@/lib/stores/device-enrollment-store";
 import { toast } from "sonner";
 import type { EnrollmentToken } from "@/lib/supabase/types";
 

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useAuthStore } from "@/stores/auth-store";
-import { useAlertStore } from "@/stores/alert-store";
-import { useDeviceStore } from "@/stores/device-store";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { useAlertStore } from "@/lib/stores/alert-store";
+import { useDeviceStore } from "@/lib/stores/device-store";
 
 export type ConnStatus = "live" | "offline" | "syncing";
 

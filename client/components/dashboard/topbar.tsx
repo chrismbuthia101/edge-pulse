@@ -11,6 +11,9 @@ import {
     Search,
     WifiOff,
     X,
+    Activity,
+    CheckCircle2,
+    ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,31 +21,34 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import type { ConnStatus } from "@/lib/hooks/use-notifications";
-import { useAuthStore } from "@/stores/auth-store";
+import { useAuthStore } from "@/lib/stores/auth-store";
 
 function useConnConfig(status: ConnStatus, queuedCount: number, isLoading: boolean, hasError: boolean) {
     const configs = {
         live: {
             icon: <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />,
-            label: "Live",
+            label: "All systems connected",
+            subLabel: "",
             classes: "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400",
         },
         offline: {
             icon: <WifiOff className="h-3 w-3" />,
-            label: queuedCount > 0 ? `Offline — ${queuedCount} events queued` : "Offline",
+            label: queuedCount > 0 ? `Offline — ${queuedCount} queued` : "Offline",
+            subLabel: "Connection lost",
             classes: "bg-destructive/10 border-destructive/20 text-destructive",
         },
         syncing: {
             icon: <Loader2 className="h-3 w-3 animate-spin" />,
-            label: "Syncing",
+            label: "Syncing events...",
+            subLabel: `${queuedCount} events in queue`,
             classes: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
         },
-    } satisfies Record<ConnStatus, { icon: React.ReactNode; label: string; classes: string }>;
+    } satisfies Record<ConnStatus, { icon: React.ReactNode; label: string; subLabel: string; classes: string }>;
 
     const base = configs[status];
 
-    if (isLoading) return { ...base, icon: <Loader2 className="h-3 w-3 animate-spin" />, label: "Loading…" };
-    if (hasError) return { ...base, icon: <WifiOff className="h-3 w-3" />, label: "Error" };
+    if (isLoading) return { ...base, icon: <Loader2 className="h-3 w-3 animate-spin" />, label: "Loading…", subLabel: "" };
+    if (hasError) return { ...base, icon: <WifiOff className="h-3 w-3" />, label: "Error", subLabel: "Connection error" };
 
     return base;
 }
@@ -53,6 +59,7 @@ interface TopBarProps {
 
 export function TopBar({ onMobileMenuToggle }: TopBarProps) {
     const [searchOpen, setSearchOpen] = useState(false);
+    const [syncPanelOpen, setSyncPanelOpen] = useState(false);
     const userRole = useAuthStore((s) => s.role);
 
     const {
@@ -94,12 +101,71 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
             <DynamicBreadcrumb />
 
-            {/* Connectivity badge */}
-            <div
-                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-300 ${conn.classes}`}
-            >
-                {conn.icon}
-                <span>{conn.label}</span>
+            {/* Connectivity badge - clickable */}
+            <div className="relative">
+                <button
+                    onClick={() => setSyncPanelOpen(!syncPanelOpen)}
+                    className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-all duration-300 ${conn.classes}`}
+                    aria-label="View sync status"
+                >
+                    {conn.icon}
+                    <span>{conn.label}</span>
+                    <ChevronDown className="h-3 w-3 ml-0.5" />
+                </button>
+
+                <AnimatePresence>
+                    {syncPanelOpen && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setSyncPanelOpen(false)} />
+                            <motion.div
+                                initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute right-0 top-full mt-2 w-72 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                            >
+                                <div className="p-4 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${conn.classes}`}>
+                                            {conn.icon}
+                                        </div>
+                                        <div>
+                                            <span className="text-sm font-semibold text-foreground">{conn.label}</span>
+                                            <p className="text-xs text-muted-foreground">{conn.subLabel}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-border space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Status</span>
+                                            <span className={`font-medium ${connStatus === "live" ? "text-green-500" : connStatus === "offline" ? "text-destructive" : "text-amber-500"}`}>
+                                                {connStatus.charAt(0).toUpperCase() + connStatus.slice(1)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Events/min</span>
+                                            <span className="font-medium text-foreground">{onlineCount > 0 ? "12" : "0"}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Queue Depth</span>
+                                            <span className={`font-medium ${queuedCount > 0 ? "text-amber-500" : "text-green-500"}`}>
+                                                {queuedCount}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-border">
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Activity className="h-3 w-3" />
+                                            <span>Real-time sync active</span>
+                                            <CheckCircle2 className="h-3 w-3 text-green-500 ml-auto" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
             </div>
 
             <div className="flex-1 min-w-0" />

@@ -23,8 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth/useAuth";
-import { useHealthStore } from "@/stores/health-store";
-
+import { useHealthStore } from "@/lib/stores/health-store";
 
 export default function HealthPage() {
     const { hasRole } = useAuth();

@@ -13,7 +13,7 @@ import {
     WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useLiveStore } from "@/stores/live-store";
+import { useLiveStore } from "@/lib/stores/live-store";
 
 export default function LivePage() {
     useEffect(() => {

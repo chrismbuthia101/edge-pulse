@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     LayoutDashboard,
@@ -25,12 +26,14 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useFocusTrap } from "@/lib/use-focus-trap";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth/useAuth";
 import { AuthService } from "@/lib/services/auth-service";
 import { AuthRepository } from "@/lib/repositories/auth-repository";
+import { useNotifications } from "@/lib/hooks/use-notifications";
+import { useAlertStore } from "@/lib/stores/alert-store";
 
 interface NavItem {
     icon: React.ElementType;
@@ -50,36 +53,40 @@ const navItems: NavGroup[] = [
         group: "Overview",
         items: [
             { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-            { icon: Activity, label: "Live Telemetry", href: "/dashboard/live", badge: "LIVE" },
+            { icon: Activity, label: "Live Feed", href: "/dashboard/live", badge: "LIVE" },
         ],
     },
     {
-        group: "Security",
+        group: "Detection",
         items: [
-            { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts" },
+            { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "pending" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
-            { icon: Brain, label: "ML Insights", href: "/dashboard/insights", roles: ["ADMINISTRATOR"] },
-            { icon: Shield, label: "File Integrity", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: BarChart3, label: "Model Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: List, label: "Investigations", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
+        ],
+    },
+    {
+        group: "Intelligence",
+        items: [
+            { icon: Brain, label: "ML Insights", href: "/dashboard/insights", roles: ["ADMINISTRATOR"] },
+            { icon: BarChart3, label: "Explainability", href: "/dashboard/explainability", roles: ["ANALYST", "ADMINISTRATOR"] },
         ],
     },
     {
         group: "System",
         items: [
-            { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
+            { icon: Shield, label: "Integrity & Logs", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
+            { icon: Wifi, label: "Network Health", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: Heart, label: "Agent Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: Wifi, label: "Network Status", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: FileText, label: "Logs", href: "/dashboard/logs", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+            { icon: Bell, label: "Notifications", href: "/dashboard/notifications", badge: "unread" },
         ],
     },
     {
-        group: "Administration",
+        group: "Admin",
         items: [
             { icon: Users, label: "Users", href: "/dashboard/users", roles: ["ADMINISTRATOR"] },
-            { icon: MonitorSmartphone, label: "Device Assignments", href: "/dashboard/assignments", roles: ["ADMINISTRATOR"] },
+            { icon: MonitorSmartphone, label: "Assignments", href: "/dashboard/assignments", roles: ["ADMINISTRATOR"] },
             { icon: FileText, label: "Reports", href: "/dashboard/reports", roles: ["ADMINISTRATOR"] },
+            { icon: Settings, label: "Settings", href: "/dashboard/settings" },
         ],
     },
 ];
@@ -100,10 +107,24 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
     const authRepository = new AuthRepository();
     const authService = new AuthService(authRepository);
 
+    const { unreadCount } = useNotifications();
+    const { alerts } = useAlertStore();
+    const pendingAlertsCount = alerts.filter(a => a.status === "PENDING").length;
+
+    const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+    const [logoutLoading, setLogoutLoading] = useState(false);
+
     const handleLogout = async () => {
+        setLogoutDialogOpen(true);
+    };
+
+    const confirmLogout = async () => {
+        setLogoutLoading(true);
         const result = await authService.signOut();
+        setLogoutLoading(false);
         if (result.success) {
             toast.success("Logged out successfully");
+            setLogoutDialogOpen(false);
             router.push("/auth/login");
         } else {
             toast.error(result.error || "Failed to sign out");
@@ -203,7 +224,15 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                 return hasRole(item.roles);
                             }).map((item) => {
                                 const isActive = pathname === item.href;
-                                const badgeCount = item.badge === "12" ? "12" : item.badge;
+                                // Convert dynamic badge keys to actual counts
+                                let badgeCount = item.badge;
+                                if (badgeCount === "pending") {
+                                    badgeCount = pendingAlertsCount > 0 ? String(pendingAlertsCount) : undefined;
+                                } else if (badgeCount === "unread") {
+                                    badgeCount = unreadCount > 0 ? String(unreadCount) : undefined;
+                                } else if (badgeCount === "LIVE") {
+                                    badgeCount = "LIVE";
+                                }
 
                                 return (
                                     <Link
@@ -328,6 +357,18 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                     </button>
                 </div>
             </motion.aside>
+
+            <ConfirmDialog
+                open={logoutDialogOpen}
+                onOpenChange={setLogoutDialogOpen}
+                title="Sign Out"
+                description="Are you sure you want to sign out? You will need to sign in again to access the dashboard."
+                confirmLabel="Sign Out"
+                cancelLabel="Cancel"
+                variant="destructive"
+                onConfirm={confirmLogout}
+                loading={logoutLoading}
+            />
         </>
     );
 }

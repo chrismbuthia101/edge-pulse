@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth/useAuth";
-import { useCaseStore } from "@/stores/case-store";
+import { useCaseStore } from "@/lib/stores/case-store";
 import { toast } from "sonner";
 
 import type { Case, CaseStatus } from "@/lib/supabase/types";
