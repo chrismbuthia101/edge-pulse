@@ -85,7 +85,7 @@ const navItems: NavGroup[] = [
         items: [
             { icon: Users, label: "Users", href: "/dashboard/users", roles: ["ADMINISTRATOR"] },
             { icon: MonitorSmartphone, label: "Assignments", href: "/dashboard/assignments", roles: ["ADMINISTRATOR"] },
-            { icon: FileText, label: "Reports", href: "/dashboard/reports", roles: ["ADMINISTRATOR"] },
+            { icon: FileText, label: "Reports", href: "/dashboard/reports", roles: ["ADMINISTRATOR", "ANALYST"] },
             { icon: Settings, label: "Settings", href: "/dashboard/settings" },
         ],
     },
