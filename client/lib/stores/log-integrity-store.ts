@@ -17,6 +17,8 @@ interface LogIntegrityStore {
   refreshIntegrityData: () => Promise<void>;
   verifyDeviceChain: (deviceId: string) => Promise<void>;
   setHashChainStatuses: (statuses: HashChainStatus[]) => void;
+  setTamperAlerts: (alerts: TamperAlert[]) => void;
+  setIntegrityMetrics: (metrics: IntegrityMetrics) => void;
   clearError: () => void;
 
   subscribeToIntegrityUpdates: () => void;
@@ -101,9 +103,17 @@ export const useLogIntegrityStore = create<LogIntegrityStore>((set, get) => ({
     try {
       await logIntegrityService.verifyDeviceChain(deviceId);
 
-      // Refresh the status after verification
-      const statuses = await logIntegrityService.getHashChainStatuses();
-      set({ hashChainStatuses: statuses });
+      // Refresh all integrity data after verification
+      const [statuses, alerts, metrics] = await Promise.all([
+        logIntegrityService.getHashChainStatuses(),
+        logIntegrityService.getTamperAlerts(),
+        logIntegrityService.getIntegrityMetrics()
+      ]);
+      set({
+        hashChainStatuses: statuses,
+        tamperAlerts: alerts,
+        integrityMetrics: metrics
+      });
 
       toast.success(`Hash chain verified for device ${deviceId.slice(-4)}`);
     } catch (err) {
@@ -116,6 +126,14 @@ export const useLogIntegrityStore = create<LogIntegrityStore>((set, get) => ({
 
   setHashChainStatuses: (statuses) => {
     set({ hashChainStatuses: statuses });
+  },
+
+  setTamperAlerts: (alerts) => {
+    set({ tamperAlerts: alerts });
+  },
+
+  setIntegrityMetrics: (metrics) => {
+    set({ integrityMetrics: metrics });
   },
 
   clearError: () => set({ error: null }),

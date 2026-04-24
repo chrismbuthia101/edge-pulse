@@ -58,19 +58,43 @@ export class RetentionRepository extends BaseRepository {
   }
 
   async calculateStorageUsage(deviceId: string): Promise<StorageUsage> {
-    // This is a mock implementation - in a real scenario, you would
-    // calculate actual storage usage from the database
-    const baseSize = 26.9;
-    const retentionDays = await this.getRetentionSettings(deviceId)
-      .then(settings => settings?.retention_days || 90);
+    try {
+      // Calculate actual storage usage from database tables
+      const [telemetryResult, alertsResult, featuresResult] = await Promise.all([
+        this.supabase
+          .from('telemetry_events')
+          .select('data')
+          .eq('device_id', deviceId),
+        this.supabase
+          .from('alerts')
+          .select('*')
+          .eq('device_id', deviceId),
+        this.supabase
+          .from('anomaly_features')
+          .select('*')
+          .eq('device_id', deviceId)
+      ]);
 
-    const multiplier = retentionDays / 90;
+      // Estimate storage in MB (rough estimate based on row count)
+      const telemetrySize = (telemetryResult.data?.length || 0) * 0.001; // ~1KB per telemetry event
+      const alertsSize = (alertsResult.data?.length || 0) * 0.0005; // ~0.5KB per alert
+      const featuresSize = (featuresResult.data?.length || 0) * 0.002; // ~2KB per feature record
+      const total = telemetrySize + alertsSize + featuresSize;
 
-    return {
-      telemetry: parseFloat((15.7 * multiplier).toFixed(1)),
-      alerts: parseFloat((2.3 * multiplier).toFixed(1)),
-      features: parseFloat((8.9 * multiplier).toFixed(1)),
-      total: parseFloat((baseSize * multiplier).toFixed(1)),
-    };
+      return {
+        telemetry: parseFloat(telemetrySize.toFixed(2)),
+        alerts: parseFloat(alertsSize.toFixed(2)),
+        features: parseFloat(featuresSize.toFixed(2)),
+        total: parseFloat(total.toFixed(2)),
+      };
+    } catch (error) {
+      console.error('Failed to calculate storage usage:', error);
+      return {
+        telemetry: 0,
+        alerts: 0,
+        features: 0,
+        total: 0,
+      };
+    }
   }
 }

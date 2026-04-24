@@ -164,14 +164,29 @@ export class LogsRepository extends BaseRepository {
         if (!existing || log.log_sequence_number > existing.total_entries) {
           deviceStatuses.set(log.device_id, {
             device_id: log.device_id,
-            device_name: `Device-${log.device_id.slice(-4)}`,
+            device_name: `Device-${log.device_id.slice(-4)}`, // Temporary, will be updated below
             total_entries: log.log_sequence_number,
             verified: log.verified ?? false,
-            broken_at_sequence: null, // Would need verification logic
+            broken_at_sequence: null,
             last_verified_at: log.created_at,
           });
         }
       });
+
+      const deviceIds = Array.from(deviceStatuses.keys());
+      if (deviceIds.length > 0) {
+        const { data: devices, error: deviceError } = await this.supabase
+          .from('device_registry')
+          .select('id, name')
+          .in('id', deviceIds);
+
+        if (!deviceError && devices) {
+          const deviceNameMap = new Map(devices.map(d => [d.id, d.name]));
+          deviceStatuses.forEach((status, deviceId) => {
+            status.device_name = deviceNameMap.get(deviceId) || `Device-${deviceId.slice(-4)}`;
+          });
+        }
+      }
 
       if (deviceStatuses.size === 0) {
         const { data: devices, error: deviceError } = await this.supabase
@@ -192,7 +207,25 @@ export class LogsRepository extends BaseRepository {
         }
       }
 
-      return Array.from(deviceStatuses.values());
+      const statuses = Array.from(deviceStatuses.values());
+      for (const status of statuses) {
+        if (status.total_entries > 0) {
+          try {
+            const verificationResult = await this.verifyChain(status.device_id);
+            if (verificationResult.is_valid) {
+              status.verified = true;
+              status.broken_at_sequence = null;
+            } else if (verificationResult.first_broken_sequence) {
+              status.broken_at_sequence = verificationResult.first_broken_sequence;
+              status.verified = false;
+            }
+          } catch (error) {
+            console.error(`Failed to verify chain for device ${status.device_id}:`, error);
+          }
+        }
+      }
+
+      return statuses;
     } catch (error) {
       console.error('Failed to fetch hash chain statuses:', error);
       return [];
@@ -201,12 +234,25 @@ export class LogsRepository extends BaseRepository {
 
   async verifyDeviceChain(deviceId: string): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from('tamper_evident_log')
-        .update({ verified: true })
-        .eq('device_id', deviceId);
+      const verificationResult = await this.verifyChain(deviceId);
 
-      if (error) throw error;
+      if (verificationResult.is_valid) {
+        const { error } = await this.supabase
+          .from('tamper_evident_log')
+          .update({ verified: true })
+          .eq('device_id', deviceId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await this.supabase
+          .from('tamper_evident_log')
+          .update({ verified: false })
+          .eq('device_id', deviceId);
+
+        if (error) throw error;
+
+        throw new Error(verificationResult.break_reason || 'Hash chain verification failed');
+      }
     } catch (error) {
       console.error(`Failed to verify device ${deviceId}:`, error);
       throw error;
@@ -232,7 +278,24 @@ export class LogsRepository extends BaseRepository {
         deviceLogs.get(log.device_id)!.push(log);
       });
 
+      const deviceIds = Array.from(deviceLogs.keys());
+      const deviceNameMap = new Map<string, string>();
+
+      if (deviceIds.length > 0) {
+        const { data: devices, error: deviceError } = await this.supabase
+          .from('device_registry')
+          .select('id, name')
+          .in('id', deviceIds);
+
+        if (!deviceError && devices) {
+          devices.forEach(device => {
+            deviceNameMap.set(device.id, device.name || `Device-${device.id.slice(-4)}`);
+          });
+        }
+      }
+
       for (const [deviceId, deviceLogList] of deviceLogs) {
+        const deviceName = deviceNameMap.get(deviceId) || `Device-${deviceId.slice(-4)}`;
         deviceLogList.sort((a, b) => a.log_sequence_number - b.log_sequence_number);
 
         for (let i = 1; i < deviceLogList.length; i++) {
@@ -243,7 +306,7 @@ export class LogsRepository extends BaseRepository {
             alerts.push({
               id: `seq-gap-${deviceId}-${current.log_sequence_number}`,
               device_id: deviceId,
-              device_name: `Device-${deviceId.slice(-4)}`,
+              device_name: deviceName,
               alert_type: 'SEQUENCE_GAP',
               severity: 'HIGH',
               message: `Gap detected in log sequence: expected ${previous.log_sequence_number + 1}, got ${current.log_sequence_number}`,
@@ -254,12 +317,11 @@ export class LogsRepository extends BaseRepository {
             });
           }
 
-          // Check for hash chain breaks
           if (current.previous_entry_hash !== previous.entry_content_hash) {
             alerts.push({
               id: `hash-break-${deviceId}-${current.log_sequence_number}`,
               device_id: deviceId,
-              device_name: `Device-${deviceId.slice(-4)}`,
+              device_name: deviceName,
               alert_type: 'CHAIN_BREAK',
               severity: 'CRITICAL',
               message: `Hash chain integrity compromised at entry #${current.log_sequence_number}`,

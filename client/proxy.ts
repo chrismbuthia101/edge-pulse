@@ -21,7 +21,6 @@ const ADMIN_ONLY_ROUTES = [
 const ANALYST_OR_ADMIN_ROUTES = [
   "/dashboard/cases",
   "/dashboard/logs",
-  "/dashboard/health",
 ];
 
 export async function proxy(req: NextRequest) {

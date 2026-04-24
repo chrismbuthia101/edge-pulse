@@ -92,3 +92,11 @@ export type { ExportQuery } from '@/lib/repositories/forensic-repository';
 
 export { RetentionRepository } from '@/lib/repositories/retention-repository';
 export type { RetentionSetting, StorageUsage } from '@/lib/repositories/retention-repository';
+
+export { ResilienceRepository } from '@/lib/repositories/resilience-repository';
+export type {
+  ConnectionMetrics,
+  ResilienceMetrics,
+  OfflineEfficiencyMetrics,
+  ResilienceQueryOptions
+} from '@/lib/repositories/resilience-repository';

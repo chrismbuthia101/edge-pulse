@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ChevronRight,
+    ChevronLeft,
+    ChevronsLeft,
+    ChevronsRight,
     Clock,
     MonitorSmartphone,
     CheckCircle2,
@@ -177,6 +180,8 @@ export default function AlertsPage() {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [rulesOpen, setRulesOpen] = useState(false);
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     const filtered = useMemo(() => {
         return alerts.filter((a) => {
@@ -193,6 +198,17 @@ export default function AlertsPage() {
             return matchesStatus && matchesSeverity && matchesSearch && matchesDevice;
         });
     }, [alerts, statusFilter, severityFilter, search, selectedDevice]);
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+
+    const paginatedAlerts = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filtered.slice(startIndex, startIndex + itemsPerPage);
+    }, [filtered, currentPage]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [statusFilter, severityFilter, search, selectedDevice]);
 
     const counts = useMemo(() => ({
         PENDING: alerts.filter((a) => a.status === "PENDING").length,
@@ -409,7 +425,7 @@ export default function AlertsPage() {
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="divide-y divide-border">
                     <AnimatePresence mode="popLayout">
-                        {filtered.map((alert, i) => {
+                        {paginatedAlerts.map((alert, i) => {
                             const sev = severityConfig[alert.severity] ?? severityConfig.medium;
                             const isSelected = selectedId === alert.id;
                             const score = alert.anomaly_score ?? alert.confidence ?? 0;
@@ -642,12 +658,57 @@ export default function AlertsPage() {
                 </div>
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">
-                        Showing {filtered.length} of {alerts.length} alerts
+                        Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length} alerts
                     </p>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={handleExportCSV}>
-                        <Download className="h-3 w-3" />
-                        Export CSV
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {totalPages > 1 && (
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => setCurrentPage(1)}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronsLeft className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="h-3.5 w-3.5" />
+                                </Button>
+                                <span className="text-xs text-muted-foreground px-2">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => setCurrentPage(totalPages)}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronsRight className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                        )}
+                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={handleExportCSV}>
+                            <Download className="h-3 w-3" />
+                            Export CSV
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>

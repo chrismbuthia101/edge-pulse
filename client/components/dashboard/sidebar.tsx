@@ -19,9 +19,7 @@ import {
     HelpCircle,
     Users,
     FileText,
-    Heart,
     List,
-    Wifi,
     BarChart3,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
@@ -75,8 +73,6 @@ const navItems: NavGroup[] = [
         group: "System",
         items: [
             { icon: Shield, label: "Integrity & Logs", href: "/dashboard/integrity", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: Wifi, label: "Network Health", href: "/dashboard/resilience", roles: ["ANALYST", "ADMINISTRATOR"] },
-            { icon: Heart, label: "Agent Health", href: "/dashboard/health", roles: ["ANALYST", "ADMINISTRATOR"] },
             { icon: Bell, label: "Notifications", href: "/dashboard/notifications", badge: "unread" },
         ],
     },

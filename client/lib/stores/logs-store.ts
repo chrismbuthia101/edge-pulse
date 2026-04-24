@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { LogsRepository } from '@/lib/repositories';
 import { LogsService } from '@/lib/services/logs-service';
+import { logIntegrityService } from '@/lib/stores/log-integrity-store';
 import type { TamperLogEntry, VerificationResult, LogDevice } from '@/lib/supabase/types';
 import { toast } from 'sonner';
 
@@ -170,6 +171,15 @@ export const useLogsStore = create<LogsStore>((set, get) => ({
 
       if (result.is_valid) {
         toast.success(`Chain verified successfully (${result.entries_checked} entries)`);
+
+        const statuses = await logIntegrityService.getHashChainStatuses();
+        const alerts = await logIntegrityService.getTamperAlerts();
+        const metrics = await logIntegrityService.getIntegrityMetrics();
+  
+        const { useLogIntegrityStore } = await import('@/lib/stores/log-integrity-store');
+        useLogIntegrityStore.getState().setHashChainStatuses(statuses);
+        useLogIntegrityStore.getState().setTamperAlerts(alerts);
+        useLogIntegrityStore.getState().setIntegrityMetrics(metrics);
       } else {
         toast.error(`Chain validation failed: ${result.break_reason}`);
       }
