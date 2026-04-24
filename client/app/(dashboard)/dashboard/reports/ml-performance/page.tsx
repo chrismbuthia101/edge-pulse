@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function MLPerformanceReportPage() {
     const { hasRole, loading } = useAuth();
@@ -29,6 +31,7 @@ export default function MLPerformanceReportPage() {
 
     const [dateRange, setDateRange] = useState("7d");
     const [loadingData, setLoadingData] = useState(true);
+    const [exporting, setExporting] = useState(false);
     const [modelMetrics, setModelMetrics] = useState({
         accuracy: 0,
         precision: 0,
@@ -107,6 +110,104 @@ export default function MLPerformanceReportPage() {
 
     const highConfidenceAlerts = alerts.filter(a => a.anomaly_score > 0.8).length;
 
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+
+        // Title
+        doc.setFontSize(20);
+        doc.setTextColor(59, 130, 246);
+        doc.text("EdgePulse ML Model Performance Report", 14, 20);
+
+        // Metadata
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Period: ${dateRange}`, 14, 28);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 34);
+
+        // Model Metrics Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Model Metrics", 14, 45);
+
+        doc.setFontSize(10);
+        doc.setTextColor(60);
+        const metricsData = [
+            ["Accuracy", `${(modelMetrics.accuracy * 100).toFixed(1)}%`],
+            ["Precision", `${(modelMetrics.precision * 100).toFixed(1)}%`],
+            ["Recall", `${(modelMetrics.recall * 100).toFixed(1)}%`],
+            ["F1 Score", `${(modelMetrics.f1Score * 100).toFixed(1)}%`],
+            ["Avg Inference Time", `${modelMetrics.avgInferenceTime.toFixed(2)}ms`],
+            ["Total Inferences", modelMetrics.totalInferences.toString()],
+            ["High Confidence Alerts", highConfidenceAlerts.toString()],
+        ];
+
+        autoTable(doc, {
+            startY: 50,
+            head: [["Metric", "Value"]],
+            body: metricsData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+        });
+
+        // SHAP Features Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Top SHAP Features", 14, 115);
+
+        const shapData = shapFeatures.map(f => [
+            f.feature_name,
+            f.attribution_score.toFixed(4),
+            f.contribution_type,
+        ]);
+
+        autoTable(doc, {
+            startY: 120,
+            head: [["Feature", "Attribution Score", "Type"]],
+            body: shapData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 8 },
+        });
+
+        doc.save(`ml-performance-${dateRange}-${new Date().toISOString().split("T")[0]}.pdf`);
+        setExporting(false);
+    };
+
+    const handleExportCSV = () => {
+        try {
+            const lines = [
+                "EdgePulse ML Performance Report",
+                `Period: ${dateRange}`,
+                `Generated: ${new Date().toISOString()}`,
+                "",
+                "MODEL METRICS",
+                `Accuracy,${(modelMetrics.accuracy * 100).toFixed(2)}%`,
+                `Precision,${(modelMetrics.precision * 100).toFixed(2)}%`,
+                `Recall,${(modelMetrics.recall * 100).toFixed(2)}%`,
+                `F1 Score,${(modelMetrics.f1Score * 100).toFixed(2)}%`,
+                `Avg Inference Time,${modelMetrics.avgInferenceTime.toFixed(2)}ms`,
+                `Total Inferences,${modelMetrics.totalInferences}`,
+                `Anomaly Threshold,${modelMetrics.anomalyThreshold.toFixed(2)}`,
+                `High Confidence Detections,${highConfidenceAlerts}`,
+                "",
+                "SHAP FEATURE IMPORTANCE",
+                ...shapFeatures.map(f => `${f.feature_name},${f.attribution_score.toFixed(4)},${f.contribution_type}`),
+            ];
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ml-performance-${dateRange}-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success('CSV report exported successfully');
+        } catch (error) {
+            console.error('CSV export failed:', error);
+            toast.error('Failed to export CSV report');
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -151,11 +252,11 @@ export default function MLPerformanceReportPage() {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
-                            <Download className="h-4 w-4 mr-2" />
+                        <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={exporting}>
+                            {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                             Export PDF
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={handleExportCSV}>
                             <Download className="h-4 w-4 mr-2" />
                             Export CSV
                         </Button>
@@ -237,7 +338,7 @@ export default function MLPerformanceReportPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
+                            <div id="shap-features-chart" className="space-y-4">
                                 {shapFeatures.length > 0 ? shapFeatures.map((feature, index) => (
                                     <div key={index} className="space-y-2">
                                         <div className="flex items-center justify-between text-sm">

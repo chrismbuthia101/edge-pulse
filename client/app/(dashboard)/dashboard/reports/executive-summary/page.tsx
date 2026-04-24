@@ -18,6 +18,8 @@ import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useCaseStore } from "@/lib/stores/case-store";
 import { cn } from "@/lib/utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type DateRange = "7d" | "30d" | "90d";
 
@@ -152,27 +154,67 @@ export default function ExecutiveSummaryReport() {
     ];
 
     const exportReport = () => {
-        setExporting(true);
-        const lines = [
-            "EdgePulse Executive Security Summary",
-            `Period: Last ${days} days`,
-            `Generated: ${new Date().toISOString()}`,
-            "",
-            "KEY METRICS",
-            `Total Alerts: ${metrics.total}`,
-            `Critical Alerts: ${metrics.critical}`,
-            `Resolution Rate: ${metrics.resRate}%`,
-            `Avg Inference Latency: ${metrics.avgLatency}ms`,
-            `Online Devices: ${metrics.onlineDevices}/${devices.length}`,
-            `Devices At Risk: ${metrics.atRisk}`,
-            `Open Cases: ${metrics.openCases}`,
+        const doc = new jsPDF();
+
+        // Title
+        doc.setFontSize(20);
+        doc.setTextColor(59, 130, 246);
+        doc.text("EdgePulse Executive Security Summary", 14, 20);
+
+        // Metadata
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Period: Last ${days} days`, 14, 28);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 34);
+
+        // Key Metrics Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Key Metrics", 14, 45);
+
+        doc.setFontSize(10);
+        doc.setTextColor(60);
+        const metricsData = [
+            ["Total Alerts", metrics.total.toString()],
+            ["Critical Alerts", metrics.critical.toString()],
+            ["Resolution Rate", `${metrics.resRate}%`],
+            ["Avg Inference Latency", `${metrics.avgLatency}ms`],
+            ["Online Devices", `${metrics.onlineDevices}/${devices.length}`],
+            ["Devices At Risk", metrics.atRisk.toString()],
+            ["Open Cases", metrics.openCases.toString()],
         ];
-        const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `executive-summary-${dateRange}-${new Date().toISOString().split("T")[0]}.txt`; a.click();
-        URL.revokeObjectURL(url);
-        setTimeout(() => setExporting(false), 800);
+
+        autoTable(doc, {
+            startY: 50,
+            head: [["Metric", "Value"]],
+            body: metricsData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+        });
+
+        // Threat Categories Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Threat Categories", 14, 115);
+
+        const threatData = topThreats.map(([cat, data]) => [
+            cat,
+            data.count.toString(),
+            data.critical.toString(),
+        ]);
+
+        autoTable(doc, {
+            startY: 120,
+            head: [["Category", "Total", "Critical"]],
+            body: threatData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+        });
+
+        doc.save(`executive-summary-${dateRange}-${new Date().toISOString().split("T")[0]}.pdf`);
+        setExporting(false);
     };
 
     return (

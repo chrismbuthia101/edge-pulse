@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { cn } from "@/lib/utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const RISK_COLORS: Record<string, string> = {
     critical: "#ef4444", high: "#f97316", medium: "#f59e0b", low: "#06b6d4", none: "#22c55e",
@@ -133,6 +135,80 @@ export default function DeviceFleetReport() {
         setTimeout(() => setExporting(false), 800);
     };
 
+    const exportPDF = () => {
+        const doc = new jsPDF();
+
+        // Title
+        doc.setFontSize(20);
+        doc.setTextColor(59, 130, 246);
+        doc.text("EdgePulse Device Fleet Report", 14, 20);
+
+        // Metadata
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+        // Summary Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Summary", 14, 40);
+
+        doc.setFontSize(10);
+        doc.setTextColor(60);
+        const summaryData = [
+            ["Total Devices", metrics.total.toString()],
+            ["Online", metrics.online.toString()],
+            ["Offline", metrics.offline.toString()],
+            ["At Risk", metrics.atRisk.toString()],
+            ["Hash Chain Broken", metrics.hashBroken.toString()],
+            ["Outdated Agents", metrics.outdated.toString()],
+            ["Avg CPU", `${metrics.avgCpu}%`],
+            ["Avg RAM", `${metrics.avgRam}%`],
+        ];
+
+        autoTable(doc, {
+            startY: 45,
+            head: [["Metric", "Value"]],
+            body: summaryData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+        });
+
+        // Device List Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Device List", 14, 110);
+
+        const deviceData = filtered.map(d => [
+            d.name,
+            d.type || "N/A",
+            d.status,
+            d.risk || "none",
+            d.hash_chain_ok === false ? "Broken" : "Intact",
+            d.agent_version || "N/A",
+        ]);
+
+        autoTable(doc, {
+            startY: 115,
+            head: [["Name", "Type", "Status", "Risk", "Hash Chain", "Agent"]],
+            body: deviceData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 8 },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 20 },
+                2: { cellWidth: 20 },
+                3: { cellWidth: 20 },
+                4: { cellWidth: 25 },
+                5: { cellWidth: 25 },
+            },
+        });
+
+        doc.save(`device-fleet-report-${new Date().toISOString().split("T")[0]}.pdf`);
+    };
+
     const DeviceTypeIcon = ({ type }: { type: string }) => {
         if (type === "server") return <Server className="h-3.5 w-3.5" />;
         if (type === "laptop") return <Laptop className="h-3.5 w-3.5" />;
@@ -154,10 +230,16 @@ export default function DeviceFleetReport() {
                         <p className="text-sm text-muted-foreground mt-0.5">Risk distribution, performance, and compliance metrics</p>
                     </div>
                 </div>
-                <Button size="sm" className="gap-1.5" onClick={exportCSV} disabled={exporting}>
-                    {exporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                    Export CSV
-                </Button>
+                <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={exportPDF} disabled={exporting}>
+                        <Download className="h-3.5 w-3.5" />
+                        Export PDF
+                    </Button>
+                    <Button size="sm" className="gap-1.5" onClick={exportCSV} disabled={exporting}>
+                        {exporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        Export CSV
+                    </Button>
+                </div>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}

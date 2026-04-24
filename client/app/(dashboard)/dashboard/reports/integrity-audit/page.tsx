@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { cn } from "@/lib/utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const INTEGRITY_COLORS: Record<string, string> = {
     verified: "#22c55e",
@@ -175,6 +177,76 @@ export default function IntegrityAuditReport() {
         setTimeout(() => setExporting(false), 800);
     };
 
+    const exportPDF = () => {
+        const doc = new jsPDF();
+
+        // Title
+        doc.setFontSize(20);
+        doc.setTextColor(59, 130, 246);
+        doc.text("EdgePulse Integrity Audit Report", 14, 20);
+
+        // Metadata
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Period: ${dateRange}`, 14, 28);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 34);
+
+        // Summary Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Summary", 14, 45);
+
+        doc.setFontSize(10);
+        doc.setTextColor(60);
+        const summaryData = [
+            ["Total Devices", metrics.totalDevices.toString()],
+            ["Verified", metrics.verified.toString()],
+            ["Tampered", metrics.tampered.toString()],
+            ["Unknown", metrics.unknown.toString()],
+            ["At Risk", metrics.atRisk.toString()],
+            ["Tamper Alerts", metrics.tamperAlerts.toString()],
+            ["Verification Rate", `${metrics.verificationRate}%`],
+        ];
+
+        autoTable(doc, {
+            startY: 50,
+            head: [["Metric", "Value"]],
+            body: summaryData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+        });
+
+        // Device List Section
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("Device List", 14, 110);
+
+        const deviceData = filteredDevices.map(d => [
+            d.name,
+            d.hash_chain_ok === true ? "Verified" : d.hash_chain_ok === false ? "Tampered" : "Unknown",
+            d.risk || "none",
+            d.status,
+        ]);
+
+        autoTable(doc, {
+            startY: 115,
+            head: [["Name", "Hash Chain", "Risk", "Status"]],
+            body: deviceData,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 8 },
+            columnStyles: {
+                0: { cellWidth: 50 },
+                1: { cellWidth: 30 },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 25 },
+            },
+        });
+
+        doc.save(`integrity-audit-${dateRange}-${new Date().toISOString().split("T")[0]}.pdf`);
+    };
+
     const RANGE_OPTS: { label: string; value: DateRange }[] = [
         { label: "7 days", value: "7d" }, { label: "30 days", value: "30d" },
         { label: "90 days", value: "90d" }, { label: "All time", value: "all" },
@@ -195,10 +267,16 @@ export default function IntegrityAuditReport() {
                         <p className="text-sm text-muted-foreground mt-0.5">Hash chain verification, tamper detection, and device integrity status</p>
                     </div>
                 </div>
-                <Button size="sm" className="gap-1.5" onClick={exportCSV} disabled={exporting}>
-                    {exporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                    Export CSV
-                </Button>
+                <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={exportPDF} disabled={exporting}>
+                        <Download className="h-3.5 w-3.5" />
+                        Export PDF
+                    </Button>
+                    <Button size="sm" className="gap-1.5" onClick={exportCSV} disabled={exporting}>
+                        {exporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        Export CSV
+                    </Button>
+                </div>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}

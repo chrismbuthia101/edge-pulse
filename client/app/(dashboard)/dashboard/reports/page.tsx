@@ -17,6 +17,7 @@ import {
     Download,
     Clock,
     TrendingUp,
+    Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +156,20 @@ const reportCards: ReportCard[] = [
             { label: "Devices", value: devices.length.toString() },
             { label: "Verified", value: devices.filter(d => d.hash_chain_ok !== false).length.toString() },
         ],
+    },
+    {
+        id: "user-management",
+        title: "User Management",
+        description: "Complete user roster with role distribution, approval status, and account activity metrics.",
+        icon: Users,
+        color: "text-purple-500",
+        bg: "bg-purple-500/10",
+        border: "border-purple-500/20",
+        dotColor: "bg-purple-500",
+        href: "/dashboard/reports/user-management",
+        roles: ["ADMINISTRATOR"],
+        category: "operations",
+        badge: "Admin Only",
     },
 ];
 
