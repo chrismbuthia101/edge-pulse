@@ -46,7 +46,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
 function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => void }) {
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
       {/* Grid pattern */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
@@ -102,7 +102,7 @@ function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => vo
 // Network error fallback
 export function NetworkErrorFallback({ reset }: { reset: () => void }) {
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
       {/* Grid pattern */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
@@ -139,7 +139,7 @@ export function NetworkErrorFallback({ reset }: { reset: () => void }) {
 // 404 Not Found page
 export function NotFoundPage() {
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
       {/* Grid pattern */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
@@ -178,7 +178,7 @@ export function NotFoundPage() {
 // Server error page
 export function ServerErrorPage() {
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
       {/* Grid pattern */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>

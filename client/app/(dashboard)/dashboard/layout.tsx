@@ -28,7 +28,7 @@ export default function DashboardLayout({
     // Show loading state while checking authentication
     if (loading) {
         return (
-            <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center">
+            <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
                 {/* Grid pattern */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                     <defs>
@@ -47,7 +47,7 @@ export default function DashboardLayout({
     // Show approval pending screen if user is not approved
     if (!user || !isApproved) {
         return (
-            <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex items-center justify-center">
+            <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
                 {/* Grid pattern */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                     <defs>
@@ -85,7 +85,7 @@ export default function DashboardLayout({
     }
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden flex">
+        <div className="min-h-screen bg-background relative overflow-hidden flex">
             {/* Grid pattern */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 <defs>

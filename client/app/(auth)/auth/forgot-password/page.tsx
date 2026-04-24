@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
     };
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 relative overflow-hidden">
+        <div className="min-h-screen bg-background relative overflow-hidden">
             {/* Grid pattern */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 <defs>
