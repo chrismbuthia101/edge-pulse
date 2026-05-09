@@ -10,6 +10,7 @@ import numpy as np
 from typing import Dict, Any, Optional, List
 
 from edgepulse.detectors.base import BaseDetector, DetectionResult
+from edgepulse.detectors.litert_backend import LITERT_AVAILABLE
 from edgepulse.detectors.sklearn_detector import SklearnAnomalyDetector
 from edgepulse.detectors.tflite_detector import TFLiteAnomalyDetector
 from edgepulse.utils.log_handler import get_logger
@@ -167,22 +168,20 @@ class EnsembleDetector(BaseDetector):
                 "error": "scikit-learn not installed",
             }
 
-        try:
-            import tensorflow  # noqa: F401
-
+        if LITERT_AVAILABLE:
             models["autoencoder"] = {
                 "available": True,
                 "name": "Autoencoder",
-                "description": "Neural network autoencoder using TensorFlow Lite",
+                "description": "Neural network autoencoder using LiteRT / ai-edge-litert",
                 "supports_shap": True,
                 "model_class": TFLiteAnomalyDetector,
             }
-        except ImportError:
+        else:
             models["autoencoder"] = {
                 "available": False,
                 "name": "Autoencoder",
-                "description": "Neural network autoencoder using TensorFlow Lite",
-                "error": "TensorFlow not installed",
+                "description": "Neural network autoencoder using LiteRT / ai-edge-litert",
+                "error": "ai-edge-litert not installed. Install: pip install ai-edge-litert",
             }
 
         return models

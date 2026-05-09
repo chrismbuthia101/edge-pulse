@@ -8,7 +8,7 @@ digital signatures, and version tracking for ML models.
 import hashlib
 import json
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -226,7 +226,7 @@ class ModelIntegrityVerifier:
                 file_size=file_size,
                 sha256_hash=file_hash,
                 signature=None,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 verified_at=None,
                 is_verified=False,
                 verification_details={},
@@ -260,7 +260,7 @@ class ModelIntegrityVerifier:
                 return IntegrityVerification(
                     is_valid=False,
                     model_id=model_id,
-                    verification_time=datetime.utcnow(),
+                    verification_time=datetime.now(timezone.utc),
                     file_hash_match=False,
                     signature_valid=False,
                     version_match=False,
@@ -277,7 +277,7 @@ class ModelIntegrityVerifier:
                 return IntegrityVerification(
                     is_valid=False,
                     model_id=model_id,
-                    verification_time=datetime.utcnow(),
+                    verification_time=datetime.now(timezone.utc),
                     file_hash_match=False,
                     signature_valid=False,
                     version_match=False,
@@ -309,7 +309,7 @@ class ModelIntegrityVerifier:
 
             is_valid = file_hash_match and signature_valid and version_match
 
-            metadata.verified_at = datetime.utcnow()
+            metadata.verified_at = datetime.now(timezone.utc)
             metadata.is_verified = is_valid
             metadata.verification_details = verification_details
             self._save_integrity_data()
@@ -317,7 +317,7 @@ class ModelIntegrityVerifier:
             result = IntegrityVerification(
                 is_valid=is_valid,
                 model_id=model_id,
-                verification_time=datetime.utcnow(),
+                verification_time=datetime.now(timezone.utc),
                 file_hash_match=file_hash_match,
                 signature_valid=signature_valid,
                 version_match=version_match,
@@ -335,8 +335,8 @@ class ModelIntegrityVerifier:
             return IntegrityVerification(
                 is_valid=False,
                 model_id=model_id,
-                verification_time=datetime.utcnow(),
-                file_hash_match=False,
+                verification_time=datetime.now(timezone.utc),
+                    file_hash_match=False,
                 signature_valid=False,
                 version_match=False,
                 details={},
@@ -375,7 +375,7 @@ class ModelIntegrityVerifier:
     async def cleanup_old_models(self, days_to_keep: int = 30):
         """Clean up old model integrity records"""
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
             models_to_remove = []
             for model_id, metadata in self.integrity_data.items():

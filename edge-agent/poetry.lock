@@ -1341,7 +1341,7 @@ files = [
 [package.dependencies]
 numpy = [
     {version = ">=2.1.0", markers = "python_version >= \"3.13\""},
-    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
+    {version = ">=1.26.0", markers = "python_version == \"3.12\""},
     {version = ">=1.23.3", markers = "python_version == \"3.11\""},
 ]
 
@@ -1840,7 +1840,7 @@ files = [
 [package.dependencies]
 typing-extensions = [
     {version = ">=4.12.0", markers = "python_version >= \"3.13\""},
-    {version = ">=4.6.0", markers = "python_version < \"3.13\""},
+    {version = ">=4.6.0"},
 ]
 
 [package.extras]
@@ -3230,4 +3230,4 @@ windows = ["keyring", "pywin32", "watchdog"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "686122d51b71d3d30b1f25aea284127fcc25ba382959e0622536598176a781d8"
+content-hash = "1b790e9590eaf59754813ce70d4eb2cdb3304c9082acf35a0a2442f45267f6a7"
