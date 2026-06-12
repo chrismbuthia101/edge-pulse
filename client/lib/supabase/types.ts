@@ -6,8 +6,6 @@ export type {
   DeviceStatus,
   SyncQueueStatus,
   ConnectivityState,
-  CaseSeverity,
-  CaseStatus,
 } from '@/lib/supabase/types/shared';
 
 // Telemetry types
@@ -29,11 +27,6 @@ export type {
   Device,
 } from '@/lib/supabase/types/devices';
 
-// Case types
-export type {
-  Case,
-} from '@/lib/supabase/types/cases';
-
 // Sync and logging types
 export type {
   TamperEvidentLog,
@@ -46,7 +39,6 @@ export type {
 export type {
   RealtimeAlertPayload,
   RealtimeDevicePayload,
-  RealtimeCasePayload,
 } from '@/lib/supabase/types/realtime';
 
 // Database types

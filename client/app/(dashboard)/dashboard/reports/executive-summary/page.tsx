@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
-import { useCaseStore } from "@/lib/stores/case-store";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -52,7 +51,6 @@ export default function ExecutiveSummaryReport() {
     const { hasRole } = useAuth();
     const { alerts, initialize: initAlerts } = useAlertStore();
     const { devices, initialize: initDevices } = useDeviceStore();
-    const { cases, initialize: initCases } = useCaseStore();
     const initialized = useRef(false);
     const [dateRange, setDateRange] = useState<DateRange>("30d");
     const [exporting, setExporting] = useState(false);
@@ -60,8 +58,8 @@ export default function ExecutiveSummaryReport() {
     useEffect(() => {
         if (initialized.current) return;
         initialized.current = true;
-        initAlerts(); initDevices(); initCases();
-    }, [initAlerts, initDevices, initCases]);
+        initAlerts(); initDevices();
+    }, [initAlerts, initDevices]);
 
     const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
     const cutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - days); return d; }, [days]);
@@ -82,9 +80,8 @@ export default function ExecutiveSummaryReport() {
         const avgLatency = total > 0 ? Math.round(periodAlerts.reduce((s, a) => s + a.inference_latency_ms, 0) / total) : 0;
         const onlineDevices = devices.filter(d => d.status === "online").length;
         const atRisk = devices.filter(d => d.risk === "critical" || d.risk === "high").length;
-        const openCases = cases.filter(c => c.status !== "CLOSED").length;
-        return { total, prevTotal, critical, resolved, resRate, avgLatency, onlineDevices, atRisk, openCases };
-    }, [periodAlerts, prevAlerts, devices, cases]);
+        return { total, prevTotal, critical, resolved, resRate, avgLatency, onlineDevices, atRisk };
+    }, [periodAlerts, prevAlerts, devices]);
 
     const pct = (curr: number, prev: number) => prev === 0 ? "new" : `${Math.abs(Math.round(((curr - prev) / prev) * 100))}%`;
     const trend = (curr: number, prev: number, lowerIsBetter = true) => lowerIsBetter ? curr <= prev : curr >= prev;
@@ -181,7 +178,6 @@ export default function ExecutiveSummaryReport() {
             ["Avg Inference Latency", `${metrics.avgLatency}ms`],
             ["Online Devices", `${metrics.onlineDevices}/${devices.length}`],
             ["Devices At Risk", metrics.atRisk.toString()],
-            ["Open Cases", metrics.openCases.toString()],
         ];
 
         autoTable(doc, {
@@ -398,7 +394,6 @@ export default function ExecutiveSummaryReport() {
                             { label: "Online Devices", value: `${metrics.onlineDevices}/${devices.length}`, pct: devices.length > 0 ? (metrics.onlineDevices / devices.length) * 100 : 0, color: "bg-green-500" },
                             { label: "At Risk", value: `${metrics.atRisk} devices`, pct: devices.length > 0 ? (metrics.atRisk / devices.length) * 100 : 0, color: "bg-destructive" },
                             { label: "Hash Intact", value: `${devices.filter(d => d.hash_chain_ok !== false).length}/${devices.length}`, pct: devices.length > 0 ? (devices.filter(d => d.hash_chain_ok !== false).length / devices.length) * 100 : 0, color: "bg-primary" },
-                            { label: "Open Cases", value: `${metrics.openCases} cases`, pct: 0, color: "bg-amber-500" },
                         ].map(item => (
                             <div key={item.label}>
                                 <div className="flex items-center justify-between mb-1">

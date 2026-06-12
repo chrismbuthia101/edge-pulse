@@ -1,20 +1,18 @@
 import type { Alert } from '@/lib/supabase/types/alerts';
 import type { SyncQueueEntry } from '@/lib/supabase/types/sync';
 import type { TelemetryEvent, FeatureVector } from '@/lib/supabase/types/telemetry';
-import type { UserRole, CaseSeverity, CaseStatus, DeviceStatus, DeviceRisk, DeviceType } from '@/lib/supabase/types/shared';
+import type { UserRole, DeviceStatus, DeviceRisk, DeviceType } from '@/lib/supabase/types/shared';
 
-export interface TamperEvidentLog {
-  log_id: string;
-  device_id: string;
-  log_sequence_number: number;
-  log_entry_type: string;
-  log_entry_reference_id: string | null;
-  entry_timestamp_utc: string;
-  entry_content_hash: string;
-  previous_entry_hash: string;
-  digital_signature: string | null;
-  verified: boolean;
+export interface PrivacySettingsRow {
+  id: string;
+  device_id: string | null;
+  enhanced_mode: boolean;
+  settings: Record<string, boolean>;
+  data_minimization: boolean;
+  updated_by: string | null;
+  organization_id: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DeviceRegistry {
@@ -68,32 +66,6 @@ export interface AnalystUser {
   email?: string;
 }
 
-export interface IncidentCase {
-  id: string;
-  case_number: string;
-  title: string;
-  description: string | null;
-  severity: CaseSeverity;
-  status: CaseStatus;
-  assigned_to: string | null;
-  created_by: string;
-  started_at: string | null;
-  closed_at: string | null;
-  closed_by: string | null;
-  alert_count: number;
-  last_activity: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CaseNote {
-  note_id: string;
-  case_id: string;
-  content: string;
-  created_by: string;
-  created_at: string;
-}
-
 export interface EnrollmentToken {
   token_id: string;
   token_hash: string;
@@ -120,8 +92,12 @@ export interface AgentConfig {
 
 export interface RetentionSetting {
   id: string;
-  device_id: string;
+  organization_id: string;
+  device_id: string | null;
   retention_days: number;
+  data_types: string[];
+  created_by: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -183,16 +159,7 @@ export interface Database {
         Insert: Pick<EnrollmentToken, 'token_hash' | 'name' | 'created_by' | 'expires_at' | 'max_uses'>;
         Update: Pick<EnrollmentToken, 'current_uses' | 'is_used' | 'used_at' | 'used_by_device_id'>;
       };
-      incident_cases: {
-        Row: IncidentCase;
-        Insert: Omit<IncidentCase, 'id' | 'case_number' | 'alert_count' | 'last_activity' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<IncidentCase, 'id' | 'case_number' | 'created_at'>>;
-      };
-      case_notes: {
-        Row: CaseNote;
-        Insert: Omit<CaseNote, 'note_id' | 'created_at'>;
-        Update: never;
-      };
+
       sync_queue: {
         Row: SyncQueueEntry;
         Insert: Omit<SyncQueueEntry, 'id' | 'queued_at' | 'created_at' | 'updated_at'>;
@@ -208,10 +175,15 @@ export interface Database {
         Insert: Omit<AgentConfig, 'config_id' | 'updated_at'>;
         Update: Partial<Omit<AgentConfig, 'config_id' | 'updated_at'>>;
       };
+      privacy_settings: {
+        Row: PrivacySettingsRow;
+        Insert: Omit<PrivacySettingsRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<PrivacySettingsRow, 'id'>>;
+      };
       retention_settings: {
         Row: RetentionSetting;
-        Insert: Omit<RetentionSetting, 'id'>;
-        Update: Partial<Omit<RetentionSetting, 'id'>>;
+        Insert: Omit<RetentionSetting, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<RetentionSetting, 'id' | 'created_at'>>;
       };
     };
   };

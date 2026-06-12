@@ -7,5 +7,3 @@ export type DeviceType = 'server' | 'laptop' | 'workstation' | 'other';
 export type SyncQueueStatus = 'PENDING' | 'SYNCING' | 'COMPLETED' | 'FAILED';
 export type ConnectivityState = 'online' | 'offline';
 export type UserRole = 'ANALYST' | 'ADMINISTRATOR';
-export type CaseSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type CaseStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | 'ESCALATED';

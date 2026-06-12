@@ -34,21 +34,22 @@ export class PrivacyRepository extends BaseRepository<PrivacySettings> {
   }
 
   async getOrCreateGlobalSettings(): Promise<PrivacySettings> {
-    // Try to get global settings first
     let settings = await this.findByDeviceId(null);
-    
+
     if (!settings) {
-      // Create default global settings if they don't exist
       settings = await this.create({
         device_id: null,
         enhanced_mode: false,
-        anonymize_ips: true,
-        encrypt_pii: true,
-        mask_usernames: false,
-        redact_sensitive_data: false,
+        settings: {
+          anonymize_ips: true,
+          encrypt_pii: true,
+          mask_usernames: false,
+          redact_sensitive_data: false,
+        },
+        data_minimization: true,
       });
     }
-    
+
     return settings;
   }
 }

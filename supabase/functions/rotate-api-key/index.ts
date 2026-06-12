@@ -1,4 +1,4 @@
-// EdgePulse API Key Rotation Function v1.0.1
+// EdgePulse API Key Rotation Function v3.0.0
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -45,7 +45,7 @@ serve(async (req) => {
 
     const apiKeyHash = await hashApiKey(apiKey, deviceId)
     const { data: keyData, error: keyError } = await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .select('*')
       .eq('device_id', deviceId)
       .eq('key_hash', apiKeyHash)
@@ -66,34 +66,32 @@ serve(async (req) => {
       )
     }
 
-    // Deactivate old key
     await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .update({ is_active: false, last_used_at: new Date().toISOString() })
-      .eq('key_id', keyData.key_id)
+      .eq('id', keyData.id)
 
-    // Generate new key
     const newApiKey = await generateApiKey()
     const newApiKeyHash = await hashApiKey(newApiKey, deviceId)
 
     const { data: newKeyData, error: newKeyError } = await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .insert({
         device_id: deviceId,
         key_hash: newApiKeyHash,
         key_name: `Rotated Key - ${new Date().toISOString()}`,
         is_active: true,
-        created_by: keyData.created_by
+        created_by: keyData.created_by,
+        organization_id: keyData.organization_id,
       })
       .select()
       .single()
 
     if (newKeyError || !newKeyData) {
-      // Reactivate old key on failure
       await supabase
-        .from('agent_api_keys')
+        .from('api_keys')
         .update({ is_active: true })
-        .eq('key_id', keyData.key_id)
+        .eq('id', keyData.id)
 
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create new API key' }),
@@ -102,15 +100,16 @@ serve(async (req) => {
     }
 
     await supabase
-      .from('audit_trail')
+      .from('audit_logs')
       .insert({
         device_id: deviceId,
         action: 'API_KEY_ROTATED',
-        resource_type: 'agent_api_keys',
-        resource_id: newKeyData.key_id,
-        old_values: { key_id: keyData.key_id, key_name: keyData.key_name },
-        new_values: { key_id: newKeyData.key_id, key_name: newKeyData.key_name },
-        timestamp_utc: new Date().toISOString()
+        resource_type: 'api_keys',
+        resource_id: newKeyData.id,
+        old_values: { key_id: keyData.id, key_name: keyData.key_name },
+        new_values: { key_id: newKeyData.id, key_name: newKeyData.key_name },
+        severity: 'INFO',
+        organization_id: keyData.organization_id,
       })
 
     return new Response(

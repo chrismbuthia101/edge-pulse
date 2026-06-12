@@ -25,7 +25,6 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
-import { useCaseStore } from "@/lib/stores/case-store";
 import { cn } from "@/lib/utils";
 import type { Alert } from "@/lib/supabase/types";
 
@@ -42,7 +41,7 @@ interface ReportCard {
     roles: string[];
     category: "security" | "operations" | "intelligence" | "compliance";
     badge?: string;
-    getStats?: (alerts: Alert[], devices: Device[], cases: Case[]) => { label: string; value: string; trend?: number }[];
+    getStats?: (alerts: Alert[], devices: Device[]) => { label: string; value: string; trend?: number }[];
 }
 
 interface Device {
@@ -53,11 +52,6 @@ interface Device {
     status?: string;
     cpu_percent?: number;
     ram_percent?: number;
-}
-
-interface Case {
-    id: string;
-    status: string;
 }
 
 type DateRange = "7d" | "30d" | "90d" | "all";
@@ -177,7 +171,6 @@ export default function ReportsPage() {
     const { hasRole, loading, isAdmin } = useAuth();
     const { alerts, initialize: initAlerts } = useAlertStore();
     const { devices, initialize: initDevices } = useDeviceStore();
-    const { cases, initialize: initCases } = useCaseStore();
     const initialized = useRef(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -190,9 +183,8 @@ export default function ReportsPage() {
             initialized.current = true;
             initAlerts();
             initDevices();
-            initCases();
         }
-    }, [initAlerts, initDevices, initCases]);
+    }, [initAlerts, initDevices]);
 
     const categories = ["All", ...Array.from(new Set(reportCards.map(r => r.category)))];
 
@@ -206,7 +198,6 @@ export default function ReportsPage() {
 
     const filteredAlerts = useMemo(() => alerts.filter(a => new Date(a.created_at) >= cutoff), [alerts, cutoff]);
     const filteredDevices = devices;
-    const filteredCases = cases.filter(c => new Date(c.created_at) >= cutoff);
 
     const filteredReports = reportCards.filter(report => {
         const matchesSearch = report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -241,7 +232,7 @@ export default function ReportsPage() {
 
     const handleRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([initAlerts(), initDevices(), initCases()]);
+        await Promise.all([initAlerts(), initDevices()]);
         setLastUpdated(new Date());
         setRefreshing(false);
     };
@@ -263,7 +254,6 @@ export default function ReportsPage() {
             `Devices Enrolled: ${devices.length}`,
             `Devices Online: ${devices.filter(d => d.status === "online").length}`,
             `Devices At Risk: ${devices.filter(d => d.risk === "critical" || d.risk === "high").length}`,
-            `Open Cases: ${filteredCases.length}`,
         ];
         const blob = new Blob([lines.join("\n")], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
@@ -473,16 +463,14 @@ export default function ReportsPage() {
                                         <h3 className="text-base font-semibold text-foreground mb-2 relative">{card.title}</h3>
                                         <p className="text-xs text-muted-foreground leading-relaxed mb-4 relative">{card.description}</p>
 
-                                        {card.getStats && (
                                             <div className="flex items-center gap-6 pt-3 border-t border-border/50 mb-3 relative">
-                                                {card.getStats(filteredAlerts, filteredDevices, filteredCases).slice(0, 2).map((stat, idx) => (
+                                                {card.getStats && card.getStats(filteredAlerts, filteredDevices).slice(0, 2).map((stat, idx) => (
                                                     <div key={idx}>
                                                         <p className={cn("text-lg font-bold font-display", card.color)}>{stat.value}</p>
                                                         <p className="text-[10px] text-muted-foreground">{stat.label}</p>
                                                     </div>
                                                 ))}
                                             </div>
-                                        )}
 
                                         <div className="flex items-center gap-1.5 mt-3 relative">
                                             {card.roles.map(role => (

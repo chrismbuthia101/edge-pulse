@@ -19,7 +19,10 @@ This document outlines the setup and deployment process for the Edge Pulse proje
 ```bash
 # Get this from your supabase dashboard settings
 export SUPABASE_DB_PASSWORD="your_db_password"
-source .env
+
+# OR
+
+source supabase/.env
 ```
 
 2. **Start Docker service:**
@@ -76,6 +79,19 @@ supabase db diff --schema public
 
 ```bash
 supabase db push --debug
+```
+
+### Reset local db
+
+```bash
+supabase db reset
+supabase stop
+```
+
+### Reset remote db
+
+```bash
+supabase db reset --linked
 ```
 
 ## Edge Functions Deployment

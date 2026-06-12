@@ -1,4 +1,4 @@
-// EdgePulse Enrollment Function v1.0.1
+// EdgePulse Enrollment Function v3.0.0
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -50,11 +50,12 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Validate enrollment token
+    const tokenHash = await hashToken(enrollmentData.enrollment_token)
+
     const { data: tokenData, error: tokenError } = await supabase
-      .from('device_enrollment_tokens')
+      .from('enrollment_tokens')
       .select('*')
-      .eq('token_hash', await hashToken(enrollmentData.enrollment_token))
+      .eq('token_hash', tokenHash)
       .single()
 
     if (tokenError || !tokenData) {
@@ -83,7 +84,7 @@ serve(async (req) => {
     const apiKeyHash = await hashApiKey(apiKey, deviceId)
 
     const { data: deviceData, error: deviceError } = await supabase
-      .from('device_registry')
+      .from('devices')
       .insert({
         id: deviceId,
         name: enrollmentData.hostname,
@@ -95,6 +96,7 @@ serve(async (req) => {
         enrolled_by: tokenData.created_by,
         last_seen: new Date().toISOString(),
         is_active: true,
+        organization_id: tokenData.organization_id,
       })
       .select()
       .single()
@@ -102,62 +104,59 @@ serve(async (req) => {
     if (deviceError || !deviceData) {
       console.error('Device creation error:', deviceError)
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to create device registry entry' }),
+        JSON.stringify({ success: false, error: 'Failed to create device' }),
         { status: 500, headers: corsHeaders }
       )
     }
 
-    // Create API key entry
     const { data: apiKeyData, error: apiKeyError } = await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .insert({
         device_id: deviceId,
         key_hash: apiKeyHash,
         key_name: `Default Key - ${new Date().toISOString()}`,
         is_active: true,
         created_by: tokenData.created_by,
+        organization_id: tokenData.organization_id,
       })
       .select()
       .single()
 
     if (apiKeyError || !apiKeyData) {
-      // Rollback device creation
-      await supabase.from('device_registry').delete().eq('id', deviceId)
-
+      await supabase.from('devices').delete().eq('id', deviceId)
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create API key' }),
         { status: 500, headers: corsHeaders }
       )
     }
 
-    // Update token usage - only mark as fully used when max_uses is reached
-    const newCurrentUses = tokenData.current_uses + 1;
-    const isFullyUsed = newCurrentUses >= tokenData.max_uses;
+    const newCurrentUses = tokenData.current_uses + 1
+    const isFullyUsed = newCurrentUses >= tokenData.max_uses
 
     await supabase
-      .from('device_enrollment_tokens')
+      .from('enrollment_tokens')
       .update({
         current_uses: newCurrentUses,
         is_used: isFullyUsed,
         used_at: new Date().toISOString(),
-        used_by_device_id: isFullyUsed ? deviceId : null,
+        used_by_device: isFullyUsed ? deviceId : null,
       })
-      .eq('token_id', tokenData.token_id)
+      .eq('id', tokenData.id)
 
-    // Create audit trail entry
     await supabase
-      .from('audit_trail')
+      .from('audit_logs')
       .insert({
         device_id: deviceId,
         action: 'DEVICE_ENROLLED',
-        resource_type: 'device_registry',
+        resource_type: 'devices',
         resource_id: deviceId,
         new_values: {
           name: enrollmentData.hostname,
           os: enrollmentData.operating_system,
           agent_version: enrollmentData.agent_version,
         },
-        timestamp_utc: new Date().toISOString(),
+        severity: 'INFO',
+        organization_id: tokenData.organization_id,
       })
 
     const response: EnrollmentResponse = {

@@ -95,8 +95,11 @@ export const usePrivacyStore = create<PrivacyStore>((set, get) => ({
         settings: {
           ...previous,
           enhanced_mode: newMode,
-          mask_usernames: newMode,
-          redact_sensitive_data: newMode,
+          settings: {
+            ...previous.settings,
+            mask_usernames: newMode,
+            redact_sensitive_data: newMode,
+          },
           updated_at: new Date().toISOString(),
         },
       });

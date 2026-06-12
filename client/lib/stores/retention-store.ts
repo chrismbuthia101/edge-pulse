@@ -26,18 +26,19 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
     telemetry: 15.7,
     alerts: 2.3,
     features: 8.9,
-    total: 26.9,
+    health: 1.2,
+    total: 28.1,
   },
   loading: false,
   error: null,
 
   initialize: async (deviceId?: string) => {
     set({ loading: true, error: null });
-    
+
     try {
       const [retentionPeriod, storageUsage] = await Promise.all([
-        retentionService.getRetentionSettings(deviceId || 'global'),
-        retentionService.getStorageUsage(deviceId || 'global'),
+        retentionService.getRetentionSettings(deviceId || null),
+        retentionService.getStorageUsage(deviceId || null),
       ]);
 
       set({ 
@@ -59,9 +60,9 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
     set({ retentionPeriod: days, loading: true, error: null });
     
     try {
-      await retentionService.updateRetentionSettings(deviceId || 'global', days);
-      
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || 'global', days);
+      await retentionService.updateRetentionSettings(deviceId || null, days);
+
+      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, days);
       
       set({ storageUsage, loading: false });
       toast.success('Retention period updated');
@@ -88,9 +89,9 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
     
     try {
       const { retentionPeriod } = get();
-      await retentionService.purgeOldData(deviceId || 'global', retentionPeriod);
-      
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || 'global', retentionPeriod);
+      await retentionService.purgeOldData(deviceId || null, retentionPeriod);
+
+      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, retentionPeriod);
       
       set({ storageUsage, loading: false });
       toast.success('Old data purged successfully');
@@ -107,7 +108,7 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
   refreshStorageUsage: async (deviceId?: string) => {
     try {
       const { retentionPeriod } = get();
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || 'global', retentionPeriod);
+      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, retentionPeriod);
       
       set({ storageUsage });
     } catch (error) {

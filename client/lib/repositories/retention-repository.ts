@@ -3,8 +3,13 @@ import {
 } from '@/lib/repositories/base-repository';
 
 export interface RetentionSetting {
-  device_id: string;
+  id: string;
+  organization_id: string;
+  device_id: string | null;
   retention_days: number;
+  data_types: string[];
+  created_by: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -12,6 +17,7 @@ export interface StorageUsage {
   telemetry: number;
   alerts: number;
   features: number;
+  health: number;
   total: number;
 }
 
@@ -20,17 +26,20 @@ export class RetentionRepository extends BaseRepository {
     super('retention_settings');
   }
 
-  async getRetentionSettings(deviceId: string): Promise<RetentionSetting | null> {
-    const result = await this.findOne({ device_id: deviceId || 'global' });
+  async getRetentionSettings(deviceId: string | null): Promise<RetentionSetting | null> {
+    const query = deviceId
+      ? { device_id: deviceId }
+      : { device_id: null };
+    const result = await this.findOne(query);
     return result as RetentionSetting | null;
   }
 
-  async upsertRetentionSetting(deviceId: string, retentionDays: number): Promise<void> {
+  async upsertRetentionSetting(deviceId: string | null, retentionDays: number): Promise<void> {
     try {
       const { error } = await this.supabase
         .from('retention_settings')
         .upsert({
-          device_id: deviceId || 'global',
+          device_id: deviceId,
           retention_days: retentionDays,
           updated_at: new Date().toISOString(),
         });
@@ -42,14 +51,16 @@ export class RetentionRepository extends BaseRepository {
     }
   }
 
-  async purgeOldTelemetryData(deviceId: string, cutoffDate: string): Promise<void> {
+  async purgeOldTelemetryData(deviceId: string | null, cutoffDate: string): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from('telemetry_events')
+      const query = this.supabase
+        .from('events')
         .delete()
-        .lt('collected_at', cutoffDate)
-        .eq('device_id', deviceId);
+        .lt('collected_at', cutoffDate);
 
+      if (deviceId) query.eq('device_id', deviceId);
+
+      const { error } = await query;
       if (error) throw error;
     } catch (error) {
       this.handleError(error);
@@ -57,34 +68,28 @@ export class RetentionRepository extends BaseRepository {
     }
   }
 
-  async calculateStorageUsage(deviceId: string): Promise<StorageUsage> {
+  async calculateStorageUsage(deviceId: string | null): Promise<StorageUsage> {
     try {
-      // Calculate actual storage usage from database tables
-      const [telemetryResult, alertsResult, featuresResult] = await Promise.all([
-        this.supabase
-          .from('telemetry_events')
-          .select('data')
-          .eq('device_id', deviceId),
-        this.supabase
-          .from('alerts')
-          .select('*')
-          .eq('device_id', deviceId),
-        this.supabase
-          .from('anomaly_features')
-          .select('*')
-          .eq('device_id', deviceId)
+      const baseFilter = (q: any) => deviceId ? q.eq('device_id', deviceId) : q;
+
+      const [telemetryResult, alertsResult, featuresResult, healthResult] = await Promise.all([
+        baseFilter(this.supabase.from('events').select('id').eq('device_id', deviceId!)),
+        baseFilter(this.supabase.from('alerts').select('id').eq('device_id', deviceId!)),
+        baseFilter(this.supabase.from('feature_vectors').select('id').eq('device_id', deviceId!)),
+        baseFilter(this.supabase.from('device_health').select('id').eq('device_id', deviceId!)),
       ]);
 
-      // Estimate storage in MB (rough estimate based on row count)
-      const telemetrySize = (telemetryResult.data?.length || 0) * 0.001; // ~1KB per telemetry event
-      const alertsSize = (alertsResult.data?.length || 0) * 0.0005; // ~0.5KB per alert
-      const featuresSize = (featuresResult.data?.length || 0) * 0.002; // ~2KB per feature record
-      const total = telemetrySize + alertsSize + featuresSize;
+      const telemetrySize = (telemetryResult.data?.length || 0) * 0.001;
+      const alertsSize = (alertsResult.data?.length || 0) * 0.0005;
+      const featuresSize = (featuresResult.data?.length || 0) * 0.002;
+      const healthSize = (healthResult.data?.length || 0) * 0.0005;
+      const total = telemetrySize + alertsSize + featuresSize + healthSize;
 
       return {
         telemetry: parseFloat(telemetrySize.toFixed(2)),
         alerts: parseFloat(alertsSize.toFixed(2)),
         features: parseFloat(featuresSize.toFixed(2)),
+        health: parseFloat(healthSize.toFixed(2)),
         total: parseFloat(total.toFixed(2)),
       };
     } catch (error) {
@@ -93,6 +98,7 @@ export class RetentionRepository extends BaseRepository {
         telemetry: 0,
         alerts: 0,
         features: 0,
+        health: 0,
         total: 0,
       };
     }

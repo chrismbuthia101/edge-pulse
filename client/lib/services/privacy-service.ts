@@ -33,13 +33,14 @@ export class PrivacyService {
     const current = await this.getPrivacySettings(options);
     const newMode = !current.enhanced_mode;
 
-    // Apply preset settings based on mode
     const updates: PrivacySettingsUpdate = {
       enhanced_mode: newMode,
-      anonymize_ips: true,
-      encrypt_pii: true,
-      mask_usernames: newMode,
-      redact_sensitive_data: newMode,
+      settings: {
+        anonymize_ips: true,
+        encrypt_pii: true,
+        mask_usernames: newMode,
+        redact_sensitive_data: newMode,
+      },
     };
 
     return this.updatePrivacySettings(updates, options);

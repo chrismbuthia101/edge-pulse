@@ -1,7 +1,6 @@
-// EdgePulse Device Sync Function v1.0.0
+// EdgePulse Device Sync Function v3.0.0
 // Handles bulk sync of alerts and telemetry from enrolled devices
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -19,7 +18,6 @@ interface SyncRequest {
 }
 
 interface AlertRecord {
-  alert_id?: string
   device_id: string
   device_name: string
   telemetry_event_id?: string
@@ -91,16 +89,14 @@ interface HealthSnapshot {
 }
 
 interface TamperLogEntry {
-  log_id: string
   device_id: string
-  log_sequence_number: number
-  log_entry_type: string
-  log_entry_reference_id?: string
-  entry_timestamp_utc: string
-  entry_content_hash: string
-  previous_entry_hash: string
-  digital_signature?: string
+  sequence_number: number
+  entry_type: string
   reference_id?: string
+  entry_timestamp: string
+  content_hash: string
+  previous_hash: string
+  digital_signature?: string
 }
 
 interface SyncResponse {
@@ -140,14 +136,13 @@ serve(async (req) => {
       )
     }
 
-    // Validate device credentials
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const apiKeyHash = await hashApiKey(apiKey, deviceId)
     const { data: keyData, error: keyError } = await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .select('*')
       .eq('device_id', deviceId)
       .eq('key_hash', apiKeyHash)
@@ -169,9 +164,24 @@ serve(async (req) => {
     }
 
     await supabase
-      .from('agent_api_keys')
+      .from('api_keys')
       .update({ last_used_at: new Date().toISOString() })
-      .eq('key_id', keyData.key_id)
+      .eq('id', keyData.id)
+
+    const { data: device, error: deviceError } = await supabase
+      .from('devices')
+      .select('organization_id')
+      .eq('id', deviceId)
+      .single()
+
+    if (deviceError || !device) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Device not found' }),
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
+    const organizationId = device.organization_id
 
     const syncData: SyncRequest = await req.json()
 
@@ -185,23 +195,49 @@ serve(async (req) => {
       health_snapshots_synced: 0,
       health_snapshots_failed: 0,
       tamper_logs_synced: 0,
-      tamper_logs_failed: 0
+      tamper_logs_failed: 0,
     }
 
-    // Sync alerts
     if (syncData.alerts && syncData.alerts.length > 0) {
       try {
         const alerts = syncData.alerts.map(alert => ({
-          ...alert,
           device_id: deviceId,
-          created_at: alert.alert_id ? undefined : new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          device_name: alert.device_name,
+          event_id: alert.telemetry_event_id || null,
+          feature_vector_id: alert.feature_vector_id || null,
+          anomaly_score_id: alert.anomaly_score_id || null,
+          anomaly_score: alert.anomaly_score,
+          model_id: alert.model_id,
+          collection_agent_version: alert.collection_agent_version,
+          inference_latency_ms: alert.inference_latency_ms,
+          telemetry_source: alert.telemetry_source,
+          title: alert.title,
+          description: alert.description || null,
+          severity: alert.severity,
+          category: alert.category,
+          alert_type: alert.alert_type || null,
+          detector_type: alert.detector_type || null,
+          confidence: alert.confidence,
+          detection_window_start: alert.detection_window_start || null,
+          detection_window_end: alert.detection_window_end || null,
+          detection_window_minutes: alert.detection_window_minutes || null,
+          explanation_json: alert.explanation_json || {},
+          net_destination_ip: alert.net_destination_ip || null,
+          net_destination_port: alert.net_destination_port || null,
+          net_protocol: alert.net_protocol || null,
+          net_duration_ms: alert.net_duration_ms || null,
+          proc_name: alert.proc_name || null,
+          proc_privilege_level: alert.proc_privilege_level || null,
+          proc_pid: alert.proc_pid || null,
           status: alert.status || 'PENDING',
-          read: alert.read || false
+          read: alert.read || false,
+          organization_id: organizationId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         }))
 
         const { error: alertsError } = await supabase
-          .from('alert_records')
+          .from('alerts')
           .insert(alerts)
 
         if (alertsError) {
@@ -218,17 +254,22 @@ serve(async (req) => {
       }
     }
 
-    // Sync telemetry
     if (syncData.telemetry && syncData.telemetry.length > 0) {
       try {
         const telemetry = syncData.telemetry.map(event => ({
-          ...event,
           device_id: deviceId,
-          received_at: new Date().toISOString()
+          collected_at: event.collected_at,
+          source: event.source,
+          payload: event.payload,
+          collection_agent_version: event.collection_agent_version,
+          connectivity_state: event.connectivity_state || 'online',
+          payload_hash: event.payload_hash || '',
+          organization_id: organizationId,
+          received_at: new Date().toISOString(),
         }))
 
         const { error: telemetryError } = await supabase
-          .from('telemetry_events')
+          .from('events')
           .insert(telemetry)
 
         if (telemetryError) {
@@ -245,14 +286,13 @@ serve(async (req) => {
       }
     }
 
-    // Update device heartbeat
     if (syncData.heartbeat) {
       try {
         const { error: heartbeatError } = await supabase
-          .from('device_registry')
+          .from('devices')
           .upsert({
             id: deviceId,
-            name: syncData.heartbeat.name || keyData.device_name,
+            name: syncData.heartbeat.name || deviceId,
             last_seen: new Date().toISOString(),
             status: syncData.heartbeat.status || 'online',
             risk: syncData.heartbeat.risk || 'none',
@@ -262,7 +302,7 @@ serve(async (req) => {
             alerts_count: syncData.heartbeat.alerts_count,
             agent_version: syncData.heartbeat.agent_version,
             hash_chain_ok: syncData.heartbeat.hash_chain_ok,
-            actively_reporting: true
+            actively_reporting: true,
           }, { onConflict: 'id' })
 
         if (heartbeatError) {
@@ -277,17 +317,27 @@ serve(async (req) => {
       }
     }
 
-    // Sync health snapshots
     if (syncData.health_snapshots && syncData.health_snapshots.length > 0) {
       try {
         const snapshots = syncData.health_snapshots.map(snapshot => ({
-          ...snapshot,
           device_id: deviceId,
-          created_at: new Date().toISOString()
+          status: snapshot.status || 'ONLINE',
+          cpu_usage: snapshot.cpu_usage,
+          memory_usage: snapshot.memory_usage,
+          disk_usage: snapshot.disk_usage,
+          network_status: snapshot.network_status !== undefined ? snapshot.network_status : true,
+          alerts_last_24h: snapshot.alerts_last_24h || 0,
+          uptime_percentage: snapshot.uptime_percentage,
+          response_time_ms: snapshot.response_time_ms,
+          error_count: snapshot.error_count || 0,
+          warning_count: snapshot.warning_count || 0,
+          last_restart: snapshot.last_restart || null,
+          organization_id: organizationId,
+          created_at: new Date().toISOString(),
         }))
 
         const { error: healthError } = await supabase
-          .from('device_health_snapshots')
+          .from('device_health')
           .insert(snapshots)
 
         if (healthError) {
@@ -304,23 +354,23 @@ serve(async (req) => {
       }
     }
 
-    // Sync tamper-evident logs
     if (syncData.tamper_logs && syncData.tamper_logs.length > 0) {
       try {
         const logs = syncData.tamper_logs.map(log => ({
           device_id: deviceId,
-          log_sequence_number: log.log_sequence_number,
-          log_entry_type: log.log_entry_type,
-          log_entry_reference_id: log.log_entry_reference_id,
-          entry_timestamp_utc: log.entry_timestamp_utc,
-          entry_content_hash: log.entry_content_hash,
-          previous_entry_hash: log.previous_entry_hash,
-          digital_signature: log.digital_signature,
-          created_at: new Date().toISOString()
+          sequence_number: log.sequence_number,
+          entry_type: log.entry_type,
+          reference_id: log.reference_id || null,
+          entry_timestamp: log.entry_timestamp,
+          content_hash: log.content_hash,
+          previous_hash: log.previous_hash,
+          digital_signature: log.digital_signature || null,
+          organization_id: organizationId,
+          created_at: new Date().toISOString(),
         }))
 
         const { error: tamperError } = await supabase
-          .from('tamper_evident_log')
+          .from('hash_chain_log')
           .insert(logs)
 
         if (tamperError) {
@@ -337,8 +387,7 @@ serve(async (req) => {
       }
     }
 
-    // Return appropriate status code
-    const statusCode = response.success ? 200 : 207 // 207 = Multi-Status (partial success)
+    const statusCode = response.success ? 200 : 207
 
     return new Response(
       JSON.stringify(response),

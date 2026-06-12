@@ -55,12 +55,6 @@ export type {
   DeviceHealthStatus
 } from '@/lib/repositories/device-repository';
 
-export { CaseRepository } from '@/lib/repositories/case-repository';
-export type {
-  CaseQueryOptions,
-  CaseMetrics
-} from '@/lib/repositories/case-repository';
-
 export { HealthRepository } from '@/lib/repositories/health-repository';
 
 export { LogsRepository } from '@/lib/repositories/logs-repository';

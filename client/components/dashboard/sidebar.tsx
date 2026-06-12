@@ -19,7 +19,6 @@ import {
     HelpCircle,
     Users,
     FileText,
-    List,
     BarChart3,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
@@ -59,7 +58,6 @@ const navItems: NavGroup[] = [
         items: [
             { icon: ShieldAlert, label: "Alerts", href: "/dashboard/alerts", badge: "pending" },
             { icon: MonitorSmartphone, label: "Devices", href: "/dashboard/devices" },
-            { icon: List, label: "Investigations", href: "/dashboard/cases", roles: ["ANALYST", "ADMINISTRATOR"] },
         ],
     },
     {

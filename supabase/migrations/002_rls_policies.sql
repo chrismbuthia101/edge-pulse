@@ -1,114 +1,107 @@
 -- ============================================================
--- EdgePulse Schema v1.0.0
+-- EdgePulse Schema v3.0.0 — Multi-Tenant
 -- Migration: 002_rls_policies
--- Description: Row-level security policies and helper functions for all tables
+-- Description: RLS policies, helper functions, grants, realtime.
 -- ============================================================
 
 -- ─── Enable RLS on all tables ────────────────────────────────────────────────
-ALTER TABLE analyst_users              ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_registry            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_api_keys             ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_enrollment_tokens   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_config               ENABLE ROW LEVEL SECURITY;
-ALTER TABLE privacy_settings           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE telemetry_events           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE feature_vectors            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE anomaly_scores             ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alert_records              ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tamper_evident_log         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_health_snapshots    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analyst_device_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE incident_cases             ENABLE ROW LEVEL SECURITY;
-ALTER TABLE case_alerts                ENABLE ROW LEVEL SECURITY;
-ALTER TABLE case_notes                 ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_trail                ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notification_rules         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sync_queue                 ENABLE ROW LEVEL SECURITY;
-ALTER TABLE retention_settings         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization.organizations     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization.billing           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users                   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.devices                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devices.api_keys               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devices.enrollment_tokens      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devices.config                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.privacy_settings         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry.events               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry.feature_vectors      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry.anomaly_scores       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alerts                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry.hash_chain_log       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telemetry.device_health        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.device_assignments      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE internal.audit_logs            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE internal.sync_queue            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.retention_settings      ENABLE ROW LEVEL SECURITY;
 
--- ─── Helper functions ─────────────────────────────────────────────────────────
--- is_admin()
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $$
-DECLARE result BOOLEAN;
-BEGIN
-    SET LOCAL row_security = off;
-    SELECT EXISTS (
-        SELECT 1 FROM public.analyst_users
-        WHERE user_id   = auth.uid()
-          AND role      = 'ADMINISTRATOR'
-          AND is_active = TRUE
-    ) INTO result;
-    RETURN result;
-END;
-$$;
+-- ─── Schema usage grants ───────────────────────────────────────────────────────
+GRANT USAGE ON SCHEMA public       TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA extensions   TO authenticated, service_role;
+GRANT USAGE ON SCHEMA devices      TO authenticated, service_role;
+GRANT USAGE ON SCHEMA telemetry    TO authenticated, service_role;
+GRANT USAGE ON SCHEMA internal     TO authenticated, service_role;
+GRANT USAGE ON SCHEMA organization TO authenticated, service_role;
 
--- is_analyst_or_admin()
-CREATE OR REPLACE FUNCTION is_analyst_or_admin()
-RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $$
-DECLARE result BOOLEAN;
-BEGIN
-    SET LOCAL row_security = off;
-    SELECT EXISTS (
-        SELECT 1 FROM public.analyst_users
-        WHERE user_id   = auth.uid()
-          AND role      IN ('ANALYST', 'ADMINISTRATOR')
-          AND is_active = TRUE
-    ) INTO result;
-    RETURN result;
-END;
-$$;
+-- ─── Helper functions ──────────────────────────────────────────────────────────
 
--- is_user_approved()  — checks approval_status in addition to is_active
-CREATE OR REPLACE FUNCTION is_user_approved()
-RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $$
-DECLARE result BOOLEAN;
-BEGIN
-    SET LOCAL row_security = off;
-    SELECT EXISTS (
-        SELECT 1 FROM public.analyst_users
-        WHERE user_id         = auth.uid()
-          AND is_active        = TRUE
-          AND approval_status  = 'APPROVED'
-    ) INTO result;
-    RETURN result;
-END;
-$$;
-
--- is_user_administrator()  — approved + ADMINISTRATOR role
-CREATE OR REPLACE FUNCTION is_user_administrator()
-RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $$
-DECLARE result BOOLEAN;
-BEGIN
-    SET LOCAL row_security = off;
-    SELECT EXISTS (
-        SELECT 1 FROM public.analyst_users
-        WHERE user_id         = auth.uid()
-          AND is_active        = TRUE
-          AND approval_status  = 'APPROVED'
-          AND role             = 'ADMINISTRATOR'
-    ) INTO result;
-    RETURN result;
-END;
-$$;
-
--- get_device_id_from_headers()  — pure header parsing, no table access
-CREATE OR REPLACE FUNCTION get_device_id_from_headers()
+CREATE OR REPLACE FUNCTION extensions.current_organization_id()
 RETURNS UUID
 LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, extensions
+AS $$
+DECLARE
+    v_org_id TEXT;
+BEGIN
+    SET LOCAL row_security = off;
+    BEGIN
+        v_org_id := current_setting('request.jwt.claims', true)::json->>'organization_id';
+        IF v_org_id IS NOT NULL THEN
+            RETURN v_org_id::UUID;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+    SELECT organization_id::TEXT INTO v_org_id
+    FROM public.users
+    WHERE id = auth.uid() AND account_status = 'ACTIVE';
+    IF v_org_id IS NOT NULL THEN
+        RETURN v_org_id::UUID;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION extensions.is_platform_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, extensions
+AS $$
+DECLARE result BOOLEAN;
+BEGIN
+    SET LOCAL row_security = off;
+    SELECT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id             = (SELECT auth.uid())
+          AND role           = 'PLATFORM_ADMIN'
+          AND account_status = 'ACTIVE'
+    ) INTO result;
+    RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION extensions.is_org_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, extensions
+AS $$
+DECLARE result BOOLEAN;
+BEGIN
+    SET LOCAL row_security = off;
+    SELECT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id             = (SELECT auth.uid())
+          AND role           = 'ORG_ADMIN'
+          AND account_status = 'ACTIVE'
+    ) INTO result;
+    RETURN result;
+END;
+$$;
+
+-- Device authentication helpers
+CREATE OR REPLACE FUNCTION extensions.get_device_id_from_headers()
+RETURNS UUID
+LANGUAGE plpgsql STABLE SECURITY INVOKER
+SET search_path = pg_catalog, public, extensions
 AS $$
 DECLARE
     raw_header  TEXT;
@@ -128,11 +121,10 @@ BEGIN
 END;
 $$;
 
--- get_api_key_from_headers()  — pure header parsing, no table access
-CREATE OR REPLACE FUNCTION get_api_key_from_headers()
+CREATE OR REPLACE FUNCTION extensions.get_api_key_from_headers()
 RETURNS TEXT
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
+LANGUAGE plpgsql STABLE SECURITY INVOKER
+SET search_path = pg_catalog, public, extensions
 AS $$
 DECLARE raw_header TEXT;
 BEGIN
@@ -143,11 +135,10 @@ BEGIN
 END;
 $$;
 
--- is_authenticated_device()
-CREATE OR REPLACE FUNCTION is_authenticated_device()
+CREATE OR REPLACE FUNCTION extensions.is_authenticated_device()
 RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, extensions
 AS $$
 DECLARE
     v_device_id UUID;
@@ -155,8 +146,8 @@ DECLARE
     v_key_hash  TEXT;
     result      BOOLEAN;
 BEGIN
-    v_device_id := get_device_id_from_headers();
-    v_api_key   := get_api_key_from_headers();
+    v_device_id := extensions.get_device_id_from_headers();
+    v_api_key   := extensions.get_api_key_from_headers();
     IF v_device_id IS NULL OR v_api_key IS NULL THEN RETURN FALSE; END IF;
     v_key_hash := encode(
         digest(v_api_key || 'ep-v1-' || v_device_id::TEXT, 'sha256'),
@@ -164,7 +155,7 @@ BEGIN
     );
     SET LOCAL row_security = off;
     SELECT EXISTS (
-        SELECT 1 FROM public.agent_api_keys
+        SELECT 1 FROM devices.api_keys
         WHERE device_id  = v_device_id
           AND key_hash   = v_key_hash
           AND is_active  = TRUE
@@ -174,339 +165,430 @@ BEGIN
 END;
 $$;
 
--- current_device_id()
-CREATE OR REPLACE FUNCTION current_device_id()
+CREATE OR REPLACE FUNCTION extensions.current_device_id()
 RETURNS UUID
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path = pg_catalog, public, extensions
 AS $$
 BEGIN
-    IF is_authenticated_device() THEN RETURN get_device_id_from_headers(); END IF;
+    IF extensions.is_authenticated_device() THEN
+        RETURN extensions.get_device_id_from_headers();
+    END IF;
     RETURN NULL;
 END;
 $$;
 
--- analyst_has_device_access()
--- Inlines the admin check with row_security = off to avoid chained recursion
--- through the analyst_device_assignments policies.
-CREATE OR REPLACE FUNCTION analyst_has_device_access(p_device_id UUID)
+-- Organization-scoped device access check
+CREATE OR REPLACE FUNCTION extensions.user_has_device_access(p_device_id UUID)
 RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, extensions
 AS $$
-DECLARE result BOOLEAN;
+DECLARE
+    v_user_role    user_role;
+    v_user_org     UUID;
+    v_device_org   UUID;
+    result         BOOLEAN;
 BEGIN
     SET LOCAL row_security = off;
-    SELECT (
-        EXISTS (
-            SELECT 1 FROM public.analyst_users
-            WHERE user_id   = auth.uid()
-              AND role      = 'ADMINISTRATOR'
-              AND is_active = TRUE
-        )
-        OR
-        EXISTS (
-            SELECT 1 FROM public.analyst_device_assignments
-            WHERE analyst_id = auth.uid()
-              AND device_id  = p_device_id
-              AND is_active  = TRUE
-        )
+
+    SELECT role, organization_id INTO v_user_role, v_user_org
+    FROM public.users
+    WHERE id = auth.uid() AND account_status = 'ACTIVE';
+
+    IF v_user_role IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    IF v_user_role = 'PLATFORM_ADMIN' THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT organization_id INTO v_device_org
+    FROM public.devices
+    WHERE id = p_device_id;
+
+    IF v_device_org IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    IF v_user_org IS DISTINCT FROM v_device_org THEN
+        RETURN FALSE;
+    END IF;
+
+    IF v_user_role = 'ORG_ADMIN' THEN
+        RETURN TRUE;
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1 FROM public.device_assignments
+        WHERE user_id  = (SELECT auth.uid())
+          AND device_id = p_device_id
+          AND is_active = TRUE
     ) INTO result;
+
     RETURN result;
 END;
 $$;
 
--- get_user_assigned_devices()  — convenience set-returning function
-CREATE OR REPLACE FUNCTION get_user_assigned_devices()
+CREATE OR REPLACE FUNCTION extensions.get_user_assigned_devices()
 RETURNS TABLE(device_id UUID, device_name TEXT, device_type TEXT, device_status TEXT)
-LANGUAGE plpgsql SECURITY DEFINER
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, extensions
+AS $$
+BEGIN
+    SET LOCAL row_security = off;
+    RETURN QUERY
+    SELECT d.id, d.name, d.type::TEXT, d.status::TEXT
+    FROM public.devices d
+    JOIN public.device_assignments da ON d.id = da.device_id
+    WHERE da.user_id  = (SELECT auth.uid())
+      AND da.is_active = TRUE
+      AND d.is_active  = TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION extensions.validate_enrollment_token(p_token TEXT)
+RETURNS TABLE(valid BOOLEAN, token_id UUID)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE v_key_hash TEXT;
+BEGIN
+    SET LOCAL row_security = off;
+    v_key_hash := encode(digest(p_token, 'sha256'), 'hex');
+    RETURN QUERY
+    SELECT
+        (et.expires_at > NOW() AND et.current_uses < et.max_uses) AS valid,
+        et.id
+    FROM devices.enrollment_tokens et
+    WHERE et.token_hash = v_key_hash
+    LIMIT 1;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_enrollment_token(p_token TEXT)
+RETURNS TABLE(valid BOOLEAN, token_id UUID)
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-    RETURN QUERY
-    SELECT dr.id, dr.name, dr.type::TEXT, dr.status::TEXT
-    FROM public.device_registry dr
-    JOIN public.analyst_device_assignments ada ON dr.id = ada.device_id
-    WHERE ada.analyst_id = auth.uid()
-      AND ada.is_active  = TRUE
-      AND dr.is_active   = TRUE;
+    RETURN QUERY SELECT * FROM extensions.validate_enrollment_token(p_token);
 END;
 $$;
 
 -- ─── RLS Policies ─────────────────────────────────────────────────────────────
 
--- ── analyst_users ────────────────────────────────────────────────────────────
-CREATE POLICY "analysts: view own profile"
-    ON analyst_users FOR SELECT
-    USING (auth.uid() = user_id);
+-- ── organization.organizations ───────────────────────────────────────────────
+CREATE POLICY "platform_admins: manage organizations"
+    ON organization.organizations FOR ALL
+    USING (extensions.is_platform_admin());
 
-CREATE POLICY "admins: view all users"
-    ON analyst_users FOR SELECT
-    USING (is_admin());
+CREATE POLICY "org_admins: view own organization"
+    ON organization.organizations FOR SELECT
+    USING (extensions.is_org_admin() AND id = extensions.current_organization_id());
 
-CREATE POLICY "admins: insert users"
-    ON analyst_users FOR INSERT
-    WITH CHECK (is_admin());
+-- ── organization.billing ────────────────────────────────────────────────────
+CREATE POLICY "platform_admins: manage billing"
+    ON organization.billing FOR ALL
+    USING (extensions.is_platform_admin());
 
-CREATE POLICY "admins: update users"
-    ON analyst_users FOR UPDATE
-    USING (is_admin());
+CREATE POLICY "org_admins: view own billing"
+    ON organization.billing FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
--- Approved analysts can update only their own non-sensitive profile fields
-CREATE POLICY "analysts: update own profile"
-    ON analyst_users FOR UPDATE
-    USING  (auth.uid() = user_id AND approval_status = 'APPROVED')
+-- ── users ───────────────────────────────────────────────────────────────────
+CREATE POLICY "platform_admins: view all users"
+    ON public.users FOR SELECT
+    USING (extensions.is_platform_admin());
+
+CREATE POLICY "org_admins: view organization users"
+    ON public.users FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "users: view self"
+    ON public.users FOR SELECT
+    USING (id = (SELECT auth.uid()));
+
+CREATE POLICY "org_admins: invite users"
+    ON public.users FOR INSERT
     WITH CHECK (
-        auth.uid() = user_id
-        AND approval_status = 'APPROVED'
-        AND role = 'ANALYST'
+        extensions.is_org_admin()
+        AND organization_id = extensions.current_organization_id()
     );
 
--- ── device_registry ──────────────────────────────────────────────────────────
-CREATE POLICY "devices: read own record"
-    ON device_registry FOR SELECT
-    USING (id = current_device_id());
+CREATE POLICY "platform_admins: create platform users"
+    ON public.users FOR INSERT
+    WITH CHECK (extensions.is_platform_admin());
 
-CREATE POLICY "devices: update own heartbeat"
-    ON device_registry FOR UPDATE
-    USING     (id = current_device_id())
-    WITH CHECK (id = current_device_id());
+CREATE POLICY "org_admins: manage organization users"
+    ON public.users FOR UPDATE
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id())
+    WITH CHECK (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
-CREATE POLICY "analysts: read assigned devices"
-    ON device_registry FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(id));
+CREATE POLICY "platform_admins: manage all users"
+    ON public.users FOR UPDATE
+    USING (extensions.is_platform_admin())
+    WITH CHECK (extensions.is_platform_admin());
 
-CREATE POLICY "admins: full device management"
-    ON device_registry FOR ALL
-    USING (is_admin());
+CREATE POLICY "users: update own profile"
+    ON public.users FOR UPDATE
+    USING (id = (SELECT auth.uid()))
+    WITH CHECK (id = (SELECT auth.uid()));
 
--- ── agent_api_keys ───────────────────────────────────────────────────────────
-CREATE POLICY "admins: manage api keys"
-    ON agent_api_keys FOR ALL
-    USING (is_admin());
+-- ── devices ─────────────────────────────────────────────────────────────────
+CREATE POLICY "devices: read own"
+    ON public.devices FOR SELECT
+    USING (id = extensions.current_device_id());
 
--- ── device_enrollment_tokens ─────────────────────────────────────────────────
-CREATE POLICY "admins: manage enrollment tokens"
-    ON device_enrollment_tokens FOR ALL
-    USING (is_admin());
+CREATE POLICY "org_admins: manage organization devices"
+    ON public.devices FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
-CREATE POLICY "anon: read token for validation"
-    ON device_enrollment_tokens FOR SELECT
-    USING (TRUE);
+CREATE POLICY "org_analysts: read assigned devices"
+    ON public.devices FOR SELECT
+    USING (extensions.user_has_device_access(id));
 
--- ── telemetry_events ─────────────────────────────────────────────────────────
-CREATE POLICY "devices: insert own telemetry"
-    ON telemetry_events FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+CREATE POLICY "devices: update own"
+    ON public.devices FOR UPDATE
+    USING (id = extensions.current_device_id())
+    WITH CHECK (id = extensions.current_device_id());
 
-CREATE POLICY "analysts: read assigned telemetry"
-    ON telemetry_events FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+-- ── api_keys ────────────────────────────────────────────────────────────────
+CREATE POLICY "org_admins: manage organization api keys"
+    ON devices.api_keys FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
--- ── feature_vectors ──────────────────────────────────────────────────────────
-CREATE POLICY "devices: insert own features"
-    ON feature_vectors FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+-- ── enrollment_tokens ──────────────────────────────────────────────────────
+CREATE POLICY "org_admins: manage organization enrollment tokens"
+    ON devices.enrollment_tokens FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
-CREATE POLICY "analysts: read assigned features"
-    ON feature_vectors FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+-- ── device_assignments ─────────────────────────────────────────────────────
+CREATE POLICY "org_admins: manage organization assignments"
+    ON public.device_assignments FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
--- ── anomaly_scores ───────────────────────────────────────────────────────────
-CREATE POLICY "devices: insert own scores"
-    ON anomaly_scores FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+CREATE POLICY "org_analysts: view own assignments"
+    ON public.device_assignments FOR SELECT
+    USING (user_id = (SELECT auth.uid()));
 
-CREATE POLICY "analysts: read assigned scores"
-    ON anomaly_scores FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+-- ── telemetry events ───────────────────────────────────────────────────────
+CREATE POLICY "devices: insert own events"
+    ON telemetry.events FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
 
--- ── alert_records ────────────────────────────────────────────────────────────
+CREATE POLICY "org_admins: read organization events"
+    ON telemetry.events FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "org_analysts: read assigned device events"
+    ON telemetry.events FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
+
+-- ── feature_vectors ────────────────────────────────────────────────────────
+CREATE POLICY "devices: insert own feature vectors"
+    ON telemetry.feature_vectors FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
+
+CREATE POLICY "org_admins: read organization feature vectors"
+    ON telemetry.feature_vectors FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "org_analysts: read assigned device feature vectors"
+    ON telemetry.feature_vectors FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
+
+-- ── anomaly_scores ─────────────────────────────────────────────────────────
+CREATE POLICY "devices: insert own anomaly scores"
+    ON telemetry.anomaly_scores FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
+
+CREATE POLICY "org_admins: read organization anomaly scores"
+    ON telemetry.anomaly_scores FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "org_analysts: read assigned device anomaly scores"
+    ON telemetry.anomaly_scores FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
+
+-- ── alerts ─────────────────────────────────────────────────────────────────
 CREATE POLICY "devices: insert own alerts"
-    ON alert_records FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+    ON public.alerts FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
 
-CREATE POLICY "analysts: read assigned alerts"
-    ON alert_records FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+CREATE POLICY "org_admins: manage organization alerts"
+    ON public.alerts FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
-CREATE POLICY "analysts: update alert status"
-    ON alert_records FOR UPDATE
-    USING     (is_analyst_or_admin() AND analyst_has_device_access(device_id))
-    WITH CHECK (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+CREATE POLICY "org_analysts: read assigned device alerts"
+    ON public.alerts FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
 
--- ── tamper_evident_log ───────────────────────────────────────────────────────
-CREATE POLICY "devices: insert own log entries"
-    ON tamper_evident_log FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+CREATE POLICY "org_analysts: update assigned device alerts"
+    ON public.alerts FOR UPDATE
+    USING (extensions.user_has_device_access(device_id))
+    WITH CHECK (extensions.user_has_device_access(device_id));
 
-CREATE POLICY "analysts: read log entries"
-    ON tamper_evident_log FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+-- ── hash_chain_log ─────────────────────────────────────────────────────────
+CREATE POLICY "devices: insert own hash chain entries"
+    ON telemetry.hash_chain_log FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
 
--- ── device_health_snapshots ──────────────────────────────────────────────────
+CREATE POLICY "org_admins: read organization hash chain"
+    ON telemetry.hash_chain_log FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "org_analysts: read assigned device hash chain"
+    ON telemetry.hash_chain_log FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
+
+-- ── device_health ──────────────────────────────────────────────────────────
 CREATE POLICY "devices: insert own health"
-    ON device_health_snapshots FOR INSERT
-    WITH CHECK (device_id = current_device_id());
+    ON telemetry.device_health FOR INSERT
+    WITH CHECK (device_id = extensions.current_device_id());
 
-CREATE POLICY "analysts: read assigned health"
-    ON device_health_snapshots FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+CREATE POLICY "org_admins: read organization device health"
+    ON telemetry.device_health FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
--- ── analyst_device_assignments ───────────────────────────────────────────────
-CREATE POLICY "analysts: view own assignments"
-    ON analyst_device_assignments FOR SELECT
-    USING (auth.uid() = analyst_id);
+CREATE POLICY "org_analysts: read assigned device health"
+    ON telemetry.device_health FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
 
-CREATE POLICY "admins: view all assignments"
-    ON analyst_device_assignments FOR SELECT
-    USING (is_admin());
-
-CREATE POLICY "admins: manage assignments"
-    ON analyst_device_assignments FOR ALL
-    USING (is_admin());
-
--- ── incident_cases ───────────────────────────────────────────────────────────
-CREATE POLICY "analysts: read own or assigned cases"
-    ON incident_cases FOR SELECT
-    USING (
-        is_analyst_or_admin()
-        AND (created_by = auth.uid() OR assigned_to = auth.uid() OR is_admin())
-    );
-
-CREATE POLICY "analysts: create cases"
-    ON incident_cases FOR INSERT
-    WITH CHECK (is_analyst_or_admin() AND created_by = auth.uid());
-
-CREATE POLICY "analysts: update own or assigned cases"
-    ON incident_cases FOR UPDATE
-    USING (
-        is_analyst_or_admin()
-        AND (created_by = auth.uid() OR assigned_to = auth.uid() OR is_admin())
-    );
-
--- ── case_alerts ──────────────────────────────────────────────────────────────
-CREATE POLICY "analysts: manage case alerts"
-    ON case_alerts FOR ALL
-    USING (
-        is_analyst_or_admin()
-        AND EXISTS (
-            SELECT 1 FROM incident_cases ic
-            WHERE ic.id = case_alerts.case_id
-              AND (ic.created_by = auth.uid() OR ic.assigned_to = auth.uid() OR is_admin())
-        )
-    );
-
--- ── case_notes ───────────────────────────────────────────────────────────────
-CREATE POLICY "analysts: manage case notes"
-    ON case_notes FOR ALL
-    USING (
-        is_analyst_or_admin()
-        AND EXISTS (
-            SELECT 1 FROM incident_cases ic
-            WHERE ic.id = case_notes.case_id
-              AND (ic.created_by = auth.uid() OR ic.assigned_to = auth.uid() OR is_admin())
-        )
-    );
-
--- ── audit_trail ──────────────────────────────────────────────────────────────
-CREATE POLICY "analysts: read audit trail"
-    ON audit_trail FOR SELECT
-    USING (is_analyst_or_admin());
-
--- ── notification_rules ───────────────────────────────────────────────────────
-CREATE POLICY "admins: manage notification rules"
-    ON notification_rules FOR ALL
-    USING (is_admin());
-
-CREATE POLICY "analysts: read own rules"
-    ON notification_rules FOR SELECT
-    USING (is_analyst_or_admin() AND created_by = auth.uid());
-
--- ── agent_config ─────────────────────────────────────────────────────────────
-CREATE POLICY "devices: read own config"
-    ON agent_config FOR SELECT
-    USING (device_id = current_device_id() OR device_id IS NULL);
-
-CREATE POLICY "admins: manage config"
-    ON agent_config FOR ALL
-    USING (is_admin());
-
--- ── privacy_settings ─────────────────────────────────────────────────────────
-CREATE POLICY "users: read privacy settings"
-    ON privacy_settings FOR SELECT
-    USING (
-        device_id IS NULL
-        OR device_id = current_device_id()
-        OR (is_analyst_or_admin() AND analyst_has_device_access(device_id))
-    );
-
-CREATE POLICY "users: insert privacy settings"
-    ON privacy_settings FOR INSERT
-    WITH CHECK (
-        device_id IS NULL
-        OR device_id = current_device_id()
-        OR (is_analyst_or_admin() AND analyst_has_device_access(device_id))
-    );
-
-CREATE POLICY "users: update privacy settings"
-    ON privacy_settings FOR UPDATE
-    USING (
-        device_id IS NULL
-        OR device_id = current_device_id()
-        OR (is_analyst_or_admin() AND analyst_has_device_access(device_id))
-    )
-    WITH CHECK (
-        device_id IS NULL
-        OR device_id = current_device_id()
-        OR (is_analyst_or_admin() AND analyst_has_device_access(device_id))
-    );
-
--- ── sync_queue ───────────────────────────────────────────────────────────────
+-- ── sync_queue ─────────────────────────────────────────────────────────────
 CREATE POLICY "devices: manage own sync queue"
-    ON sync_queue FOR ALL
-    USING (device_id = current_device_id());
+    ON internal.sync_queue FOR ALL
+    USING (device_id = extensions.current_device_id());
 
-CREATE POLICY "analysts: read sync queue"
-    ON sync_queue FOR SELECT
-    USING (is_analyst_or_admin() AND analyst_has_device_access(device_id));
+CREATE POLICY "org_admins: read organization sync queue"
+    ON internal.sync_queue FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
-CREATE POLICY "admins: manage all sync queue"
-    ON sync_queue FOR ALL
-    USING (is_admin());
+-- ── retention_settings ─────────────────────────────────────────────────────
+CREATE POLICY "org_admins: manage organization retention"
+    ON public.retention_settings FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
 
--- ── retention_settings ───────────────────────────────────────────────────────
-CREATE POLICY "analysts: read retention settings"
-    ON retention_settings FOR SELECT
-    USING (is_analyst_or_admin());
+CREATE POLICY "platform_admins: view all retention"
+    ON public.retention_settings FOR SELECT
+    USING (extensions.is_platform_admin());
 
-CREATE POLICY "admins: manage retention settings"
-    ON retention_settings FOR ALL
-    USING (is_admin());
+-- ── privacy_settings ──────────────────────────────────────────────────────
+CREATE POLICY "org_admins: manage organization privacy settings"
+    ON public.privacy_settings FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "org_analysts: read assigned device privacy settings"
+    ON public.privacy_settings FOR SELECT
+    USING (extensions.user_has_device_access(device_id));
+
+-- ── config ─────────────────────────────────────────────────────────────────
+CREATE POLICY "devices: read own config"
+    ON devices.config FOR SELECT
+    USING (device_id = extensions.current_device_id());
+
+CREATE POLICY "org_admins: manage organization device config"
+    ON devices.config FOR ALL
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+-- ── audit_logs ─────────────────────────────────────────────────────────────
+CREATE POLICY "service: insert audit logs"
+    ON internal.audit_logs FOR INSERT
+    WITH CHECK (FALSE);
+
+CREATE POLICY "org_admins: read organization audit logs"
+    ON internal.audit_logs FOR SELECT
+    USING (extensions.is_org_admin() AND organization_id = extensions.current_organization_id());
+
+CREATE POLICY "platform_admins: read all audit logs"
+    ON internal.audit_logs FOR SELECT
+    USING (extensions.is_platform_admin());
 
 -- ─── Grants ───────────────────────────────────────────────────────────────────
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
 
-GRANT SELECT ON device_enrollment_tokens TO anon;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
 
-GRANT SELECT, INSERT, UPDATE ON analyst_users               TO authenticated;
-GRANT SELECT, UPDATE          ON device_registry            TO authenticated;
-GRANT SELECT                  ON agent_api_keys             TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON device_enrollment_tokens   TO authenticated;
-GRANT SELECT                  ON telemetry_events           TO authenticated;
-GRANT SELECT                  ON feature_vectors            TO authenticated;
-GRANT SELECT                  ON anomaly_scores             TO authenticated;
-GRANT SELECT, UPDATE          ON alert_records              TO authenticated;
-GRANT SELECT                  ON tamper_evident_log         TO authenticated;
-GRANT SELECT                  ON device_health_snapshots    TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON analyst_device_assignments TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON incident_cases             TO authenticated;
-GRANT SELECT, INSERT          ON case_alerts                TO authenticated;
-GRANT SELECT, INSERT          ON case_notes                 TO authenticated;
-GRANT SELECT                  ON audit_trail                TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON notification_rules         TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON agent_config               TO authenticated;
-GRANT SELECT, INSERT, UPDATE  ON privacy_settings           TO authenticated;
-GRANT SELECT                  ON sync_queue                 TO authenticated;
-GRANT SELECT                  ON retention_settings         TO authenticated;
-GRANT USAGE                   ON SEQUENCE case_seq          TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.users                  TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.devices                TO authenticated;
+GRANT SELECT, INSERT                  ON telemetry.events              TO authenticated;
+GRANT SELECT                          ON telemetry.feature_vectors     TO authenticated;
+GRANT SELECT                          ON telemetry.anomaly_scores      TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.alerts                 TO authenticated;
+GRANT SELECT                          ON telemetry.hash_chain_log      TO authenticated;
+GRANT SELECT                          ON telemetry.device_health       TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.device_assignments     TO authenticated;
+GRANT SELECT                          ON internal.audit_logs           TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.privacy_settings       TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE  ON internal.sync_queue           TO authenticated;
+GRANT SELECT, INSERT, UPDATE          ON public.retention_settings     TO authenticated;
+GRANT SELECT                          ON organization.organizations    TO authenticated;
+GRANT SELECT                          ON organization.billing          TO authenticated;
+
+REVOKE ALL ON devices.api_keys        FROM authenticated;
+REVOKE ALL ON devices.config          FROM authenticated;
+
+GRANT ALL ON ALL TABLES    IN SCHEMA public       TO service_role;
+GRANT ALL ON ALL TABLES    IN SCHEMA devices      TO service_role;
+GRANT ALL ON ALL TABLES    IN SCHEMA telemetry    TO service_role;
+GRANT ALL ON ALL TABLES    IN SCHEMA internal     TO service_role;
+GRANT ALL ON ALL TABLES    IN SCHEMA organization TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public       TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA devices      TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA telemetry    TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA internal     TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA organization TO service_role;
+GRANT ALL ON ALL ROUTINES  IN SCHEMA public       TO service_role;
+GRANT ALL ON ALL ROUTINES  IN SCHEMA extensions   TO service_role;
+
+GRANT SELECT ON public.alert_summary          TO authenticated;
+GRANT SELECT ON public.device_log_summary     TO authenticated;
+
+GRANT EXECUTE ON FUNCTION public.validate_enrollment_token(TEXT) TO anon, authenticated;
+
+-- ─── Function permission hardening ────────────────────────────────────────────
+REVOKE EXECUTE ON FUNCTION public.set_updated_at()               FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.sync_organization_to_jwt() FROM PUBLIC;
+
+REVOKE EXECUTE ON FUNCTION extensions.current_organization_id()                FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.is_platform_admin()                      FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.is_org_admin()                           FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.is_authenticated_device()                FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.user_has_device_access(UUID)             FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.get_user_assigned_devices()              FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.current_device_id()                      FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.get_device_id_from_headers()             FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.get_api_key_from_headers()               FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION extensions.validate_enrollment_token(TEXT)          FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION extensions.current_organization_id()                 TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.is_platform_admin()                       TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.is_org_admin()                            TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.is_authenticated_device()                 TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.user_has_device_access(UUID)              TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.get_user_assigned_devices()               TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.current_device_id()                       TO authenticated;
+GRANT EXECUTE ON FUNCTION extensions.get_device_id_from_headers()             TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION extensions.get_api_key_from_headers()               TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION extensions.validate_enrollment_token(TEXT)          TO authenticated;
+
+-- ─── Realtime publications ────────────────────────────────────────────────────
+DO $$
+BEGIN
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.alerts;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.devices;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE internal.sync_queue;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE telemetry.events;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+END $$;

@@ -45,6 +45,8 @@ export interface Alert {
   collection_agent_version: string;
   inference_latency_ms: number;
   telemetry_source: TelemetrySource;
+  alert_type: string;
+  detector_type: string;
   // display
   title: string;
   description: string | null;
