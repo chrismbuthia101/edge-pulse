@@ -1,6 +1,3 @@
-# Report Generator
-# Generates comprehensive, human-readable anomaly reports.
-
 from edgepulse.utils.log_handler import get_logger
 import uuid
 from typing import Dict, Optional
@@ -17,7 +14,6 @@ class ReportGenerator:
         self.device_id = device_id
 
     def assign_severity(self, anomaly_score: float) -> SeverityLevel:
-        """Assign severity level based on anomaly score using shared enum"""
         if anomaly_score > 0.9:
             return SeverityLevel.CRITICAL
         elif anomaly_score > 0.7:
@@ -33,27 +29,23 @@ class ReportGenerator:
         explanation: Dict,
         context: Optional[Dict] = None,
     ) -> Dict:
-        # Support both legacy "score" field and standardized "anomaly_score"
         anomaly_score = anomaly_data.get("anomaly_score", anomaly_data.get("score", 0.0))
         anomaly_label = anomaly_data.get("label", 0)
         
         severity = self.assign_severity(anomaly_score)
         
-        # Extract top contributing features
         top_features = explanation.get("top_features", [])
         explanation_text = explanation.get("explanation_text", "No explanation available")
         
-        # Determine anomaly type
         anomaly_type = self._determine_anomaly_type(top_features, context)
         
-        # Generate recommended actions
         recommended_actions = self._generate_recommended_actions(severity, anomaly_type, top_features)
         
         report = {
             "alert_id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat(),
             "device_id": self.device_id,
-            "severity": severity.value,  # Convert enum to string value
+            "severity": severity.value,
             "anomaly_score": float(anomaly_score),
             "anomaly_label": int(anomaly_label),
             "anomaly_type": anomaly_type,
@@ -65,7 +57,7 @@ class ReportGenerator:
             "context": context or {},
             "recommended_actions": recommended_actions,
             "forensic_data": {
-                "log_hash": None,  # Will be filled by log manager
+                "log_hash": None,
                 "related_events": [],
             },
         }
@@ -78,10 +70,6 @@ class ReportGenerator:
         explanation: Dict,
         context: Optional[Dict] = None,
     ) -> Dict:
-        """
-        Backwards-compatible wrapper used by components that still call
-        generate_anomaly_report. Internally delegates to generate_alert_report.
-        """
         return self.generate_alert_report(anomaly_data, explanation, context)
 
     def _determine_anomaly_type(
@@ -92,7 +80,6 @@ class ReportGenerator:
         
         feature_names = [f.get("feature", "") for f in top_features]
         
-        # Check for specific patterns
         if any("network" in name.lower() for name in feature_names):
             if any("unusual" in name.lower() or "entropy" in name.lower() for name in feature_names):
                 return "network_anomaly"
@@ -144,7 +131,6 @@ class ReportGenerator:
             actions.append("Log for future analysis")
             actions.append("Monitor if pattern persists")
         
-        # Type-specific actions
         if "network" in anomaly_type:
             actions.append("Review network connections and firewall rules")
             actions.append("Check for unauthorized network access")
@@ -194,6 +180,5 @@ class ReportGenerator:
         return "\n".join(lines)
 
     def format_as_json(self, report: Dict) -> str:
-        """Format report as JSON string."""
         import json
         return json.dumps(report, indent=2)

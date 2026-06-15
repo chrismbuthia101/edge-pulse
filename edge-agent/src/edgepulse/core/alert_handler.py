@@ -1,11 +1,3 @@
-"""
-AlertHandler
-============
-Single-responsibility service that processes anomaly detections, generates
-alerts, persists them to the local database, fires local notifications, and
-enqueues the alert for cloud sync.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -20,9 +12,8 @@ if TYPE_CHECKING:
     from edgepulse.alerts.alert_engine import AlertEngine
     from edgepulse.alerts.notifier import LocalNotifier
     from edgepulse.analysis.report_generator import ReportGenerator
-    from edgepulse.storage.database import DatabaseManager
-    from edgepulse.storage.chain import HashChain
-    from edgepulse.sync.async_queue import AsyncSyncQueue
+    from edgepulse.storage.database import Database
+    from edgepulse.sync.sync_queue import SyncQueue
 
 logger = get_logger(__name__)
 
@@ -33,9 +24,8 @@ class AlertHandler:
         device_id: str,
         report_generator: ReportGenerator,
         alert_engine: AlertEngine,
-        database: DatabaseManager,
-        hash_chain: HashChain,
-        sync_queue: Optional[AsyncSyncQueue],
+        database: Database,
+        sync_queue: Optional[SyncQueue],
         metrics: InMemoryMetricsCollector,
         notifier: Optional[LocalNotifier] = None,
     ) -> None:
@@ -43,14 +33,9 @@ class AlertHandler:
         self.report_generator = report_generator
         self.alert_engine = alert_engine
         self.database = database
-        self.hash_chain = hash_chain
         self.sync_queue = sync_queue
         self.metrics = metrics
         self.notifier = notifier
-
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
 
     async def handle(
         self,
@@ -59,7 +44,6 @@ class AlertHandler:
         severity_label: str,
         explainer: Optional[Any] = None,
     ) -> None:
-        """Process one detection event end-to-end."""
 
         await self._persist_detection(detection)
 
@@ -96,18 +80,12 @@ class AlertHandler:
 
         await self._persist_alert(alert, detection, explanation, severity_label)
 
-        self._append_to_chain(detection, alert)
-
         alert_severity = str(alert.get("severity", severity_label))
         self.metrics.record_alert(alert_severity)
 
         await self._notify(alert)
 
         await self._enqueue_for_sync(alert, severity_label)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     async def _persist_detection(self, detection: Dict[str, Any]) -> None:
         try:
@@ -187,22 +165,6 @@ class AlertHandler:
         except Exception as exc:
             logger.error("alert_persist_error", error=str(exc))
 
-    def _append_to_chain(
-        self,
-        detection: Dict[str, Any],
-        alert: Dict[str, Any],
-    ) -> None:
-        try:
-            det_entry = self.hash_chain.create_entry("anomaly_detected", detection)
-            if not self.hash_chain.append(det_entry):
-                logger.error("hash_chain_append_failed", event_type="anomaly_detected")
-
-            alert_entry = self.hash_chain.create_entry("alert_generated", alert)
-            if not self.hash_chain.append(alert_entry):
-                logger.error("hash_chain_append_failed", event_type="alert_generated")
-        except Exception as exc:
-            logger.error("hash_chain_error", error=str(exc))
-
     async def _notify(self, alert: Dict[str, Any]) -> None:
         if self.notifier is None:
             return
@@ -229,13 +191,11 @@ class AlertHandler:
                 "anomaly_type", "behavioral_deviation"
             )
 
-            # Get detector type from the alert's anomaly data
             detector = alert.get("anomaly", {}).get("detector", "unknown")
 
             payload = {
                 "alert_id": alert.get("alert_id"),
                 "device_id": self.device_id,
-                "device_name": self.device_id,
                 "title": anomaly_type,
                 "description": alert.get("anomaly", {}).get(
                     "description", "Anomaly detected"
@@ -248,7 +208,6 @@ class AlertHandler:
                 "confidence": alert.get("anomaly", {}).get("confidence", 0.0),
                 "anomaly_score": alert.get("anomaly_score", 0.0),
                 "model_id": f"iforest-{self.device_id[:8]}",
-                "collection_agent_version": "1.0.0",
                 "inference_latency_ms": 0,
                 "telemetry_source": "PROCESS",
                 "created_at": datetime.utcnow().isoformat() + "Z",

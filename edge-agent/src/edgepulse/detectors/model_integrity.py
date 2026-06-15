@@ -1,9 +1,4 @@
-"""
-Model Integrity Verification for EdgePulse
 
-Implements model file integrity verification with SHA-256 hashing,
-digital signatures, and version tracking for ML models.
-"""
 
 import hashlib
 import json
@@ -25,7 +20,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class ModelMetadata:
-    """Model metadata for integrity verification"""
     model_id: str
     model_version: str
     model_type: str  # 'isolation_forest', 'autoencoder'
@@ -41,7 +35,6 @@ class ModelMetadata:
 
 @dataclass
 class IntegrityVerification:
-    """Result of model integrity verification"""
     is_valid: bool
     model_id: str
     verification_time: datetime
@@ -53,7 +46,6 @@ class IntegrityVerification:
 
 
 class ModelIntegrityVerifier:
-    """Verifies model file integrity and authenticity"""
 
     def __init__(self, models_directory: Optional[str] = None):
         from edgepulse.utils.path_manager import PathManager
@@ -76,7 +68,6 @@ class ModelIntegrityVerifier:
         logger.info(f"Model integrity verifier initialized for: {self.models_directory}")
 
     def _load_integrity_data(self):
-        """Load existing integrity data from file"""
         try:
             if self.integrity_db_path.exists():
                 with open(self.integrity_db_path, "r") as f:
@@ -98,7 +89,6 @@ class ModelIntegrityVerifier:
             self.integrity_data = {}
 
     def _save_integrity_data(self):
-        """Save integrity data to file"""
         try:
             serializable_data = {}
             for model_id, metadata in self.integrity_data.items():
@@ -117,7 +107,6 @@ class ModelIntegrityVerifier:
             logger.error(f"Failed to save integrity data: {e}")
 
     def _get_signing_key(self) -> Optional[str]:
-        """Get or generate model signing key"""
         if not keyring:
             logger.warning("keyring not available, model signatures disabled")
             return None
@@ -142,7 +131,6 @@ class ModelIntegrityVerifier:
             return None
 
     def _calculate_file_hash(self, file_path: Path) -> str:
-        """Calculate SHA-256 hash of model file"""
         try:
             hash_sha256 = hashlib.sha256()
             with open(file_path, "rb") as f:
@@ -154,7 +142,6 @@ class ModelIntegrityVerifier:
             raise EdgePulseError(f"Hash calculation failed: {e}")
 
     def _sign_model(self, model_data: Dict[str, Any]) -> Optional[str]:
-        """Create digital signature for model metadata"""
         signing_key = self._get_signing_key()
         if not signing_key:
             return None
@@ -178,7 +165,6 @@ class ModelIntegrityVerifier:
             return None
 
     def _verify_signature(self, model_data: Dict[str, Any], signature: str) -> bool:
-        """Verify digital signature of model metadata"""
         try:
             signing_key = self._get_signing_key()
             if not signing_key:
@@ -208,7 +194,6 @@ class ModelIntegrityVerifier:
         model_type: str,
         file_path: str,
     ) -> ModelMetadata:
-        """Register a new model with integrity verification"""
         try:
             file_path_obj = Path(file_path)
 
@@ -254,7 +239,6 @@ class ModelIntegrityVerifier:
             raise EdgePulseError(f"Model registration failed: {e}")
 
     async def verify_model(self, model_id: str) -> IntegrityVerification:
-        """Verify model integrity"""
         try:
             if model_id not in self.integrity_data:
                 return IntegrityVerification(
@@ -344,7 +328,6 @@ class ModelIntegrityVerifier:
             )
 
     async def verify_all_models(self) -> Dict[str, IntegrityVerification]:
-        """Verify all registered models"""
         results = {}
         for model_id in self.integrity_data:
             results[model_id] = await self.verify_model(model_id)
@@ -352,15 +335,12 @@ class ModelIntegrityVerifier:
         return results
 
     def get_model_metadata(self, model_id: str) -> Optional[ModelMetadata]:
-        """Get model metadata"""
         return self.integrity_data.get(model_id)
 
     def list_models(self) -> List[str]:
-        """List all registered model IDs"""
         return list(self.integrity_data.keys())
 
     def remove_model(self, model_id: str) -> bool:
-        """Remove model from integrity database"""
         try:
             if model_id in self.integrity_data:
                 del self.integrity_data[model_id]
@@ -373,7 +353,6 @@ class ModelIntegrityVerifier:
             return False
 
     async def cleanup_old_models(self, days_to_keep: int = 30):
-        """Clean up old model integrity records"""
         try:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
@@ -394,7 +373,6 @@ class ModelIntegrityVerifier:
             return 0
 
     def get_integrity_report(self) -> Dict[str, Any]:
-        """Generate integrity verification report"""
         try:
             total_models = len(self.integrity_data)
             verified_models = sum(1 for m in self.integrity_data.values() if m.is_verified)
@@ -424,5 +402,4 @@ class ModelIntegrityVerifier:
 def create_model_integrity_verifier(
     models_directory: Optional[str] = None,
 ) -> ModelIntegrityVerifier:
-    """Create model integrity verifier"""
     return ModelIntegrityVerifier(models_directory)

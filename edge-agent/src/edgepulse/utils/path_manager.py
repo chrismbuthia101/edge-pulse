@@ -4,27 +4,54 @@ from pathlib import Path
 from typing import Optional
 
 
-def _detect_install_mode() -> bool:
-    return str(Path(__file__)).startswith("/opt/edgepulse")
-
-
 class PathManager:
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
+        self._system_install = False
+
         if base_dir is not None:
             self.base_dir = Path(base_dir).resolve()
-            self._system_install = False
         elif env_base := os.environ.get("EDGE_PULSE_DATA_DIR"):
             self.base_dir = Path(env_base).resolve()
-            self._system_install = False
-        elif _detect_install_mode():
-            self.base_dir = Path(os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR", "/var/lib/edgepulse"))
+        elif self._is_system_install():
+            self.base_dir = self._system_data_dir()
             self._system_install = True
         else:
-            self.base_dir = Path(__file__).parent.parent.parent.resolve()
-            self._system_install = False
+            self.base_dir = self._dev_data_dir()
 
         self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _is_windows() -> bool:
+        return sys.platform == "win32"
+
+    @staticmethod
+    def _safe_program_data() -> Path:
+        return Path("C:\\ProgramData").resolve()
+
+    @staticmethod
+    def _is_system_install() -> bool:
+        if PathManager._is_windows():
+            return (PathManager._safe_program_data() / "EdgePulse").exists()
+        return str(Path(__file__).resolve()).startswith("/opt/edgepulse")
+
+    @staticmethod
+    def _system_data_dir() -> Path:
+        if PathManager._is_windows():
+            return PathManager._safe_program_data() / "EdgePulse"
+        return Path(os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR", "/var/lib/edgepulse"))
+
+    @staticmethod
+    def _system_config_dir() -> Path:
+        if PathManager._is_windows():
+            return PathManager._safe_program_data() / "EdgePulse" / "config"
+        return Path(os.environ.get("EDGE_PULSE_SYSTEM_CONFIG_DIR", "/etc/edgepulse"))
+
+    @staticmethod
+    def _dev_data_dir() -> Path:
+        if PathManager._is_windows():
+            return Path.home() / ".edgepulse"
+        return Path(__file__).resolve().parent.parent.parent
 
     @property
     def data_dir(self) -> Path:
@@ -46,10 +73,7 @@ class PathManager:
 
     @property
     def models_dir(self) -> Path:
-        if self._system_install:
-            path = Path(os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR", "/var/lib/edgepulse")) / "models"
-        else:
-            path = self.base_dir / "models"
+        path = self.base_dir / "models"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -66,12 +90,9 @@ class PathManager:
     def get_baseline_path(self, device_id: str) -> Path:
         return self.models_dir / f"{device_id}_baseline.pkl"
 
-    def get_hash_chain_path(self, device_id: str) -> Path:
-        return self.logs_dir / f"{device_id}_hash_chain.json"
-
     def get_config_path(self) -> Path:
         if self._system_install:
-            return Path(os.environ.get("EDGE_PULSE_SYSTEM_CONFIG_DIR", "/etc/edgepulse")) / "agent_config.json"
+            return self._system_config_dir() / "agent_config.json"
         config_dir = Path.home() / ".edge-pulse"
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir / "config.yaml"

@@ -1,22 +1,21 @@
-"""
-EdgePulse Agent (core/agent.py)
-"""
+
 
 import asyncio
+import json
 import signal
-import platform
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
+from edgepulse.platform import is_windows
+
 from edgepulse.core.events_bus import EventBus, Event, EventType, get_event_bus
 from edgepulse.core.async_pipeline import AsyncPipeline
 from edgepulse.config.settings import AgentSettings
 from edgepulse.utils.log_handler import configure_logging, get_logger
-from edgepulse.storage.database import DatabaseManager
-from edgepulse.storage.chain import HashChain
-from edgepulse.sync.async_queue import AsyncSyncQueue
+from edgepulse.storage.database import Database
+from edgepulse.sync.sync_queue import SyncQueue
 from edgepulse.api.api_server import AdaptiveAPIServer, register_detector_health_provider
 
 from edgepulse.collectors.system_collector import SystemMetricsCollector
@@ -27,24 +26,21 @@ from edgepulse.features.feature_normalizer import DeviceNormalizer
 from edgepulse.detectors.isolation_forest_detector import IsolationForestDetector
 from edgepulse.detectors.autoencoder_reconstruction_detector import AutoencoderDetector
 from edgepulse.detectors.ensemble_detector import EnsembleDetector
-from edgepulse.analysis.explainable_ai import (
-    ExplainableAIManager,
-    ExplanationType,
-    StrictExplanationJSON,
-)
 from edgepulse.analysis.report_generator import ReportGenerator
 from edgepulse.alerts.alert_engine import AlertEngine
 from edgepulse.alerts.notifier import LocalNotifier
-from edgepulse.sync.supabase import SupabaseSync
 from edgepulse.config.privacy import PrivacyController
 from edgepulse.utils.path_manager import PathManager
-from edgepulse.security.tamper_logger import TamperEvidentLogger
 from edgepulse.utils.error_handler import (
     EdgePulseError, ConfigurationError, ModelError,
-    DetectionError, SyncError, NetworkError,
+    SyncError, NetworkError,
 )
 from edgepulse.shared.metrics import create_metrics_collector, StandardMetrics
-from edgepulse.shared.schemas import DetectionEvent
+from edgepulse.core.device_registry import DeviceRegistry
+from edgepulse.core.explainer_service import ExplainerService
+from edgepulse.core.alert_handler import AlertHandler
+from edgepulse.core.sync_service import SyncService
+from edgepulse.utils.version import get_agent_version
 
 logger = get_logger(__name__)
 
@@ -52,22 +48,23 @@ _WARMUP_CYCLES = 1
 
 
 class EdgePulseAgent:
-    """Async EdgePulse agent with dependency injection and modern architecture"""
 
     def __init__(
         self,
         settings: Optional[AgentSettings] = None,
         device_id: Optional[str] = None,
-        # Dependency injection
         event_bus: Optional[EventBus] = None,
-        database: Optional[DatabaseManager] = None,
-        sync_queue: Optional[AsyncSyncQueue] = None,
+        database: Optional[Database] = None,
+        sync_queue: Optional[SyncQueue] = None,
         api_server: Optional[AdaptiveAPIServer] = None,
-        # Component injection
         collectors: Optional[List[Any]] = None,
         detectors: Optional[List[Any]] = None,
         feature_extractor: Optional[Any] = None,
         alert_engine: Optional[Any] = None,
+        device_registry: Optional[DeviceRegistry] = None,
+        explainer_service: Optional[ExplainerService] = None,
+        alert_handler: Optional[AlertHandler] = None,
+        sync_service: Optional[SyncService] = None,
     ):
         self.settings = settings or AgentSettings()
         if device_id:
@@ -89,10 +86,10 @@ class EdgePulseAgent:
         self.device_id = self.settings.device_id
 
         self.event_bus = event_bus or get_event_bus()
-        self.database = database or DatabaseManager(
+        self.database = database or Database(
             PathManager().data_dir / "edgepulse.db"
         )
-        self.sync_queue = sync_queue or AsyncSyncQueue(
+        self.sync_queue = sync_queue or SyncQueue(
             PathManager().data_dir / "sync",
             max_size=self.settings.sync.offline_queue_max,
             max_retry_attempts=self.settings.sync.retry_max_attempts,
@@ -104,21 +101,15 @@ class EdgePulseAgent:
             min_memory_mb=self.settings.api.min_memory_mb,
             min_cpu_cores=self.settings.api.min_cpu_cores,
         )
-        self.hash_chain = HashChain(self.device_id, PathManager())
         self.metrics = create_metrics_collector("agent", self.device_id)
-        self.tamper_logger: Optional[TamperEvidentLogger] = None
         self._health_snapshot_interval = 300
-        self._tamper_log_sync_interval = 60
-        self._telemetry_sync_interval = 120
 
-        # State
         self._running = False
         self._shutdown_event: Optional[asyncio.Event] = None
         self._tasks: List[asyncio.Task] = []
         self._pipeline: Optional[AsyncPipeline] = None
         self._sync_client: Optional[Any] = None
 
-        # Warmup cycle counter — alerts are suppressed until this reaches 0.
         self._warmup_cycles_remaining: int = _WARMUP_CYCLES
 
         self._collectors = collectors or self._create_collectors()
@@ -126,17 +117,15 @@ class EdgePulseAgent:
         self._feature_extractor = feature_extractor or self._create_feature_extractor()
         self._alert_engine = alert_engine or self._create_alert_engine()
 
-        self._explainer_manager: Optional[ExplainableAIManager] = None
-        self._explainer_init_attempted: bool = False
+        self.device_registry = device_registry or DeviceRegistry(
+            self.device_id, self.database,
+            agent_version=get_agent_version(),
+        )
+        self.explainer_service = explainer_service or ExplainerService(self.device_id)
 
         logger.info("async_agent_initialized", device_id=self.device_id)
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     async def initialize(self) -> None:
-        """Initialize the agent and all components"""
         logger.info("initializing_async_agent", device_id=self.device_id)
 
         try:
@@ -166,14 +155,17 @@ class EdgePulseAgent:
                 event_bus=self.event_bus,
                 metrics_collector=self.metrics,
                 database=self.database,
+                sync_queue=self.sync_queue,
             )
 
             await self._setup_event_handlers()
 
-            await self._initialize_tamper_logger()
-
             if self.settings.should_enable_sync():
-                await self._initialize_sync_client()
+                self.sync_service = self._initialize_sync_service()
+                if self.sync_service is not None:
+                    ok = await self.sync_service.initialize()
+                    if ok:
+                        self._sync_client = self.sync_service.client
 
             logger.info("async_agent_initialized_successfully", device_id=self.device_id)
 
@@ -182,7 +174,6 @@ class EdgePulseAgent:
             raise EdgePulseError(f"Failed to initialize agent: {e}") from e
 
     async def start(self) -> None:
-        """Start the agent"""
         if self._running:
             logger.warning("agent_already_running")
             return
@@ -197,8 +188,8 @@ class EdgePulseAgent:
             if self._pipeline:
                 await self._pipeline.start(self.settings.get_collection_interval_seconds())
 
-            if self._sync_client:
-                await self.sync_queue.start_worker(self._sync_client)
+            if self.sync_service:
+                await self.sync_service.start_worker()
 
             if self.settings.should_enable_api():
                 await self.api_server.start()
@@ -211,17 +202,6 @@ class EdgePulseAgent:
                 timestamp=datetime.utcnow(),
                 source="async_agent",
             ))
-
-            try:
-                start_entry = self.hash_chain.create_entry(
-                    "agent_started", {"device_id": self.device_id}
-                )
-                if not self.hash_chain.append(start_entry):
-                    logger.error("hash_chain_append_failed", event_type="agent_started")
-            except Exception as e:
-                logger.error("hash_chain_error", error=str(e))
-
-            await self._log_tamper_event("SYSTEM", {"device_id": self.device_id})
 
             logger.info("agent_started", device_id=self.device_id)
 
@@ -245,7 +225,6 @@ class EdgePulseAgent:
             raise EdgePulseError(f"Failed to start agent: {e}") from e
 
     async def stop(self) -> None:
-        """Stop the agent gracefully"""
         if not self._running:
             return
 
@@ -272,11 +251,10 @@ class EdgePulseAgent:
             if self.api_server:
                 await self.api_server.stop()
 
-            if self.sync_queue:
+            if self.sync_service:
+                await self.sync_service.stop()
+            elif self.sync_queue:
                 await self.sync_queue.stop()
-
-            if self._sync_client:
-                await self._sync_client.close()
 
             await self._save_state()
             await self.event_bus.publish(Event(
@@ -295,7 +273,6 @@ class EdgePulseAgent:
             raise EdgePulseError(f"Failed to stop agent: {e}") from e
 
     async def run_forever(self) -> None:
-        """Run the agent until shutdown signal"""
         await self.initialize()
         await self.start()
 
@@ -313,17 +290,12 @@ class EdgePulseAgent:
 
     @asynccontextmanager
     async def lifespan(self):
-        """Context manager for agent lifecycle"""
         await self.initialize()
         try:
             await self.start()
             yield self
         finally:
             await self.stop()
-
-    # ------------------------------------------------------------------
-    # Signal handling
-    # ------------------------------------------------------------------
 
     def _setup_signal_handlers(self) -> None:
         loop = asyncio.get_running_loop()
@@ -333,7 +305,7 @@ class EdgePulseAgent:
             if self._shutdown_event and not self._shutdown_event.is_set():
                 self._shutdown_event.set()
 
-        if platform.system() == "Windows":
+        if is_windows():
             def _windows_sigint_handler(signum, frame) -> None:
                 loop.call_soon_threadsafe(request_shutdown)
 
@@ -347,10 +319,6 @@ class EdgePulseAgent:
             loop.add_signal_handler(signal.SIGINT, request_shutdown)
             loop.add_signal_handler(signal.SIGTERM, request_shutdown)
             logger.debug("signal_handlers_registered", platform="unix")
-
-    # ------------------------------------------------------------------
-    # Component factories
-    # ------------------------------------------------------------------
 
     def _create_collectors(self) -> List[Any]:
         collectors = [
@@ -425,10 +393,6 @@ class EdgePulseAgent:
             min_severity=self.settings.alerting.min_severity,
         )
 
-    # ------------------------------------------------------------------
-    # Initialization helpers
-    # ------------------------------------------------------------------
-
     async def _initialize_components(self) -> None:
         for collector in self._collectors:
             if hasattr(collector, 'start'):
@@ -455,6 +419,16 @@ class EdgePulseAgent:
         if self.settings.alerting.enable_local_notifications:
             self.notifier = LocalNotifier()
 
+        self.alert_handler = AlertHandler(
+            device_id=self.device_id,
+            report_generator=self.report_generator,
+            alert_engine=self._alert_engine,
+            database=self.database,
+            sync_queue=self.sync_queue,
+            metrics=self.metrics,
+            notifier=getattr(self, 'notifier', None),
+        )
+
         primary_detectors = [d for d in self._detectors if hasattr(d, "get_health")]
 
         if primary_detectors:
@@ -464,8 +438,9 @@ class EdgePulseAgent:
                 "detector_health_provider_registered",
                 detector=primary.__class__.__name__,
             )
-            # Initialise the explainer now that we have a trained model.
-            self._initialize_explainer()
+            self.explainer_service.try_initialize(
+                self._detectors, self._feature_extractor
+            )
         else:
             def _no_detector_health():
                 return {
@@ -478,134 +453,27 @@ class EdgePulseAgent:
             register_detector_health_provider(_no_detector_health)
             logger.warning("no_trained_detector_health_provider_registered")
 
-        # Register device in local DB
-        try:
-            from edgepulse.shared.schemas import DeviceInfo, DeviceStatus
-            device_info = DeviceInfo(
-                device_id=self.device_id,
-                status=DeviceStatus.ONLINE,
-                last_seen=datetime.utcnow().isoformat(),
-                version="1.0.0",
-            )
-            await self.database.upsert_device(device_info)
-            logger.info("device_registered_in_db", device_id=self.device_id)
-        except Exception as e:
-            logger.error("device_registration_error", error=str(e))
+        await self.device_registry.register()
 
-    def _initialize_explainer(self) -> None:
-        """
-        Initialise ExplainableAIManager (SHAP primary, LIME fallback).
-        """
-        if self._explainer_init_attempted:
-            return
-        self._explainer_init_attempted = True
+    def _initialize_sync_service(self) -> Optional[SyncService]:
+        raw_key = self.settings.sync.supabase_key
+        if raw_key is None:
+            logger.warning("sync_client_skipped: supabase_key is None")
+            return None
 
-        if not self._detectors:
-            logger.warning("explainer_init_skipped: no detectors")
-            return
+        supabase_key = (
+            raw_key.get_secret_value()
+            if hasattr(raw_key, 'get_secret_value')
+            else raw_key
+        )
 
-        primary_detector = self._detectors[0]
-        model = getattr(primary_detector, "model", None)
-        if model is None:
-            logger.warning("explainer_init_skipped: primary detector has no trained model")
-            return
-
-        try:
-            import numpy as np
-
-            feature_names = self._feature_extractor.get_feature_names()
-            n_features = len(feature_names)
-
-            synthetic_bg = np.random.normal(
-                0.0, 0.5, size=(100, n_features)
-            ).astype(np.float32)
-
-            manager = ExplainableAIManager(
-                model_id=f"{self.device_id}_primary",
-                cache_size=256,
-            )
-            ok = manager.initialize(
-                model=model,
-                training_data=synthetic_bg,
-                feature_names=feature_names,
-                primary_method=ExplanationType.SHAP,
-                enable_fallback=True,   # LIME kicks in if SHAP fails
-                enable_cache=True,
-            )
-
-            if ok:
-                self._explainer_manager = manager
-                logger.info(
-                    "explainer_initialized",
-                    device_id=self.device_id,
-                    methods=[m.value for m in manager.get_available_methods()],
-                    feature_count=n_features,
-                )
-            else:
-                logger.warning("explainer_initialization_failed", device_id=self.device_id)
-                self._explainer_manager = None
-
-        except Exception as exc:
-            logger.error("explainer_init_error", error=str(exc))
-            self._explainer_manager = None
-
-    async def _initialize_sync_client(self) -> None:
-        """Initialize Supabase sync client."""
-        try:
-            raw_key = self.settings.sync.supabase_key
-            if raw_key is None:
-                logger.warning("sync_client_skipped: supabase_key is None")
-                return
-
-            supabase_key = (
-                raw_key.get_secret_value()
-                if hasattr(raw_key, 'get_secret_value')
-                else raw_key
-            )
-
-            device_id = self.settings.device_id
-            api_key = None
-
-            try:
-                from edgepulse.auth.credentials import CredentialManager
-                cred_manager = CredentialManager()
-                creds = cred_manager.get_device_credentials()
-                if creds:
-                    device_id = creds.device_id or device_id
-                    api_key = creds.api_key
-                    logger.info("Using device credentials for sync", device_id=device_id)
-            except Exception as e:
-                logger.warning("Could not load device credentials", error=str(e))
-
-            self._sync_client = SupabaseSync(
-                supabase_url=self.settings.sync.supabase_url,
-                supabase_key=supabase_key,
-                device_id=device_id,
-                api_key=api_key,
-                timeout=10.0,
-                max_retries=3,
-            )
-            await self._sync_client.initialize()
-            logger.info("async_supabase_client_initialized")
-        except SyncError as e:
-            logger.error("sync_client_initialization_failed", error=str(e))
-            self._sync_client = None
-        except NetworkError as e:
-            logger.error("sync_client_network_error", error=str(e))
-            self._sync_client = None
-        except Exception as e:
-            logger.error("sync_client_initialization_failed", error=str(e))
-            self._sync_client = None
-
-    async def _initialize_tamper_logger(self) -> None:
-        """Initialize tamper-evident logger for local audit logging."""
-        try:
-            self.tamper_logger = TamperEvidentLogger(self.device_id, self.database)
-            await self.tamper_logger.initialize()
-            logger.info("tamper_logger_initialized", device_id=self.device_id)
-        except Exception as e:
-            logger.error("tamper_logger_initialization_failed", error=str(e))
-            self.tamper_logger = None
+        service = SyncService(
+            sync_queue=self.sync_queue,
+            supabase_url=self.settings.sync.supabase_url,
+            supabase_key=supabase_key,
+            device_id=self.settings.device_id,
+        )
+        return service
 
     async def _setup_event_handlers(self) -> None:
         async def handle_anomaly(event: Event):
@@ -614,18 +482,13 @@ class EdgePulseAgent:
             features = data.get("features")
             severity_label = data.get("severity", detection.get("severity", "medium"))
 
-            # ------------------------------------------------------------------
-            # Warmup guard
-            # ------------------------------------------------------------------
             if self._warmup_cycles_remaining > 0:
                 self._warmup_cycles_remaining -= 1
                 logger.info(
                     "warmup_cycle_suppressed",
                     cycles_remaining=self._warmup_cycles_remaining,
                     anomaly_score=detection.get("anomaly_score", 0.0),
-                    detail="Alert suppressed during baseline warmup.",
                 )
-
                 if features is not None and hasattr(self, "normalizer"):
                     try:
                         import numpy as np
@@ -643,249 +506,60 @@ class EdgePulseAgent:
                 detector=detection.get("detector"),
             )
 
-            # Persist detection event
-            try:
-                detection_event = DetectionEvent(
-                    device_id=self.device_id,
-                    detector_name=detection.get("detector", "unknown"),
-                    label=detection.get("label", 0),
-                    anomaly_score=detection.get("anomaly_score", 0.0),
-                    confidence=detection.get("confidence", 0.0),
-                    features_used=detection.get("features_used"),
-                    model_version=detection.get("model_version", "1.0"),
-                    detection_metadata={"raw_detection": detection},
-                )
-                await self.database.insert_detection(detection_event)
-                logger.debug("detection_saved_to_database", device_id=self.device_id)
-            except Exception as e:
-                logger.error("detection_save_error", error=str(e))
-
-            self.metrics.increment_counter(
-                StandardMetrics.ANOMALIES_DETECTED_TOTAL,
-                labels={'severity': severity_label},
+            await self.alert_handler.handle(
+                detection, features, severity_label,
+                explainer=self.explainer_service if self.explainer_service.is_available else None,
             )
-            self.metrics.observe_histogram(
-                StandardMetrics.ALERT_ANOMALY_SCORE,
-                detection.get('anomaly_score', 0.5),
-                labels={'severity': severity_label},
-            )
-
-            explanation_obj: Optional[StrictExplanationJSON] = None
-            explanation: Dict[str, Any] = {}
-
-            if self._explainer_manager is not None and features is not None:
-                try:
-                    import numpy as np
-                    feat_array = np.asarray(features, dtype=float).flatten()
-                    anomaly_score = detection.get("anomaly_score", 0.0)
-                    explanation_obj = self._explainer_manager.explain_prediction(
-                        feat_array, anomaly_score
-                    )
-                    explanation = explanation_obj.to_dict()
-                    logger.debug(
-                        "explanation_generated",
-                        explanation_type=explanation.get("explanation_type"),
-                        feature_count=len(explanation.get("features", [])),
-                        top_factors=explanation.get("summary", {}).get("main_factors", [])[:3],
-                    )
-                except Exception as e:
-                    logger.error("explanation_generation_error", error=str(e))
-                    explanation = {}
-            else:
-                if self._explainer_manager is None:
-                    logger.debug("explanation_skipped: explainer not available")
-                if features is None:
-                    logger.debug("explanation_skipped: no features in event")
-
-            shap_features = explanation.get("features", [])
-
-            feature_importance: Dict[str, float] = {
-                f.get("feature_name", f"feature_{i}"): f.get("attribution_score", 0.0)
-                for i, f in enumerate(shap_features)
-                if f.get("feature_name") and f.get("attribution_score", 0.0) != 0.0
-            }
-
-            summary_factors = (
-                explanation.get("summary", {}).get("main_factors", [])
-                if explanation
-                else []
-            )
-            explanation_text = (
-                ", ".join(summary_factors)
-                if summary_factors
-                else "No explanation available"
-            )
-
-            report_explanation: Dict[str, Any] = {
-                "top_features": [
-                    {
-                        "feature": f.get("feature_name", ""),
-                        "contribution": f.get("attribution_score", 0.0),
-                        "direction": f.get("contribution_type", "neutral"),
-                    }
-                    for f in shap_features[:5]
-                ],
-                "explanation_text": explanation_text,
-                "feature_importance": feature_importance,
-            }
-
-            anomaly_data = {
-                "anomaly_score": detection.get("anomaly_score", 0.0),
-                "label": detection.get("label", 0),
-                "confidence": detection.get("confidence", 0.0),
-                "detector": detection.get("detector"),
-            }
-
-            try:
-                report = await asyncio.to_thread(
-                    self.report_generator.generate_alert_report,
-                    anomaly_data,
-                    report_explanation,
-                    {"raw_detection": detection},
-                )
-            except Exception as e:
-                logger.error("report_generation_error", error=str(e))
-                try:
-                    report = self.report_generator.generate_alert_report(
-                        anomaly_data, {}, {"raw_detection": detection}
-                    )
-                except Exception as e2:
-                    logger.error("report_generation_fallback_error", error=str(e2))
-                    return
-
-            alert = None
-            try:
-                if self._alert_engine:
-                    alert = self._alert_engine.process_anomaly(
-                        report, report.get("explanation", {})
-                    )
-            except Exception as e:
-                logger.error("alert_engine_error", error=str(e))
-                alert = None
-
-            if not alert:
-                return
-
-            try:
-                from edgepulse.shared.schemas import AlertEvent, SeverityLevel
-                alert_event = AlertEvent(
-                    device_id=self.device_id,
-                    timestamp=datetime.utcnow().isoformat(),
-                    severity=SeverityLevel(str(alert.get("severity", severity_label)).lower()),
-                    anomaly_score=alert.get("anomaly_score", 0.0),
-                    alert_type=alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
-                    detector_type=detection.get("detector", "unknown"),
-                    explanation=explanation if explanation else alert.get("explanation", {}),
-                    feature_importance=feature_importance if feature_importance else None,
-                    acknowledged=False,
-                )
-                await self.database.insert_alert(alert_event)
-                logger.debug("alert_saved_to_database", alert_id=alert.get("alert_id"))
-            except Exception as e:
-                logger.error("alert_save_error", error=str(e))
-
-            alert_severity = str(alert.get("severity", severity_label))
-            self.metrics.record_alert(alert_severity)
-
-            try:
-                if getattr(self, "notifier", None):
-                    await asyncio.to_thread(self.notifier.notify_all, alert)
-            except Exception as e:
-                logger.error("local_notification_error", error=str(e))
-
-            try:
-                anomaly_entry = self.hash_chain.create_entry("anomaly_detected", detection)
-                if not self.hash_chain.append(anomaly_entry):
-                    logger.error("hash_chain_append_failed", event_type="anomaly_detected")
-                alert_entry = self.hash_chain.create_entry("alert_generated", alert)
-                if not self.hash_chain.append(alert_entry):
-                    logger.error("hash_chain_append_failed", event_type="alert_generated")
-            except Exception as e:
-                logger.error("hash_chain_error", error=str(e))
-
-            await self._log_tamper_event("ANOMALY", detection)
-            await self._log_tamper_event("ALERT_EVENT", {"alert_id": alert.get("alert_id")})
 
             try:
                 if self.sync_queue:
-                    alert_payload = {
-                        "alert_id": alert.get("alert_id"),
-                        "device_id": self.device_id,
-                        "device_name": self.device_id,
-                        "title": alert.get("anomaly", {}).get("anomaly_type", "Security Alert"),
-                        "description": alert.get("anomaly", {}).get("description", "Anomaly detected"),
-                        "severity": str(alert.get("severity", severity_label)).lower(),
-                        "alert_type": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
-                        "detector_type": detection.get("detector", "unknown"),
-                        "status": "PENDING",
-                        "category": alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
-                        "confidence": alert.get("anomaly", {}).get("confidence", 0.0),
-                        "anomaly_score": alert.get("anomaly_score", 0.0),
-                        "explanation_json": explanation if explanation else {},
-                        "feature_importance": feature_importance if feature_importance else {},
+                    anomaly_payload = {
                         "model_id": f"iforest-{self.device_id[:8]}",
-                        "collection_agent_version": "1.0.0",
-                        "inference_latency_ms": (
-                            explanation.get("summary", {}).get("processing_time_ms", 0)
-                            if explanation else 0
-                        ),
-                        "telemetry_source": "PROCESS",
+                        "score": detection.get("anomaly_score", 0.0),
+                        "label": str(detection.get("label", 0)),
+                        "threshold_applied": 0.75,
+                        "above_threshold": detection.get("anomaly_score", 0.0) >= 0.75,
+                        "inference_latency_ms": detection.get("inference_latency_ms", 0),
+                        "connectivity_state": "online",
+                        "scored_at": datetime.utcnow().isoformat() + "Z",
                         "created_at": datetime.utcnow().isoformat() + "Z",
-                        "updated_at": datetime.utcnow().isoformat() + "Z",
-                        "read": False,
                     }
-                    await self.sync_queue.enqueue("alert_records", alert_payload, priority=5)
-                    logger.info("alert_queued_for_sync", alert_id=alert.get("alert_id"))
+                    await self.sync_queue.enqueue("anomaly_scores", anomaly_payload, priority=3)
+
+                    if features is not None:
+                        import numpy as np
+                        feat_arr = np.asarray(features, dtype=float).flatten()
+                        feature_dict = {
+                            f"feature_{i}": float(v) for i, v in enumerate(feat_arr)
+                        }
+                        fv_payload = {
+                            "model_id": f"iforest-{self.device_id[:8]}",
+                            "features": feature_dict,
+                            "feature_version": "v1.0",
+                            "computed_at": datetime.utcnow().isoformat() + "Z",
+                            "created_at": datetime.utcnow().isoformat() + "Z",
+                        }
+                        await self.sync_queue.enqueue("feature_vectors", fv_payload, priority=3)
             except Exception as e:
                 logger.error("alert_sync_queue_error", error=str(e))
-
-            await self.event_bus.publish(Event(
-                type=EventType.ALERT,
-                data={"alert": alert},
-                timestamp=datetime.utcnow(),
-                source="async_agent",
-            ))
 
         async def handle_sync_completed(event: Event):
             data = event.data
             logger.info("sync_completed", items=data.get('count', 0))
             self.metrics.increment_counter(StandardMetrics.SYNC_ATTEMPTS_TOTAL)
             self.metrics.set_gauge(StandardMetrics.SYNC_SUCCESS_RATE, 1.0)
-            try:
-                sync_entry = self.hash_chain.create_entry(
-                    "sync_completed", {"count": data.get("count", 0)}
-                )
-                if not self.hash_chain.append(sync_entry):
-                    logger.error("hash_chain_append_failed", event_type="sync_completed")
-            except Exception as e:
-                logger.error("hash_chain_error", error=str(e))
-
-            await self._log_tamper_event("SYNC", {"count": data.get("count", 0)})
-
         async def handle_telemetry(event: Event):
-            data = event.data or {}
-            telemetry = data.get("telemetry", {})
-            await self._log_tamper_event("TELEMETRY", {
-                "process_count": telemetry.get("process_count", 0),
-                "network_connections": telemetry.get("network_connections", 0),
-                "source": data.get("source", "unknown")
-            })
+            pass
 
         self.event_bus.subscribe(EventType.DETECTION, handle_anomaly)
         self.event_bus.subscribe(EventType.SYNC, handle_sync_completed)
         self.event_bus.subscribe(EventType.TELEMETRY, handle_telemetry)
-
-    # ------------------------------------------------------------------
-    # Background tasks
-    # ------------------------------------------------------------------
 
     async def _start_background_tasks(self) -> None:
         self._tasks.append(asyncio.create_task(self._health_check_loop()))
         self._tasks.append(asyncio.create_task(self._metrics_collection_loop()))
         self._tasks.append(asyncio.create_task(self._data_cleanup_loop()))
         self._tasks.append(asyncio.create_task(self._health_snapshot_sync_loop()))
-        self._tasks.append(asyncio.create_task(self._tamper_log_sync_loop()))
-        self._tasks.append(asyncio.create_task(self._telemetry_sync_loop()))
 
     async def _health_check_loop(self) -> None:
         await asyncio.sleep(5)
@@ -946,10 +620,11 @@ class EdgePulseAgent:
         await asyncio.sleep(30)
         while self._running:
             try:
-                if self._sync_client and hasattr(self._sync_client, 'sync_health_snapshots'):
+                client = self.sync_service.client if self.sync_service else None
+                if client and hasattr(client, 'sync_health_snapshots'):
                     snapshot = await self._collect_health_snapshot()
                     if snapshot:
-                        success = await self._sync_client.sync_health_snapshots([snapshot])
+                        success = await client.sync_health_snapshots([snapshot])
                         if success:
                             logger.debug("health_snapshot_synced", device_id=self.device_id)
                         else:
@@ -1012,130 +687,6 @@ class EdgePulseAgent:
             logger.error("health_snapshot_collection_error", error=str(e))
             return None
 
-    async def _tamper_log_sync_loop(self) -> None:
-        await asyncio.sleep(15)
-        while self._running:
-            try:
-                if self._sync_client and self.tamper_logger:
-                    if hasattr(self._sync_client, 'sync_tamper_logs'):
-                        unsynced_logs = await self._get_unsynced_tamper_logs()
-                        if unsynced_logs:
-                            success = await self._sync_client.sync_tamper_logs(unsynced_logs)
-                            if success:
-                                await self._mark_tamper_logs_synced(unsynced_logs)
-                                logger.info(
-                                    "tamper_logs_synced",
-                                    device_id=self.device_id,
-                                    count=len(unsynced_logs)
-                                )
-                await asyncio.sleep(self._tamper_log_sync_interval)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error("tamper_log_sync_error", error=str(e))
-                await asyncio.sleep(60)
-
-    async def _get_unsynced_tamper_logs(self) -> List[Dict[str, Any]]:
-        try:
-            query = """
-                SELECT log_id, device_id, log_sequence_number, log_entry_type,
-                       log_entry_reference_id, entry_timestamp_utc,
-                       entry_content_hash, previous_entry_hash, digital_signature
-                FROM tamper_evident_log
-                WHERE device_id = ? AND synced = 0
-                ORDER BY log_sequence_number ASC
-                LIMIT 100
-            """
-            results = await self.database.execute_query(query, (self.device_id,))
-            return results if results else []
-        except Exception as e:
-            logger.error("get_unsynced_tamper_logs_error", error=str(e))
-            return []
-
-    async def _mark_tamper_logs_synced(self, logs: List[Dict[str, Any]]) -> None:
-        try:
-            for log in logs:
-                query = """
-                    UPDATE tamper_evident_log
-                    SET synced = 1
-                    WHERE log_id = ? AND device_id = ?
-                """
-                await self.database.execute_query(
-                    query, (log.get("log_id"), self.device_id)
-                )
-        except Exception as e:
-            logger.error("mark_tamper_logs_synced_error", error=str(e))
-
-    async def _telemetry_sync_loop(self) -> None:
-        await asyncio.sleep(20)
-        while self._running:
-            try:
-                if self._sync_client and hasattr(self._sync_client, 'sync_telemetry_events'):
-                    unsynced_telemetry = await self._get_unsynced_telemetry()
-                    if unsynced_telemetry:
-                        success = await self._sync_client.sync_telemetry_events(unsynced_telemetry)
-                        if success:
-                            await self._mark_telemetry_synced(unsynced_telemetry)
-                            logger.info(
-                                "telemetry_synced",
-                                device_id=self.device_id,
-                                count=len(unsynced_telemetry)
-                            )
-                        else:
-                            logger.warning("telemetry_sync_failed", device_id=self.device_id)
-                await asyncio.sleep(self._telemetry_sync_interval)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error("telemetry_sync_loop_error", error=str(e))
-                await asyncio.sleep(60)
-
-    async def _get_unsynced_telemetry(self) -> List[Dict[str, Any]]:
-        try:
-            query = """
-                SELECT event_id, device_id, timestamp, event_type,
-                       event_payload, collection_agent_version, payload_hash
-                FROM telemetry_events
-                WHERE device_id = ? AND synced = 0
-                ORDER BY timestamp ASC
-                LIMIT 50
-            """
-            results = await self.database.execute_query(query, (self.device_id,))
-            return results if results else []
-        except Exception as e:
-            logger.error("get_unsynced_telemetry_error", error=str(e))
-            return []
-
-    async def _mark_telemetry_synced(self, events: List[Dict[str, Any]]) -> None:
-        try:
-            query = """
-                UPDATE telemetry_events
-                SET synced = 1
-                WHERE event_id = ? AND device_id = ?
-            """
-            for event in events:
-                await self.database.execute_query(
-                    query, (event.get("event_id"), self.device_id)
-                )
-        except Exception as e:
-            logger.error("mark_telemetry_synced_error", error=str(e))
-
-    async def _log_tamper_event(
-        self,
-        entry_type: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Log an event to the tamper-evident chain for sync."""
-        try:
-            if self.tamper_logger:
-                reference_id = None
-                if metadata:
-                    import json
-                    reference_id = hash(json.dumps(metadata, sort_keys=True)) % 1000000
-                await self.tamper_logger.log_event(entry_type, str(reference_id), metadata)
-        except Exception as e:
-            logger.debug("tamper_log_event_error", error=str(e))
-
     async def _save_state(self) -> None:
         try:
             for detector in self._detectors:
@@ -1147,18 +698,14 @@ class EdgePulseAgent:
         except Exception as e:
             logger.error("state_save_error", error=str(e))
 
-    # ------------------------------------------------------------------
-    # Status
-    # ------------------------------------------------------------------
-
     def get_status(self) -> Dict[str, Any]:
         from edgepulse.api.api_server import _get_detector_health
-        explainer_info: Dict[str, Any] = {"available": False}
-        if self._explainer_manager is not None:
+        explainer_info: Dict[str, Any] = {"available": self.explainer_service.is_available}
+        if self.explainer_service.manager is not None:
             explainer_info = {
-                "available": self._explainer_manager.is_initialized,
-                "methods": [m.value for m in self._explainer_manager.get_available_methods()],
-                "cache_stats": self._explainer_manager.cache_stats(),
+                "available": self.explainer_service.is_available,
+                "methods": self.explainer_service.available_methods,
+                "cache_stats": self.explainer_service.manager.cache_stats(),
             }
         return {
             "device_id": self.device_id,

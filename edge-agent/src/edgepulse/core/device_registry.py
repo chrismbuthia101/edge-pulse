@@ -1,9 +1,3 @@
-"""
-DeviceRegistry
-==============
-Responsible for keeping the local `devices` table up to date.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -15,33 +9,23 @@ from edgepulse.utils.log_handler import get_logger
 from edgepulse.shared.schemas import DeviceInfo, DeviceStatus
 
 if TYPE_CHECKING:
-    from edgepulse.storage.database import DatabaseManager
+    from edgepulse.storage.database import Database
 
 logger = get_logger(__name__)
 
 
 class DeviceRegistry:
-    """
-    Upserts the device row into the local SQLite database so that the
-    `devices` table is always populated.
-    """
-
     def __init__(
         self,
         device_id: str,
-        database: DatabaseManager,
+        database: Database,
         agent_version: str = "1.0.0",
     ) -> None:
         self.device_id = device_id
         self.database = database
         self.agent_version = agent_version
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     async def register(self) -> None:
-        """Write (or update) the device row when the agent starts."""
         info = DeviceInfo(
             device_id=self.device_id,
             status=DeviceStatus.ONLINE,
@@ -58,7 +42,6 @@ class DeviceRegistry:
             logger.error("device_register_error", error=str(exc))
 
     async def heartbeat(self, alerts_count: int = 0) -> None:
-        """Refresh `last_seen` and live resource metrics."""
         info = DeviceInfo(
             device_id=self.device_id,
             status=DeviceStatus.ONLINE,
@@ -74,7 +57,6 @@ class DeviceRegistry:
             logger.error("device_heartbeat_error", error=str(exc))
 
     async def mark_offline(self) -> None:
-        """Mark the device as offline when the agent stops."""
         info = DeviceInfo(
             device_id=self.device_id,
             status=DeviceStatus.OFFLINE,
@@ -86,10 +68,6 @@ class DeviceRegistry:
             logger.info("device_marked_offline", device_id=self.device_id)
         except Exception as exc:
             logger.error("device_mark_offline_error", error=str(exc))
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _safe_cpu() -> Optional[float]:

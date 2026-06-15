@@ -1,6 +1,3 @@
-# Alert Engine
-# Intelligent alert generation, correlation, and deduplication.
-
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Union
 from datetime import datetime, timedelta

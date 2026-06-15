@@ -1,9 +1,4 @@
-"""
-Scikit-learn Anomaly Detector Implementation
 
-Implements Isolation Forest as the primary detection model
-with SHAP TreeExplainer integration for explainable AI.
-"""
 
 import joblib
 import time
@@ -35,7 +30,6 @@ logger = get_logger(__name__)
 
 
 class SklearnAnomalyDetector(BaseDetector):
-    """Scikit-learn Isolation Forest anomaly detector"""
 
     def __init__(self, model_id: str):
         super().__init__(model_id)
@@ -57,7 +51,6 @@ class SklearnAnomalyDetector(BaseDetector):
         logger.info(f"SklearnAnomalyDetector initialized: {model_id}")
 
     def load_model_with_integrity(self, model_path: str) -> bool:
-        """Load model with SHA-256 integrity verification"""
         try:
             if not SKLEARN_AVAILABLE:
                 logger.error("scikit-learn not available")
@@ -120,7 +113,6 @@ class SklearnAnomalyDetector(BaseDetector):
             return False
 
     def save_model(self, model_path: str) -> bool:
-        """Save model with hash verification"""
         try:
             if not self.model or not SKLEARN_AVAILABLE:
                 logger.error("No model to save or scikit-learn not available")
@@ -155,7 +147,6 @@ class SklearnAnomalyDetector(BaseDetector):
             return False
 
     def train(self, training_data: np.ndarray, config: Dict[str, Any]) -> bool:
-        """Train the Isolation Forest model"""
         try:
             if not SKLEARN_AVAILABLE:
                 logger.error("scikit-learn not available")
@@ -166,7 +157,6 @@ class SklearnAnomalyDetector(BaseDetector):
                 f"{training_data.shape[1]} features"
             )
 
-            # Extract feature names from config
             feature_names = None
             if isinstance(config, dict):
                 feature_names = config.get("feature_names")
@@ -220,14 +210,12 @@ class SklearnAnomalyDetector(BaseDetector):
             return False
 
     def _detect_internal(self, features: np.ndarray) -> float:
-        """Internal detection that satisfies BaseDetector abstract contract."""
         result = self.detect(features)
         if isinstance(result, DetectionResult):
             return result.anomaly_score
         return 0.0
 
     def detect(self, features: np.ndarray) -> DetectionResult:
-        """Perform anomaly detection"""
         try:
             if not self.is_trained or not self.model:
                 raise RuntimeError("Model not trained or loaded")
@@ -298,15 +286,12 @@ class SklearnAnomalyDetector(BaseDetector):
             )
 
     def evaluate(self, test_data: Any) -> Dict[str, float]:
-        """Evaluate detector performance (satisfies BaseDetector abstract contract)"""
         return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
 
     def load_model(self, file_path: str) -> bool:
-        """Load model (satisfies BaseDetector abstract contract)"""
         return self.load_model_with_integrity(file_path)
 
     def detect_drift(self, new_data: np.ndarray, threshold: float = 0.1) -> bool:
-        """Detect model drift using statistical methods"""
         try:
             if not self.is_trained or not self.model:
                 logger.warning("Cannot detect drift - model not trained")
@@ -347,7 +332,6 @@ class SklearnAnomalyDetector(BaseDetector):
             return False
 
     def get_feature_importance(self) -> Optional[Dict[str, float]]:
-        """Get feature importance from trained model"""
         try:
             if not self.model or not hasattr(self.model, "feature_importances_"):
                 return None
@@ -366,7 +350,6 @@ class SklearnAnomalyDetector(BaseDetector):
             return None
 
     def _calculate_file_hash(self, file_path: Path) -> str:
-        """Calculate SHA-256 hash of model file"""
         try:
             hash_sha256 = hashlib.sha256()
             with open(file_path, "rb") as f:
@@ -378,7 +361,6 @@ class SklearnAnomalyDetector(BaseDetector):
             return ""
 
     def get_model_info(self) -> Dict[str, Any]:
-        """Get detailed model information"""
         info = {
             "model_id": self.model_id,
             "model_type": self.model_type,

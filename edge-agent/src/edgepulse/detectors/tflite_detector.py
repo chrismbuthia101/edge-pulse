@@ -1,6 +1,4 @@
-"""
-TFLite / LiteRT Autoencoder anomaly detector.
-"""
+
 
 from __future__ import annotations
 
@@ -173,7 +171,6 @@ class TFLiteAnomalyDetector(BaseDetector):
         errors = np.mean((norm_data - recon) ** 2, axis=1)
         self.threshold_value = float(np.percentile(errors, self.threshold_percentile))
 
-        # ── Convert to TFLite ─────────────────────────────────────────────
         converter = tf.lite.TFLiteConverter.from_keras_model(autoencoder)
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
         tflite_model = converter.convert()

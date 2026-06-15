@@ -132,11 +132,11 @@ class EdgePulseLinuxService:
             if not agent_task.done():
                 if (
                     self._agent_wrapper is not None
-                    and hasattr(self._agent_wrapper, "agent_core")
-                    and self._agent_wrapper.agent_core is not None
+                    and hasattr(self._agent_wrapper, "agent")
+                    and self._agent_wrapper.agent is not None
                 ):
                     try:
-                        await self._agent_wrapper.agent_core.stop()
+                        await self._agent_wrapper.agent.stop()
                     except Exception as exc:
                         logger.error("linux_service_agent_stop_error", error=str(exc))
                 agent_task.cancel()

@@ -1,7 +1,5 @@
-# Cloud synchronization for centralized monitoring.
-
-from edgepulse.sync.supabase import SupabaseSync
+from edgepulse.sync.cloud_sync import CloudSync
 
 __all__ = [
-    "SupabaseSync",
+    "CloudSync",
 ]

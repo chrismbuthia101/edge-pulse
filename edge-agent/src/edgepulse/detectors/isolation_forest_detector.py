@@ -1,5 +1,3 @@
-# Isolation Forest Detector
-# Primary unsupervised anomaly detector using Isolation Forest algorithm.
 
 import os
 from edgepulse.utils.log_handler import get_logger
@@ -17,8 +15,6 @@ from edgepulse.detectors.base import BaseDetector
 
 logger = get_logger(__name__)
 
-# Printed once to stdout so it appears in any log aggregator even before
-# structlog is fully configured.
 _BOOTSTRAP_WARNING = """
 ╔══════════════════════════════════════════════════════════════════╗
 ║  EdgePulse — NO MODEL FILE FOUND                                ║
@@ -67,9 +63,6 @@ class IsolationForestDetector(BaseDetector):
         # Human-readable status exposed to /health endpoint
         self.status_detail: str = "not_loaded"
 
-    # ------------------------------------------------------------------
-    # Model loading
-    # ------------------------------------------------------------------
 
     def load_model(self, path: Optional[Path] = None) -> bool:
         load_path = Path(path) if path else self.model_path
@@ -128,7 +121,6 @@ class IsolationForestDetector(BaseDetector):
                 logger.error("isolation_forest_load_error", path=str(candidate), error=str(e))
                 self.status_detail = f"load_error:{e}"
 
-        # No model found — emit a highly visible warning with helpful info
         logger.warning(
             "no_model_found_in_paths",
             searched_paths=[str(p) for p in candidate_paths],
@@ -139,7 +131,6 @@ class IsolationForestDetector(BaseDetector):
         return False
 
     def _emit_bootstrap_warning(self, attempted_path: Path) -> None:
-        """Print a prominent warning to stdout and structured logger."""
         print(_BOOTSTRAP_WARNING, flush=True)
         logger.warning(
             "no_model_file_found",
@@ -153,7 +144,6 @@ class IsolationForestDetector(BaseDetector):
         )
 
     def get_health(self) -> Dict[str, Any]:
-        """Return a dict suitable for inclusion in the /health API response."""
         return {
             "detector": "IsolationForestDetector",
             "is_trained": self.is_trained,
@@ -168,9 +158,6 @@ class IsolationForestDetector(BaseDetector):
             ),
         }
 
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
 
     def train(self, training_data: Any, config: Dict[str, Any]) -> None:
         features = (
@@ -206,9 +193,6 @@ class IsolationForestDetector(BaseDetector):
             logger.error("isolation_forest_training_error", error=str(e))
             raise ModelError(f"Failed to train Isolation Forest: {e}") from e
 
-    # ------------------------------------------------------------------
-    # Detection
-    # ------------------------------------------------------------------
 
     def _detect_internal(self, features: Any) -> float:
         if not self.is_trained or self.model is None:
@@ -282,9 +266,6 @@ class IsolationForestDetector(BaseDetector):
             logger.error("isolation_forest_predict_error", error=str(e))
             return (0, 0.0)
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
 
     def save_model(self, path: Optional[Path] = None) -> bool:
         if not self.is_trained or self.model is None:
@@ -337,9 +318,6 @@ class IsolationForestDetector(BaseDetector):
             logger.error("isolation_forest_evaluate_error", error=str(e))
             return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
 
-    # ------------------------------------------------------------------
-    # Integrity / drift
-    # ------------------------------------------------------------------
 
     def verify_model_integrity(self) -> bool:
         if not self.is_trained or self.model is None:

@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
-"""
-verify_datasets.py
-==================
-Run this BEFORE train_models.py to confirm every dataset is in the
-expected location and has files the training script can actually read.
-
-Usage:
-    python verify_datasets.py --datasets-dir ~/Datasets
-
-Exit code 0 = all checks passed (or only warnings).
-Exit code 1 = one or more critical errors found.
-"""
+"""Verify dataset layout before running train_models.py. Exit 0 = ok, 1 = errors."""
 
 import argparse
 import sys
 from pathlib import Path
 
 
-GREEN  = "\033[92m"
-YELLOW = "\033[93m"
-RED    = "\033[91m"
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
+GREEN  = ""
+YELLOW = ""
+RED    = ""
+RESET  = ""
+BOLD   = ""
 
 
 def ok(msg: str)   -> None: print(f"  {GREEN}✓{RESET}  {msg}")
@@ -61,7 +50,6 @@ def verify(datasets_dir: Path) -> None:
 
     ok(f"datasets-dir found: {datasets_dir}")
 
-    # ── 1. UNSW-NB15 ─────────────────────────────────────────────────────────
     hdr("1. UNSW-NB15")
     unsw_dir = datasets_dir / "UNSW_NB15"
     if check(unsw_dir.exists(), f"UNSW_NB15/ found", f"UNSW_NB15/ not found at {unsw_dir}"):
@@ -72,7 +60,6 @@ def verify(datasets_dir: Path) -> None:
         for p in parquets:
             ok(f"  {p.name}  ({p.stat().st_size // 1024 // 1024} MB)")
 
-    # ── 2. CSE-CIC-IDS2018 ────────────────────────────────────────────────────
     hdr("2. CSE-CIC-IDS2018")
     cic_candidates = [
         datasets_dir / "CSE-CIC-IDS2018" / "CSE-CIC-IDS2018.csv",
@@ -88,7 +75,6 @@ def verify(datasets_dir: Path) -> None:
             err(f"  {p.relative_to(datasets_dir)}")
         errors += 1
 
-    # ── 3. CERT r4.2 ─────────────────────────────────────────────────────────
     hdr("3. CERT Insider Threat r4.2")
     cert_dir = datasets_dir / "CERT Insider Threat r4.2"
     if check(cert_dir.exists(), "CERT directory found",
@@ -104,7 +90,6 @@ def verify(datasets_dir: Path) -> None:
         if device.exists():
             ok(f"device.csv found (not used in training)")
 
-    # ── 4. ADFA-LD ────────────────────────────────────────────────────────────
     hdr("4. ADFA-LD  (Linux syscall traces)")
     adfa_ld_dir = datasets_dir / "ADFA-LD"
     if check(adfa_ld_dir.exists(), "ADFA-LD/ found",
@@ -125,7 +110,6 @@ def verify(datasets_dir: Path) -> None:
         else:
             warn("Attack_Data_Master/ not found — adfa_ld will run as normal-only")
 
-    # ── 5. ADFA-WD  (Windows Full_Process_Traces) ─────────────────────────────
     hdr("5. ADFA-WD / Full_Process_Traces  (Windows syscall traces)")
 
     # Layout B: root-level Full_Process_Traces
@@ -179,7 +163,6 @@ def verify(datasets_dir: Path) -> None:
             warn("Neither Full_Process_Traces/ nor ADFA-WD-SAA_Master/ found")
             warn("adfa_wd will be skipped during training")
 
-    # ── 6. DAPT2020 ───────────────────────────────────────────────────────────
     hdr("6. DAPT2020")
     dapt_dir = datasets_dir / "DAPT2020"
     if check(dapt_dir.exists(), "DAPT2020/ found",
@@ -198,7 +181,6 @@ def verify(datasets_dir: Path) -> None:
             warn("No attack files found (expected files with 'pvt' in the name)")
             warn("Training will use DAPT as normal-only data")
 
-    # ── Summary ───────────────────────────────────────────────────────────────
     print()
     print("=" * 60)
     if errors == 0:

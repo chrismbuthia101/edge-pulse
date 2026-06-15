@@ -1,9 +1,4 @@
-"""
-Ensemble Anomaly Detector
 
-Manages multiple detection models and provides unified interface.
-Supports switching between scikit-learn Isolation Forest and TensorFlow Lite Autoencoder.
-"""
 
 import time
 import numpy as np
@@ -19,7 +14,6 @@ logger = get_logger(__name__)
 
 
 class EnsembleDetector(BaseDetector):
-    """Ensemble detector that manages multiple models"""
 
     def __init__(self, model_id: str, model_type: str = "isolation_forest"):
         super().__init__(model_id)
@@ -36,19 +30,11 @@ class EnsembleDetector(BaseDetector):
 
         logger.info(f"EnsembleDetector initialized with {model_type}: {model_id}")
 
-    # ------------------------------------------------------------------ #
-    # BaseDetector abstract method implementations                         #
-    # ------------------------------------------------------------------ #
-
     def train(self, training_data: np.ndarray, config: Dict[str, Any]) -> None:
-        """
-        Train current model.
-        """
         if not self.current_detector:
             logger.error("No detector available")
             return
 
-        # Pass the config directly to the underlying detector
         self.current_detector.train(training_data, config)
 
     def _detect_internal(self, features: Any) -> float:
@@ -60,13 +46,11 @@ class EnsembleDetector(BaseDetector):
         return 0.0
 
     def evaluate(self, test_data: Any) -> Dict[str, float]:
-        """Evaluate detector performance"""
         if not self.current_detector:
             return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
         return self.current_detector.evaluate(test_data)
 
     def save_model(self, file_path: str) -> bool:
-        """Save model"""
         if not self.current_detector:
             logger.error("No detector available")
             return False
@@ -74,25 +58,18 @@ class EnsembleDetector(BaseDetector):
         return True
 
     def load_model(self, file_path: str) -> bool:
-        """Load model"""
         if not self.current_detector:
             logger.error("No detector available")
             return False
         return self.current_detector.load_model(file_path)
 
-    # ------------------------------------------------------------------ #
-    # Additional ensemble-specific methods                                 #
-    # ------------------------------------------------------------------ #
-
     def load_model_with_integrity(self, model_path: str) -> bool:
-        """Load model with integrity verification"""
         if not self.current_detector:
             logger.error("No detector available")
             return False
         return self.current_detector.load_model_with_integrity(model_path)
 
     def detect(self, features: np.ndarray) -> DetectionResult:
-        """Perform anomaly detection, delegating to the inner detector."""
         if not self.current_detector:
             logger.error("No detector available")
             return DetectionResult(
@@ -108,14 +85,12 @@ class EnsembleDetector(BaseDetector):
         return self.current_detector.detect(features)
 
     def detect_drift(self, new_data: np.ndarray, threshold: float = 0.1) -> bool:
-        """Detect model drift"""
         if not self.current_detector:
             logger.error("No detector available")
             return False
         return self.current_detector.detect_drift(new_data, threshold)
 
     def switch_model(self, new_model_type: str) -> bool:
-        """Switch to a different model type"""
         if new_model_type == self.model_type:
             logger.info(f"Already using {new_model_type}")
             return True
@@ -147,7 +122,6 @@ class EnsembleDetector(BaseDetector):
             return False
 
     def get_available_models(self) -> Dict[str, Dict[str, Any]]:
-        """Get information about available models"""
         models: Dict[str, Dict[str, Any]] = {}
 
         try:
@@ -187,7 +161,6 @@ class EnsembleDetector(BaseDetector):
         return models
 
     def get_model_info(self) -> Dict[str, Any]:
-        """Get detailed model information"""
         base_info: Dict[str, Any] = {
             "ensemble_model_id": self.model_id,
             "current_model_type": self.model_type,
@@ -202,14 +175,12 @@ class EnsembleDetector(BaseDetector):
         return base_info
 
     def set_detection_threshold(self, threshold: float) -> None:
-        """Set detection threshold for current model"""
         super().set_detection_threshold(threshold)
 
         if self.current_detector:
             self.current_detector.set_detection_threshold(threshold)
 
     def get_feature_importance(self) -> Optional[Dict[str, float]]:
-        """Get feature importance from current model"""
         if self.current_detector and hasattr(self.current_detector, "get_feature_importance"):
             return self.current_detector.get_feature_importance()  # type: ignore[union-attr]
         return None
@@ -217,7 +188,6 @@ class EnsembleDetector(BaseDetector):
     def validate_model_switch(
         self, new_model_type: str, model_path: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Validate if model switch is possible"""
         validation_result: Dict[str, Any] = {
             "can_switch": False,
             "reason": "",
@@ -250,7 +220,6 @@ class EnsembleDetector(BaseDetector):
 
     @property
     def is_trained(self) -> bool:
-        """Delegate is_trained to the inner detector."""
         if self.current_detector and hasattr(self.current_detector, "is_trained"):
             return self.current_detector.is_trained  # type: ignore[return-value]
         return False

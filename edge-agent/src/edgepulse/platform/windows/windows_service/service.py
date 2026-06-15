@@ -97,13 +97,13 @@ class EdgePulseWindowsService(win32service.ServiceFramework):
             if self.hWaitStop:
                 win32event.SetEvent(self.hWaitStop)
 
-            if self._agent_wrapper and self._agent_wrapper.agent_core:
+            if self._agent_wrapper and self._agent_wrapper.agent:
 
                 def stop_agent():
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        loop.run_until_complete(self._agent_wrapper.agent_core.stop())
+                        loop.run_until_complete(self._agent_wrapper.agent.stop())
                     finally:
                         loop.close()
 
@@ -162,29 +162,3 @@ class EdgePulseWindowsService(win32service.ServiceFramework):
         logger.info("Windows Service shutdown")
         self.SvcStop()
 
-if sys.platform == "win32":
-
-    def RegisterService(service_name, service_display_name, service_description):
-        """Register service with Windows"""
-        try:
-            win32serviceutil.InstallService(
-                service_name,
-                service_display_name,
-                service_description,
-                startType=win32service.SERVICE_AUTO_START,
-            )
-            logger.info(f"Service registered: {service_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Error registering service: {e}")
-            return False
-
-    def UnregisterService(service_name):
-        """Unregister service from Windows"""
-        try:
-            win32serviceutil.RemoveService(service_name)
-            logger.info(f"Service unregistered: {service_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Error unregistering service: {e}")
-            return False

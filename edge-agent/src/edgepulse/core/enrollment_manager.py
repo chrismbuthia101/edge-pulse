@@ -1,30 +1,22 @@
-"""
-Enrollment Manager for EdgePulse
-
-Handles device enrollment logic separated from AgentCore to improve SRP compliance.
-"""
-
 from typing import Optional
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.auth.enrollment import DeviceEnrollmentClient
 from edgepulse.auth.credentials import CredentialManager
-from edgepulse.sync.supabase import SupabaseSync
-from edgepulse.utils.log_handler import ConfigurationError
+from edgepulse.sync.cloud_sync import CloudSync
+from edgepulse.utils.error_handler import ConfigurationError
 
 logger = get_logger(__name__)
 
 
 class EnrollmentManager:
-    """Manages device enrollment process and configuration"""
     
     def __init__(self, credential_manager: CredentialManager):
         self.credential_manager = credential_manager
         self.enrollment_client: Optional[DeviceEnrollmentClient] = None
-        self.supabase_client: Optional[SupabaseSync] = None
+        self.sync_client: Optional[CloudSync] = None
         self._is_enrolled = False
         
     async def initialize(self, service_mode: bool = False) -> bool:
-        """Initialize enrollment client and check enrollment status"""
         try:
             self.enrollment_client = DeviceEnrollmentClient(self.credential_manager)
             self._is_enrolled = self.enrollment_client.is_enrolled()
@@ -43,7 +35,6 @@ class EnrollmentManager:
             raise
     
     async def _attempt_automatic_enrollment(self) -> bool:
-        """Attempt automatic enrollment in service mode"""
         try:
             enrollment_config = self.enrollment_client.read_enrollment_config()
             if not enrollment_config:
@@ -72,26 +63,22 @@ class EnrollmentManager:
             raise
     
     def is_enrolled(self) -> bool:
-        """Check if device is enrolled"""
         return self._is_enrolled
     
     def get_device_credentials(self):
-        """Get current device credentials"""
         if not self.enrollment_client or not self._is_enrolled:
             return None
         return self.enrollment_client.get_device_credentials()
     
-    def create_supabase_client(self, supabase_url: str, device_id: str, api_key: str) -> SupabaseSync:
-        """Create and return Supabase client"""
-        self.supabase_client = SupabaseSync(
+    def create_sync_client(self, supabase_url: str, device_id: str, api_key: str) -> CloudSync:
+        self.sync_client = CloudSync(
             supabase_url=supabase_url,
             supabase_key=api_key,
             device_id=device_id,
             api_key=api_key,
         )
-        logger.info("Supabase client initialized")
-        return self.supabase_client
-    
-    def get_supabase_client(self) -> Optional[SupabaseSync]:
-        """Get current Supabase client"""
-        return self.supabase_client
+        logger.info("Sync client initialized")
+        return self.sync_client
+
+    def get_sync_client(self) -> Optional[CloudSync]:
+        return self.sync_client

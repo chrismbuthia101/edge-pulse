@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.platform._paths import _BASE_DIR, _CONFIG_DIR, _LOG_DIR, _RUN_DIR, write_default_config
 
 logger = get_logger(__name__)
 
@@ -24,11 +25,6 @@ SERVICE_DESCRIPTION = (
     "EdgePulse AI-powered security monitoring and anomaly detection agent "
     "for Linux edge devices."
 )
-
-_BASE_DIR = Path("/var/lib/edgepulse")
-_CONFIG_DIR = Path("/etc/edgepulse")
-_LOG_DIR = Path("/var/log/edgepulse")
-_RUN_DIR = Path("/run/edgepulse")
 _SYSTEMD_SYSTEM_DIR = Path("/etc/systemd/system")
 _SYSTEMD_USER_DIR_TEMPLATE = "~/.config/systemd/user"
 
@@ -304,35 +300,7 @@ class EdgePulseLinuxInstaller:
             return False
 
     def _write_default_config(self) -> None:
-        import json
-
-        config_file = self.config_dir / "agent_config.json"
-        if config_file.exists():
-            return
-
-        default: dict = {
-            "sync": {
-                "supabase_url": "https://your-project.supabase.co",
-                "supabase_key": "your-api-key"
-            },
-            "collection_interval": 60,
-            "detection_threshold": 0.5,
-            "offline_queue_size": 10000,
-            "logging_level": "INFO",
-            "enable_process_monitoring": True,
-            "enable_network_monitoring": True,
-            "enable_filesystem_monitoring": False,
-            "model_type": "isolation_forest",
-        }
-        try:
-            config_file.write_text(json.dumps(default, indent=2))
-            config_file.chmod(0o640)
-        except Exception as exc:
-            logger.warning("linux_default_config_write_failed", error=str(exc))
-
-    def configure_service_directory(self) -> bool:
-        return self._create_directories()
-
+        write_default_config(self.config_dir)
 
 def main() -> None:
     import argparse
@@ -343,7 +311,7 @@ def main() -> None:
     )
     parser.add_argument(
         "action",
-        choices=["install", "uninstall", "start", "stop", "restart", "status", "configure"],
+        choices=["install", "uninstall", "start", "stop", "restart", "status"],
         help="Service management action",
     )
     parser.add_argument("--path", help="Agent installation path")
@@ -362,7 +330,6 @@ def main() -> None:
         "start": installer.start_service,
         "stop": installer.stop_service,
         "restart": installer.restart_service,
-        "configure": installer.configure_service_directory,
     }
 
     if args.action == "status":

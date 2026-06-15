@@ -1,10 +1,3 @@
-"""
-Configuration Manager for EdgePulse
-
-Manages agent configuration with remote polling, hot-apply,
-and encrypted local caching.
-"""
-
 import os
 import json
 import asyncio
@@ -14,11 +7,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
-
-def get_safe_program_data_path() -> Path:
-    """Get safe ProgramData path without using environment variables"""
-    # Use hardcoded safe path to prevent traversal
-    return Path('C:\\ProgramData').resolve()
 
 try:
     from cryptography.fernet import Fernet
@@ -31,13 +19,13 @@ except ImportError:
 
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.auth.auth_client import AuthenticatedClient
+from edgepulse.platform._paths import _safe_program_data
 
 logger = get_logger(__name__)
 
 
 @dataclass
 class ConfigItem:
-    """Individual configuration item"""
     key: str
     value: Any
     version: int
@@ -45,17 +33,7 @@ class ConfigItem:
     updated_by: Optional[str] = None
 
 
-@dataclass
-class ConfigSnapshot:
-    """Snapshot of configuration at a point in time"""
-    timestamp: str
-    version: int
-    config_items: Dict[str, ConfigItem]
-    checksum: str
-
-
 class ConfigManager:
-    """Configuration manager with remote polling and hot-apply"""
 
     def __init__(
         self,
@@ -84,22 +62,16 @@ class ConfigManager:
             f"ConfigManager initialized with {poll_interval_minutes} minute polling interval"
         )
 
-    # ------------------------------------------------------------------
-    # Cache initialisation
-    # ------------------------------------------------------------------
-
     def _initialize_local_cache(self) -> None:
-        """Initialize encrypted local cache"""
         try:
             if os.name == "nt":
-                base_path = get_safe_program_data_path()
-                cache_dir = base_path / "EdgePulse"
+                cache_dir = _safe_program_data()
             else:
                 cache_dir = Path.home() / ".edgepulse"
 
             # Ensure the path is within expected bounds
             cache_dir = cache_dir.resolve()
-            if os.name == "nt" and not str(cache_dir).startswith(str(base_path)):
+            if os.name == "nt" and not str(cache_dir).startswith(str(_safe_program_data())):
                 raise ValueError("Invalid path: traversal detected")
 
             cache_dir.mkdir(parents=True, exist_ok=True)
@@ -116,7 +88,6 @@ class ConfigManager:
             self._encryption_key = None
 
     def _generate_encryption_key(self) -> bytes:
-        """Generate encryption key from machine-specific data"""
         try:
             if not CRYPTO_AVAILABLE:
                 # Generate a simple hash-based key when crypto is not available
@@ -168,7 +139,6 @@ class ConfigManager:
             return encrypted_data.decode(errors="replace")
 
     def _load_cached_config(self) -> None:
-        """Load configuration from local cache"""
         try:
             if not self._cache_file or not self._cache_file.exists():
                 logger.info("No cached configuration found")
@@ -196,7 +166,6 @@ class ConfigManager:
             logger.error(f"Error loading cached config: {e}")
 
     def _save_cached_config(self) -> None:
-        """Save configuration to local cache"""
         try:
             if not self._cache_file:
                 return
@@ -229,12 +198,7 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Error saving cached config: {e}")
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     async def start(self) -> None:
-        """Start configuration polling"""
         if self._running:
             logger.warning("ConfigManager already running")
             return
@@ -244,7 +208,6 @@ class ConfigManager:
         logger.info("ConfigManager started")
 
     async def stop(self) -> None:
-        """Stop configuration polling"""
         self._running = False
 
         if self._polling_task:
@@ -258,7 +221,6 @@ class ConfigManager:
         logger.info("ConfigManager stopped")
 
     async def _polling_loop(self) -> None:
-        """Main polling loop"""
         logger.info("Configuration polling loop started")
 
         while self._running:
@@ -272,7 +234,6 @@ class ConfigManager:
                 await asyncio.sleep(60)
 
     async def _poll_remote_config(self) -> None:
-        """Poll remote configuration for updates"""
         if not self.auth_client:
             logger.debug("No auth_client available, skipping remote poll")
             return
@@ -294,7 +255,6 @@ class ConfigManager:
             logger.error(f"Error polling remote config: {e}")
 
     def _process_remote_config(self, remote_config: Dict[str, Any]) -> List[str]:
-        """Process remote configuration and apply updates"""
         updates: List[str] = []
 
         for key, value in remote_config.items():
@@ -318,7 +278,6 @@ class ConfigManager:
     def _set_config_item(
         self, key: str, value: Any, source: str = "local"
     ) -> None:
-        """Set a configuration item"""
         self._config_version += 1
 
         config_item = ConfigItem(
@@ -334,17 +293,11 @@ class ConfigManager:
         if source == "remote_poll":
             self._last_remote_update = datetime.utcnow()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value"""
         config_item = self._current_config.get(key)
         return config_item.value if config_item else default
 
     def set(self, key: str, value: Any, source: str = "local") -> None:
-        """Set configuration value"""
         old_value = self.get(key)
         self._set_config_item(key, value, source)
 
@@ -360,13 +313,11 @@ class ConfigManager:
         self._save_cached_config()
 
     def get_all(self) -> Dict[str, Any]:
-        """Get all configuration values"""
         return {key: item.value for key, item in self._current_config.items()}
 
     def add_change_callback(
         self, key: str, callback: Callable[[Any, Any], None]
     ) -> None:
-        """Add callback for configuration changes"""
         if key not in self._change_callbacks:
             self._change_callbacks[key] = []
         self._change_callbacks[key].append(callback)
@@ -374,7 +325,6 @@ class ConfigManager:
     def remove_change_callback(
         self, key: str, callback: Callable[[Any, Any], None]
     ) -> None:
-        """Remove configuration change callback"""
         if key in self._change_callbacks:
             try:
                 self._change_callbacks[key].remove(callback)
@@ -382,7 +332,6 @@ class ConfigManager:
                 pass
 
     def get_config_info(self) -> Dict[str, Any]:
-        """Get configuration information"""
         return {
             "version": self._config_version,
             "item_count": len(self._current_config),
@@ -397,7 +346,6 @@ class ConfigManager:
         }
 
     async def force_refresh(self) -> bool:
-        """Force immediate refresh from remote"""
         if not self.auth_client:
             logger.warning("No auth_client; cannot force refresh")
             return False
@@ -420,7 +368,6 @@ class ConfigManager:
             return False
 
     def validate_config(self) -> Dict[str, Any]:
-        """Validate current configuration"""
         validation_results: Dict[str, Any] = {
             "valid": True,
             "errors": [],
@@ -471,100 +418,3 @@ class ConfigManager:
 
         return validation_results
 
-    def export_config(self, include_sensitive: bool = False) -> Dict[str, Any]:
-        """Export configuration for backup"""
-        try:
-            exported: Dict[str, Any] = {
-                "version": self._config_version,
-                "exported_at": datetime.utcnow().isoformat(),
-                "items": {},
-            }
-
-            sensitive_keys = {"api_key", "database_password", "secret_key"}
-
-            for key, item in self._current_config.items():
-                if not include_sensitive and key in sensitive_keys:
-                    exported["items"][key] = {
-                        "value": "***REDACTED***",
-                        "version": item.version,
-                        "updated_at": item.updated_at,
-                        "updated_by": item.updated_by,
-                    }
-                else:
-                    exported["items"][key] = asdict(item)
-
-            return exported
-
-        except Exception as e:
-            logger.error(f"Error exporting config: {e}")
-            return {}
-
-    def import_config(
-        self, config_data: Dict[str, Any], overwrite: bool = False
-    ) -> bool:
-        """Import configuration from backup"""
-        try:
-            imported_count = 0
-
-            for key, item_data in config_data.get("items", {}).items():
-                if not overwrite and key in self._current_config:
-                    continue
-
-                if isinstance(item_data, dict) and "value" in item_data:
-                    self.set(key, item_data["value"], "import")
-                    imported_count += 1
-
-            logger.info(f"Imported {imported_count} configuration items")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error importing config: {e}")
-            return False
-
-    def reset_to_defaults(self) -> None:
-        """Reset configuration to defaults"""
-        try:
-            default_config = {
-                "collection.interval": 60,
-                "detection.threshold": 0.5,
-                "sync.offline_queue_size": 10000,
-                "logging.level": "INFO",
-                "telemetry.enable_process_monitoring": True,
-                "telemetry.enable_network_monitoring": True,
-                "telemetry.enable_filesystem_monitoring": True,
-            }
-
-            self._current_config.clear()
-            self._config_version = 0
-
-            for key, value in default_config.items():
-                self.set(key, value, "default")
-
-            logger.info("Configuration reset to defaults")
-
-        except Exception as e:
-            logger.error(f"Error resetting to defaults: {e}")
-
-    def get_config_history(self) -> List[Dict[str, Any]]:
-        """Get configuration change history (simplified)"""
-        try:
-            history: List[Dict[str, Any]] = []
-
-            for key, item in sorted(
-                self._current_config.items(), key=lambda x: x[1].updated_at
-            ):
-                history.append(
-                    {
-                        "key": key,
-                        "value": item.value,
-                        "version": item.version,
-                        "updated_at": item.updated_at,
-                        "updated_by": item.updated_by,
-                    }
-                )
-
-            return history[-50:]
-
-        except Exception as e:
-            logger.error(f"Error getting config history: {e}")
-            return []

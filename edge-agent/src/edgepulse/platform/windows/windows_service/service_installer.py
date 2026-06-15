@@ -25,6 +25,7 @@ else:
     raise ImportError("Windows Service installer only works on Windows")
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.platform._paths import _safe_program_data
 
 logger = get_logger(__name__)
 
@@ -315,46 +316,6 @@ class EdgePulseServiceInstaller:
                 "is_installed": False
             }
     
-    def configure_service_directory(self) -> bool:
-        """Configure service working directory and permissions"""
-        try:
-            # Create service data directory
-            service_data_dir = Path("C:\\ProgramData\\EdgePulse")
-            service_data_dir.mkdir(exist_ok=True)
-            
-            # Set permissions for service data directory
-            sd = win32security.GetFileSecurity(
-                str(service_data_dir),
-                win32security.DACL_SECURITY_INFORMATION
-            )
-            
-            dacl = sd.GetSecurityDescriptorDacl()
-            if dacl is None:
-                dacl = win32security.ACL()
-            
-            # Add LocalSystem full control
-            sid_system = win32security.LookupAccountName("", "SYSTEM")[0]
-            dacl.AddAccessAllowedAce(
-                win32security.ACL_REVISION,
-                win32con.GENERIC_ALL,
-                sid_system
-            )
-            
-            sd.SetSecurityDescriptorDacl(1, dacl, 0)
-            win32security.SetFileSecurity(
-                str(service_data_dir),
-                win32security.DACL_SECURITY_INFORMATION,
-                sd
-            )
-            
-            logger.info(f"Service directory configured: {service_data_dir}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to configure service directory: {e}")
-            return False
-
-
 # CLI interface for service management
 def main():
     """Command-line interface for service management"""
@@ -362,7 +323,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="EdgePulse Windows Service Manager")
     parser.add_argument("action", choices=[
-        "install", "uninstall", "start", "stop", "restart", "status", "configure"
+        "install", "uninstall", "start", "stop", "restart", "status"
     ], help="Service management action")
     parser.add_argument("--path", help="Agent installation path")
     
@@ -384,8 +345,6 @@ def main():
         status = installer.get_service_status()
         print(f"Service Status: {status['status']}")
         return
-    elif args.action == "configure":
-        success = installer.configure_service_directory()
     else:
         print(f"Unknown action: {args.action}")
         return

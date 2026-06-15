@@ -33,7 +33,6 @@ class Event:
 
 
 class EventBus:
-    """Event bus for decoupled communication between components"""
 
     def __init__(self):
         self._subscribers: Dict[EventType, List[Callable]] = {}
@@ -45,15 +44,9 @@ class EventBus:
         self._start_lock: Optional[asyncio.Lock] = None
 
     def _get_or_create_lock(self) -> asyncio.Lock:
-        """Return the shared start/stop lock, creating it on first call.
-        """
         if self._start_lock is None:
             self._start_lock = asyncio.Lock()
         return self._start_lock
-
-    # ------------------------------------------------------------------
-    # Subscribe / publish
-    # ------------------------------------------------------------------
 
     def subscribe(self, event_type: EventType, handler: Callable) -> None:
         if event_type not in self._subscribers:
@@ -74,20 +67,13 @@ class EventBus:
                 pass
 
     async def publish(self, event: Event) -> None:
-        """Publish an event to the queue.
-        """
         if not self._running or not self._event_queue:
             logger.debug("event_bus_not_running_drop", event_type=event.type.value)
             return
         await self._event_queue.put(event)
         logger.debug("event_published", event_type=event.type.value, source=event.source)
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     async def start(self) -> None:
-        """Start the event processor."""
         lock = self._get_or_create_lock()
         async with lock:
             if self._running:
@@ -100,7 +86,6 @@ class EventBus:
             logger.info("event_bus_started")
 
     async def stop(self) -> None:
-        """Stop the event processor and drain remaining events."""
         lock = self._get_or_create_lock()
         async with lock:
             if not self._running:
@@ -126,10 +111,6 @@ class EventBus:
             self._loop = None
             self._event_queue = None
             logger.info("event_bus_stopped")
-
-    # ------------------------------------------------------------------
-    # Internal event processing
-    # ------------------------------------------------------------------
 
     async def _process_events(self) -> None:
         while self._running and self._event_queue:
@@ -169,12 +150,10 @@ class EventBus:
             )
 
 
-# Global event bus instance
 _event_bus: Optional[EventBus] = None
 
 
 def get_event_bus() -> EventBus:
-    """Get the global event bus instance"""
     global _event_bus
     if _event_bus is None:
         _event_bus = EventBus()

@@ -33,10 +33,6 @@ class ExplainerService:
         self._manager: Optional[ExplainableAIManager] = None
         self._init_attempted = False
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     @property
     def manager(self) -> Optional[ExplainableAIManager]:
         return self._manager

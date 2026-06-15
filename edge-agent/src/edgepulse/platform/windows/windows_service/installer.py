@@ -21,12 +21,8 @@ if sys.platform == "win32":
     import servicemanager
 
 from edgepulse.utils.log_handler import get_logger
-
-
-def get_safe_program_data_path() -> Path:
-    """Get safe ProgramData path without using environment variables"""
-    # Use hardcoded safe path to prevent traversal
-    return Path('C:\\ProgramData').resolve()
+from edgepulse.platform._paths import _safe_program_data
+from edgepulse.platform import ServiceManager
 
 logger = get_logger(__name__)
 
@@ -35,7 +31,7 @@ SERVICE_DISPLAY_NAME = "EdgePulse Monitoring Agent"
 SERVICE_DESCRIPTION = "EdgePulse anomaly detection and monitoring agent for edge devices"
 
 
-class ServiceInstaller:
+class ServiceInstaller(ServiceManager):
     """Windows Service installation and management utilities"""
     
     def __init__(self):
@@ -44,8 +40,7 @@ class ServiceInstaller:
         self.description = SERVICE_DESCRIPTION
         
         # Service paths - use safe ProgramData path to prevent traversal
-        base_path = get_safe_program_data_path()
-        self.service_dir = base_path / 'EdgePulse'
+        self.service_dir = _safe_program_data()
         self.config_dir = self.service_dir / 'config'
         self.log_dir = self.service_dir / 'logs'
         self.data_dir = self.service_dir / 'data'

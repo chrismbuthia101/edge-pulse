@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Optional
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.platform._paths import _BASE_DIR, _CONFIG_DIR, _LOG_DIR, _RUN_DIR, _safe_base_dir, write_default_config
+from edgepulse.platform import ServiceManager
 
 logger = get_logger(__name__)
 
@@ -26,18 +28,8 @@ SERVICE_DESCRIPTION = (
     "for Linux edge devices."
 )
 
-_BASE_DIR = Path("/var/lib/edgepulse")
-_CONFIG_DIR = Path("/etc/edgepulse")
-_LOG_DIR = Path("/var/log/edgepulse")
-_RUN_DIR = Path("/run/edgepulse")
-
 _SYSTEMD_SYSTEM_DIR = Path("/etc/systemd/system")
 _UNIT_FILE = _SYSTEMD_SYSTEM_DIR / f"{SERVICE_NAME}.service"
-
-
-def _get_safe_base_dir() -> Path:
-    """Return /var/lib/edgepulse resolved to prevent traversal."""
-    return _BASE_DIR.resolve()
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,7 +101,7 @@ def _build_unit_file(python_exe: Optional[str] = None) -> str:
 
 # ─── ServiceInstaller ─────────────────────────────────────────────────────────
 
-class ServiceInstaller:
+class ServiceInstaller(ServiceManager):
     """
     systemd service installer and lifecycle manager for EdgePulse on Linux.
     """
@@ -120,7 +112,7 @@ class ServiceInstaller:
         self.description = SERVICE_DESCRIPTION
 
         # Directory layout
-        self.service_dir = _get_safe_base_dir()
+        self.service_dir = _safe_base_dir()
         self.config_dir = _CONFIG_DIR
         self.log_dir = _LOG_DIR
         self.data_dir = self.service_dir / "data"
@@ -335,29 +327,4 @@ class ServiceInstaller:
 
     def _write_default_config(self) -> None:
         """Write a starter agent_config.json to /etc/edgepulse if absent."""
-        import json
-
-        config_file = self.config_dir / "agent_config.json"
-        if config_file.exists():
-            return
-
-        default: dict = {
-            "sync": {
-                "supabase_url": "https://your-project.supabase.co",
-                "supabase_key": "your-api-key"
-            },
-            "collection_interval": 60,
-            "detection_threshold": 0.5,
-            "offline_queue_size": 10000,
-            "logging_level": "INFO",
-            "enable_process_monitoring": True,
-            "enable_network_monitoring": True,
-            "enable_filesystem_monitoring": False,
-            "model_type": "isolation_forest",
-        }
-        try:
-            config_file.write_text(json.dumps(default, indent=2))
-            config_file.chmod(0o640)
-            logger.info("default_config_written", path=str(config_file))
-        except Exception as exc:
-            logger.warning("default_config_write_failed", error=str(exc))
+        write_default_config(self.config_dir)

@@ -1,5 +1,3 @@
-# Memory feature extraction.
-
 from typing import Dict, List, Any
 import numpy as np
 

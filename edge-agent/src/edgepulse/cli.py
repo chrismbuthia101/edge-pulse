@@ -1,12 +1,11 @@
-# Command line interface for EdgePulse
 
 import argparse
 import asyncio
 import sys
-import platform
 from pathlib import Path
 
-# Load environment variables from .env file
+from edgepulse.platform import is_windows, is_linux
+
 try:
     from dotenv import load_dotenv
     env_path = Path(__file__).parent.parent.parent / ".env"
@@ -21,20 +20,16 @@ from edgepulse.core.agent import EdgePulseAgent
 from edgepulse.config.settings import AgentSettings
 from edgepulse.utils.error_handler import ConfigurationError, EdgePulseError
 
-# ─── Platform-specific service module ─────────────────────────────────────────
-
-_current_platform = platform.system()
-
-if _current_platform == "Windows":
+if is_windows():
     try:
-        from edgepulse.windows_service.installer import ServiceInstaller
+        from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
         WINDOWS_SERVICE_AVAILABLE = True
     except ImportError:
         WINDOWS_SERVICE_AVAILABLE = False
 else:
     WINDOWS_SERVICE_AVAILABLE = False
 
-if sys.platform.startswith("linux"):
+if is_linux():
     try:
         from edgepulse.platform.linux.linux_service.installer import ServiceInstaller as LinuxServiceInstaller
         LINUX_SERVICE_AVAILABLE = True
@@ -76,7 +71,6 @@ def _load_credentials_into_env() -> bool:
                 os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
             if credentials.device_id:
                 os.environ["DEVICE_ID"] = credentials.device_id
-            # Return True only if both URL and key are present
             return bool(credentials.supabase_url and credentials.api_key)
     except Exception:
         pass
@@ -84,24 +78,20 @@ def _load_credentials_into_env() -> bool:
 
 
 def main():
-    """Main CLI entry point"""
     parser = argparse.ArgumentParser(
         description="EdgePulse - Edge Security Monitoring Agent"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # ── run ───────────────────────────────────────────────────────────────────
     run_parser = subparsers.add_parser("run", help="Run the EdgePulse agent")
     run_parser.add_argument("--config", type=str, help="Path to configuration file")
     run_parser.add_argument("--daemon", action="store_true", help="Run as daemon")
     run_parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
-    # ── bootstrap subcommand ─────────────────────────────────────────────────
     if _BOOTSTRAP_AVAILABLE:
         add_bootstrap_subcommand(subparsers)
 
-    # ── enroll subcommand ─────────────────────────────────────────────────────
     if _ENROLLMENT_AVAILABLE:
         enroll_parser = subparsers.add_parser(
             "enroll",
@@ -129,10 +119,8 @@ def main():
             help="Supabase anon key (can also be provided via config file)",
         )
 
-    # ── status subcommand ─────────────────────────────────────────────────────
     subparsers.add_parser("status", help="Show enrollment and agent status")
 
-    # ── Windows service ───────────────────────────────────────────────────────
     if WINDOWS_SERVICE_AVAILABLE:
         service_parser = subparsers.add_parser("service", help="Manage Windows Service")
         service_subparsers = service_parser.add_subparsers(
@@ -148,7 +136,6 @@ def main():
         logs_parser.add_argument("--lines", type=int, default=50, help="Number of log lines to show")
         service_subparsers.add_parser("cleanup", help="Clean up Windows Service data")
 
-    # ── Linux service ─────────────────────────────────────────────────────────
     if LINUX_SERVICE_AVAILABLE:
         linux_parser = subparsers.add_parser("service", help="Manage Linux systemd Service")
         linux_subparsers = linux_parser.add_subparsers(
@@ -168,50 +155,38 @@ def main():
 
     args = parser.parse_args()
 
-    # ── Dispatch: status ──────────────────────────────────────────────────────
     if args.command == "status":
         _show_status()
         return
 
-    # ── Dispatch: Windows service ─────────────────────────────────────────────
-    if args.command == "service" and WINDOWS_SERVICE_AVAILABLE:
+    if args.command == "service" and is_windows() and WINDOWS_SERVICE_AVAILABLE:
         _dispatch_windows_service(args)
         return
 
-    # ── Dispatch: Linux service ───────────────────────────────────────────────
-    if args.command == "service" and LINUX_SERVICE_AVAILABLE:
+    if args.command == "service" and is_linux() and LINUX_SERVICE_AVAILABLE:
         _dispatch_linux_service(args)
         return
 
-    # ── Dispatch: bootstrap ──────────────────────────────────────────────────
     if args.command == "bootstrap":
         if not _BOOTSTRAP_AVAILABLE:
             print("Bootstrap command not available (edgepulse.bootstrap_cli not found)")
             sys.exit(1)
         sys.exit(run_bootstrap(args))
 
-    # ── Dispatch: enroll ───────────────────────────────────────────────────────
     if args.command == "enroll":
         if not _ENROLLMENT_AVAILABLE:
             print("Enrollment command not available")
             sys.exit(1)
         sys.exit(_run_enrollment(args))
 
-    # ── Default: run the agent ────────────────────────────────────────────────
     if args.command is None or args.command == "run":
         _run_agent(args)
 
 
-# ---------------------------------------------------------------------------
-# Status helper
-# ---------------------------------------------------------------------------
-
 def _show_status():
-    """Print a human-readable enrollment/agent status summary."""
     print("\nEdgePulse Agent — Status")
     print("=" * 50)
 
-    # Credentials
     try:
         from edgepulse.auth.credentials import CredentialManager
         cm = CredentialManager()
@@ -223,21 +198,23 @@ def _show_status():
             print(f"  Backend URL : {url}")
         else:
             print("  Enrollment  : ✗ Not enrolled")
-            print("  Run: sudo /opt/edgepulse/venv/bin/edge-agent enroll")
+            cli_path = PathManager().base_dir / "venv" / "bin" / "edge-agent"
+            print(f"  Run: sudo {cli_path} enroll")
     except Exception as e:
         print(f"  Enrollment  : ✗ Error reading credentials: {e}")
 
-    # ML model
     from edgepulse.utils.path_manager import PathManager
-    model_path = PathManager().models_dir / "edgepulse_primary_isolation_forest.joblib"
+    pm = PathManager()
+    model_path = pm.models_dir / "edgepulse_primary_isolation_forest.joblib"
     if model_path.exists():
         print(f"  ML Model    : ✓ Present ({model_path})")
     else:
         print(f"  ML Model    : ✗ Not bootstrapped")
-        print(f"  Run: sudo /opt/edgepulse/venv/bin/python /opt/edgepulse/bootstrap_model.py")
+        python_path = pm.base_dir / "venv" / "bin" / "python"
+        bootstrap_path = pm.base_dir / "bootstrap_model.py"
+        print(f"  Run: sudo {python_path} {bootstrap_path}")
 
-    # Enrollment config template
-    enroll_cfg = Path("/etc/edgepulse/enrollment.json")
+    enroll_cfg = PathManager().get_config_path().parent / "enrollment.json"
     if enroll_cfg.exists():
         try:
             import json
@@ -256,10 +233,6 @@ def _show_status():
     print()
 
 
-# ---------------------------------------------------------------------------
-# Enrollment helper
-# ---------------------------------------------------------------------------
-
 def _run_enrollment(args) -> int:
     from edgepulse.auth.credentials import CredentialManager
     from edgepulse.auth.enrollment import DeviceEnrollmentClient
@@ -269,7 +242,6 @@ def _run_enrollment(args) -> int:
 
     config = None
 
-    # 1. Try explicit config path
     if hasattr(args, "config") and args.config:
         from edgepulse.auth.enrollment import EnrollmentConfig
         import json as _json
@@ -287,11 +259,9 @@ def _run_enrollment(args) -> int:
         except Exception as e:
             print(f"Error reading config file {args.config}: {e}")
 
-    # 2. Try auto-discovered config
     if config is None:
         config = enrollment_client.read_enrollment_config()
 
-    # 3. Try CLI flags
     if config is None and hasattr(args, "token") and args.token \
             and hasattr(args, "supabase_url") and args.supabase_url:
         from edgepulse.auth.enrollment import EnrollmentConfig
@@ -303,12 +273,16 @@ def _run_enrollment(args) -> int:
         )
 
     if not config:
+        from edgepulse.utils.path_manager import PathManager
+        pm = PathManager()
+        enroll_path = pm.get_config_path().parent / "enrollment.json"
+        cli_path = pm.base_dir / "venv" / "bin" / "edge-agent"
         print()
         print("Error: No enrollment configuration found.")
         print()
-        print("Create /etc/edgepulse/enrollment.json with your project details:")
+        print(f"Create {enroll_path} with your project details:")
         print()
-        print('  sudo nano /etc/edgepulse/enrollment.json')
+        print(f'  sudo nano {enroll_path}')
         print()
         print("  Contents:")
         print('  {')
@@ -317,16 +291,18 @@ def _run_enrollment(args) -> int:
         print('    "supabase_anon_key": "YOUR_ANON_KEY"')
         print('  }')
         print()
-        print("Then run:  sudo /opt/edgepulse/venv/bin/edge-agent enroll")
+        print(f"Then run:  sudo {cli_path} enroll")
         print()
         return 1
 
     # Validate no placeholders
     if "YOUR_PROJECT" in (config.supabase_url or "") or \
        "YOUR_ENROLLMENT_TOKEN" in (config.enrollment_token or ""):
+        from edgepulse.utils.path_manager import PathManager
+        enroll_path = PathManager().get_config_path().parent / "enrollment.json"
         print()
         print("Error: enrollment.json still contains placeholder values.")
-        print(f"  Edit: sudo nano /etc/edgepulse/enrollment.json")
+        print(f"  Edit: sudo nano {enroll_path}")
         print("  Replace YOUR_PROJECT_REF with your actual Supabase project reference.")
         print("  Replace YOUR_ENROLLMENT_TOKEN with the token from your EdgePulse dashboard.")
         print()
@@ -342,14 +318,23 @@ def _run_enrollment(args) -> int:
                 print(f"  API Key   : {result.api_key[:10]}...")
                 print()
                 print("Next steps:")
-                print("  1. Start the agent service:")
-                print("       sudo systemctl start edgepulse-agent")
-                print()
-                print("  2. Check service status:")
-                print("       sudo systemctl status edgepulse-agent")
-                print()
-                print("  3. View live logs:")
-                print("       sudo journalctl -u edgepulse-agent -f")
+                if is_windows():
+                    print("  1. Start the agent service via Windows Service Manager")
+                    print("       net start EdgePulseAgent")
+                    print()
+                    print("  2. Check service status:")
+                    print("       net start | findstr EdgePulseAgent")
+                    print()
+                    print("  3. View logs in C:\\ProgramData\\EdgePulse\\logs\\")
+                else:
+                    print("  1. Start the agent service:")
+                    print("       sudo systemctl start edgepulse-agent")
+                    print()
+                    print("  2. Check service status:")
+                    print("       sudo systemctl status edgepulse-agent")
+                    print()
+                    print("  3. View live logs:")
+                    print("       sudo journalctl -u edgepulse-agent -f")
                 print()
                 return 0
             else:
@@ -362,19 +347,17 @@ def _run_enrollment(args) -> int:
             print("  • Wrong Supabase URL")
             print("  • Network connectivity issues")
             print()
-            print("  Check: sudo journalctl -u edgepulse-agent -n 50")
+            if is_windows():
+                print("  Check logs in C:\\ProgramData\\EdgePulse\\logs\\")
+            else:
+                print("  Check: sudo journalctl -u edgepulse-agent -n 50")
             print()
             return 1
 
     return asyncio.run(do_enrollment())
 
 
-# ---------------------------------------------------------------------------
-# Agent runner helper
-# ---------------------------------------------------------------------------
-
 def _run_agent(args):
-    # Attempt to inject credentials from credential store
     enrolled = _load_credentials_into_env()
 
     try:
@@ -387,7 +370,6 @@ def _run_agent(args):
         settings = AgentSettings(config_path=config_path)
 
         if not enrolled and not settings.should_enable_sync():
-            # Not yet enrolled — run in local-only mode (no sync, no crash)
             import logging
             logging.getLogger(__name__).warning(
                 "Device is not enrolled. Running in local-only mode. "
@@ -395,9 +377,11 @@ def _run_agent(args):
                 "Run 'edge-agent enroll' to enroll this device."
             )
             print()
+            from edgepulse.utils.path_manager import PathManager
+            cli_path = PathManager().base_dir / "venv" / "bin" / "edge-agent"
             print("⚠  Device not enrolled — running in local-only mode.")
             print("   Anomaly detection is active but events will NOT be synced to the cloud.")
-            print("   To enroll: sudo /opt/edgepulse/venv/bin/edge-agent enroll")
+            print(f"   To enroll: sudo {cli_path} enroll")
             print()
 
         agent = EdgePulseAgent(settings=settings)
@@ -422,56 +406,38 @@ def _run_agent(args):
         sys.exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Service dispatch helpers
-# ---------------------------------------------------------------------------
-
 def _dispatch_windows_service(args):
-    from edgepulse.windows_service.installer import ServiceInstaller
-    installer = ServiceInstaller()
-    action = args.service_action
-
-    dispatch = {
-        "install": lambda: installer.install_service(getattr(args, "python_exe", None)),
-        "uninstall": installer.uninstall_service,
-        "start": installer.start_service,
-        "stop": installer.stop_service,
-        "status": lambda: print(f"Windows Service status: {installer.get_service_status()}"),
-        "logs": lambda: print(installer.get_service_logs(args.lines)),
-        "cleanup": installer.cleanup_service_data,
-    }
-
-    fn = dispatch.get(action)
-    if fn:
-        fn()
-    else:
-        print(f"Unknown service action: {action}")
-        sys.exit(1)
+    from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+    _dispatch_service_action(ServiceInstaller(), args)
 
 
 def _dispatch_linux_service(args):
-    from edgepulse.platform.linux.linux_service.installer import ServiceInstaller as LinuxServiceInstaller
-    installer = LinuxServiceInstaller()
-    action = args.service_action
+    from edgepulse.platform.linux.linux_service.installer import ServiceInstaller
+    _dispatch_service_action(ServiceInstaller(), args)
 
+
+def _dispatch_service_action(installer, args):
+    action = args.service_action
     dispatch = {
         "install": lambda: installer.install_service(getattr(args, "python_exe", None)),
         "uninstall": installer.uninstall_service,
         "start": installer.start_service,
         "stop": installer.stop_service,
-        "restart": lambda: (installer.stop_service(), installer.start_service()),
         "status": lambda: print(f"Service status: {installer.get_service_status()}"),
         "logs": lambda: print(installer.get_service_logs(args.lines)),
         "cleanup": installer.cleanup_service_data,
     }
-
-    fn = dispatch.get(action)
-    if fn:
-        result = fn()
-        if result is False:
-            sys.exit(1)
+    if action == "restart":
+        result = installer.stop_service()
+        if result is not False:
+            result = installer.start_service()
     else:
-        print(f"Unknown service action: {action}")
+        fn = dispatch.get(action)
+        if not fn:
+            print(f"Unknown service action: {action}")
+            sys.exit(1)
+        result = fn()
+    if result is False:
         sys.exit(1)
 
 

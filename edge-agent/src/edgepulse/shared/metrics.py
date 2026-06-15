@@ -1,5 +1,3 @@
-# Shared metrics system for EdgePulse components.
-
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
@@ -8,7 +6,6 @@ from dataclasses import dataclass
 
 
 class MetricType(Enum):
-    """Standard metric types"""
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -17,7 +14,6 @@ class MetricType(Enum):
 
 @dataclass
 class MetricDefinition:
-    """Standard metric definition"""
     name: str
     metric_type: MetricType
     description: str
@@ -25,32 +21,26 @@ class MetricDefinition:
 
 
 class MetricCollector(ABC):
-    """Abstract base class for metric collectors"""
-    
+
     @abstractmethod
     def increment_counter(self, metric_def: MetricDefinition, value: int = 1, labels: Optional[Dict[str, str]] = None) -> None:
-        """Increment a counter metric"""
         pass
-    
+
     @abstractmethod
     def set_gauge(self, metric_def: MetricDefinition, value: Union[int, float], labels: Optional[Dict[str, str]] = None) -> None:
-        """Set a gauge metric value"""
         pass
-    
+
     @abstractmethod
     def observe_histogram(self, metric_def: MetricDefinition, value: float, labels: Optional[Dict[str, str]] = None) -> None:
-        """Observe a histogram metric value"""
         pass
-    
+
     @abstractmethod
     def get_all_metrics(self) -> Dict[str, Any]:
-        """Get all current metric values"""
         pass
 
 
 class InMemoryMetricsCollector(MetricCollector):
-    """In-memory implementation of metrics collector"""
-    
+
     def __init__(self, device_id: str = "unknown", max_history_size: int = 1000):
         self.device_id = device_id
         self.counters: Dict[str, int] = {}
@@ -60,17 +50,14 @@ class InMemoryMetricsCollector(MetricCollector):
         self._max_history_size = max_history_size
     
     def increment_counter(self, metric_def: MetricDefinition, value: int = 1, labels: Optional[Dict[str, str]] = None) -> None:
-        """Increment a counter metric"""
         key = self._make_key(metric_def.name, labels)
         self.counters[key] = self.counters.get(key, 0) + value
     
     def set_gauge(self, metric_def: MetricDefinition, value: Union[int, float], labels: Optional[Dict[str, str]] = None) -> None:
-        """Set a gauge metric value"""
         key = self._make_key(metric_def.name, labels)
         self.gauges[key] = float(value)
     
     def observe_histogram(self, metric_def: MetricDefinition, value: float, labels: Optional[Dict[str, str]] = None) -> None:
-        """Observe a histogram metric value"""
         key = self._make_key(metric_def.name, labels)
         if key not in self.histograms:
             self.histograms[key] = []
@@ -81,7 +68,6 @@ class InMemoryMetricsCollector(MetricCollector):
             self.histograms[key] = self.histograms[key][-self._max_history_size:]
     
     def get_all_metrics(self) -> Dict[str, Any]:
-        """Get all current metric values"""
         return {
             'counters': self.counters.copy(),
             'gauges': self.gauges.copy(),
@@ -92,7 +78,6 @@ class InMemoryMetricsCollector(MetricCollector):
         }
     
     def _make_key(self, name: str, labels: Optional[Dict[str, str]] = None) -> str:
-        """Create a unique key for a metric with labels"""
         if not labels:
             return name
         
@@ -100,14 +85,12 @@ class InMemoryMetricsCollector(MetricCollector):
         return f"{name}{{{label_str}}}"
     
     def record_anomaly(self, severity: str = "medium") -> None:
-        """Record an anomaly detection"""
         self.increment_counter(
             StandardMetrics.ANOMALIES_DETECTED_TOTAL,
             labels={'severity': severity}
         )
     
     def record_alert(self, severity: str = "medium", anomaly_score: Optional[float] = None, alert_type: Optional[str] = None) -> None:
-        """Record an alert generation"""
         self.increment_counter(
             StandardMetrics.ALERTS_GENERATED_TOTAL,
             labels={'severity': severity}
@@ -121,12 +104,10 @@ class InMemoryMetricsCollector(MetricCollector):
             )
     
     def update_collection_interval(self, interval: float) -> None:
-        """Update the collection interval metric"""
         self.set_gauge(StandardMetrics.COLLECTION_INTERVAL, interval)
 
 
 class StandardMetrics:
-    """Standard metric definitions for EdgePulse"""
     
     # System metrics
     CPU_USAGE = MetricDefinition(
@@ -235,40 +216,32 @@ class StandardMetrics:
 
 
 class MetricsRegistry:
-    """Registry for managing metrics collectors"""
-    
+
     def __init__(self):
         self._collectors: Dict[str, MetricCollector] = {}
-    
+
     def register(self, name: str, collector: MetricCollector) -> None:
-        """Register a metrics collector"""
         self._collectors[name] = collector
-    
+
     def get(self, name: str) -> Optional[MetricCollector]:
-        """Get a registered metrics collector"""
         return self._collectors.get(name)
-    
+
     def get_all(self) -> Dict[str, MetricCollector]:
-        """Get all registered collectors"""
         return self._collectors.copy()
 
 
-# Global metrics registry
 _metrics_registry = MetricsRegistry()
 
 
 def get_metrics_registry() -> MetricsRegistry:
-    """Get the global metrics registry"""
     return _metrics_registry
 
 
 def create_metrics_collector(name: str, device_id: str = "unknown") -> MetricCollector:
-    """Create and register a new metrics collector"""
     collector = InMemoryMetricsCollector(device_id)
     _metrics_registry.register(name, collector)
     return collector
 
 
 def get_metrics_collector(name: str) -> Optional[MetricCollector]:
-    """Get a metrics collector by name"""
     return _metrics_registry.get(name)

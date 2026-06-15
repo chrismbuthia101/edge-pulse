@@ -1,9 +1,3 @@
-"""
-SyncService
-===========
-Owns initialisation of the SupabaseSync client and the AsyncSyncQueue worker.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +10,6 @@ logger = get_logger(__name__)
 
 
 class SyncService:
-    """Lifecycle wrapper for SupabaseSync + AsyncSyncQueue worker."""
 
     def __init__(
         self,
@@ -31,18 +24,13 @@ class SyncService:
         self._device_id = device_id
         self._client: Optional[Any] = None
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     @property
     def client(self) -> Optional[Any]:
         return self._client
 
     async def initialize(self) -> bool:
-        """Build and initialise the SupabaseSync client. Returns True on success."""
         try:
-            from edgepulse.sync.supabase import SupabaseSync
+            from edgepulse.sync.cloud_sync import CloudSync
             from edgepulse.auth.credentials import CredentialManager
 
             device_id = self._device_id
@@ -57,7 +45,7 @@ class SyncService:
             except Exception as exc:
                 logger.warning("sync_credentials_load_failed", error=str(exc))
 
-            self._client = SupabaseSync(
+            self._client = CloudSync(
                 supabase_url=self._supabase_url,
                 supabase_key=self._supabase_key,
                 device_id=device_id,
@@ -79,14 +67,12 @@ class SyncService:
             return False
 
     async def start_worker(self) -> None:
-        """Start the queue worker if client is available."""
         if self._client is None:
             return
         await self._sync_queue.start_worker(self._client)
         logger.info("sync_queue_worker_started")
 
     async def stop(self) -> None:
-        """Stop the queue and close the client."""
         try:
             await self._sync_queue.stop()
         except Exception as exc:

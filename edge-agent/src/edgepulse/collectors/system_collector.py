@@ -1,6 +1,3 @@
-# System Metrics Collector
-# Collects CPU, memory, disk, and network metrics using psutil.
-
 from datetime import datetime
 import time
 from typing import Dict, Any, Optional, List, Union
@@ -17,16 +14,13 @@ logger = get_logger(__name__)
 
 
 class SystemMetricsCollector(BaseCollector):
-    """System metrics collector for Windows systems"""
-
     def __init__(self, collection_interval: int = 5, device_id: str = "unknown") -> None:
         self.collection_interval = collection_interval
         self.device_id = device_id
         self._last_disk_io: Optional[Any] = None
         self._last_network_io: Optional[Any] = None
         self._running = False
-        
-        # Shared metrics collector
+
         self.metrics = create_metrics_collector(f"system_collector_{device_id}", device_id)
 
     def start(self) -> None:
@@ -53,10 +47,9 @@ class SystemMetricsCollector(BaseCollector):
                 current_freq = cpu_freq.current if cpu_freq else None
             except (AttributeError, RuntimeError):
                 current_freq = None
-            
-            # Record metrics
+
             self.metrics.set_gauge(StandardMetrics.CPU_USAGE, total_cpu, {"device_id": self.device_id})
-            
+
             cpu_data = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "cpu_percent": total_cpu,  # Standardized field name
@@ -65,10 +58,10 @@ class SystemMetricsCollector(BaseCollector):
                 "cpu_count": cpu_count,
                 "cpu_frequency_mhz": current_freq,
             }
-            
+
             logger.debug("cpu_metrics_collected", cpu_percent=total_cpu, device_id=self.device_id)
             return cpu_data
-            
+
         except ResourceError as e:
             logger.error(f"Error collecting CPU metrics: {e}", device_id=self.device_id)
             return {
@@ -95,10 +88,9 @@ class SystemMetricsCollector(BaseCollector):
         try:
             memory = psutil.virtual_memory()
             swap = psutil.swap_memory()
-            
-            # Record metrics
+
             self.metrics.set_gauge(StandardMetrics.MEMORY_USAGE, memory.percent, {"device_id": self.device_id})
-            
+
             memory_data = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "memory_total_bytes": memory.total,
@@ -109,10 +101,10 @@ class SystemMetricsCollector(BaseCollector):
                 "swap_used_bytes": swap.used,
                 "swap_percent": swap.percent,
             }
-            
+
             logger.debug("memory_metrics_collected", memory_percent=memory.percent, device_id=self.device_id)
             return memory_data
-            
+
         except ResourceError as e:
             logger.error(f"Error collecting memory metrics: {e}", device_id=self.device_id)
             return {
@@ -138,7 +130,7 @@ class SystemMetricsCollector(BaseCollector):
     def collect_disk_metrics(self) -> Dict[str, Any]:
         try:
             disk_io = psutil.disk_io_counters()
-            
+
             if disk_io is None:
                 return {
                     "timestamp": datetime.utcnow().isoformat(),
@@ -147,21 +139,20 @@ class SystemMetricsCollector(BaseCollector):
                     "disk_read_count": 0,
                     "disk_write_count": 0,
                 }
-            
+
             read_bytes_delta = 0
             write_bytes_delta = 0
             read_count_delta = 0
             write_count_delta = 0
-            
+
             if self._last_disk_io:
                 read_bytes_delta = disk_io.read_bytes - self._last_disk_io.read_bytes
                 write_bytes_delta = disk_io.write_bytes - self._last_disk_io.write_bytes
                 read_count_delta = disk_io.read_count - self._last_disk_io.read_count
                 write_count_delta = disk_io.write_count - self._last_disk_io.write_count
-            
+
             self._last_disk_io = disk_io
-            
-            # Disk usage for all partitions
+
             disk_usage: Dict[str, Dict[str, Any]] = {}
             partitions = psutil.disk_partitions()
             for partition in partitions:
@@ -182,7 +173,7 @@ class SystemMetricsCollector(BaseCollector):
                 except Exception as e:
                     logger.warning(f"Error collecting disk usage: {e}")
                     continue
-            
+
             return {
                 "timestamp": datetime.utcnow().isoformat(),
                 "disk_read_bytes": disk_io.read_bytes,
@@ -220,7 +211,7 @@ class SystemMetricsCollector(BaseCollector):
     def collect_network_metrics(self) -> Dict[str, Any]:
         try:
             network_io = psutil.net_io_counters()
-            
+
             if network_io is None:
                 return {
                     "timestamp": datetime.utcnow().isoformat(),
@@ -229,21 +220,20 @@ class SystemMetricsCollector(BaseCollector):
                     "network_packets_sent": 0,
                     "network_packets_recv": 0,
                 }
-            
-            # Calculate deltas if we have previous data
+
             bytes_sent_delta = 0
             bytes_recv_delta = 0
             packets_sent_delta = 0
             packets_recv_delta = 0
-            
+
             if self._last_network_io:
                 bytes_sent_delta = network_io.bytes_sent - self._last_network_io.bytes_sent
                 bytes_recv_delta = network_io.bytes_recv - self._last_network_io.bytes_recv
                 packets_sent_delta = network_io.packets_sent - self._last_network_io.packets_sent
                 packets_recv_delta = network_io.packets_recv - self._last_network_io.packets_recv
-            
+
             self._last_network_io = network_io
-            
+
             return {
                 "timestamp": datetime.utcnow().isoformat(),
                 "network_bytes_sent": network_io.bytes_sent,
@@ -285,7 +275,7 @@ class SystemMetricsCollector(BaseCollector):
         try:
             boot_time = psutil.boot_time()
             uptime_seconds = time.time() - boot_time
-            
+
             return {
                 "timestamp": datetime.utcnow().isoformat(),
                 "boot_time": datetime.fromtimestamp(boot_time).isoformat(),
@@ -314,11 +304,9 @@ class SystemMetricsCollector(BaseCollector):
             }
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Get metrics from shared collector"""
         return self.metrics.get_all_metrics()
-    
+
     def create_telemetry_event(self, data: Dict[str, Any]) -> TelemetryEvent:
-        """Create standardized telemetry event"""
         return TelemetryEvent(
             device_id=self.device_id,
             timestamp=normalize_timestamp(data.get('timestamp', datetime.utcnow())),
@@ -332,8 +320,6 @@ class SystemMetricsCollector(BaseCollector):
         )
 
     def collect_all(self) -> Dict[str, Any]:
-        """Collect all system metrics"""
-        
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "cpu": self.collect_cpu_metrics(),

@@ -1,10 +1,6 @@
-# Privacy Controller
-# Enforces privacy-by-design principles and GDPR compliance.
-
 from edgepulse.utils.log_handler import get_logger
 import hashlib
 from typing import Dict
-from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
 
@@ -82,13 +78,11 @@ class PrivacyController:
         # Use deep copy to avoid mutating the original data structure
         anonymized = copy.deepcopy(data)
         
-        # Hash IP addresses
         if "network_connections" in anonymized:
             for conn in anonymized["network_connections"]:
                 if "remote_address" in conn:
                     conn["remote_address"] = self.anonymize_ip(conn["remote_address"])
         
-        # Hash usernames
         if "processes" in anonymized:
             for proc in anonymized["processes"]:
                 if "username" in proc:
@@ -100,17 +94,14 @@ class PrivacyController:
         if not ip_address:
             return ""
         
-        if self.anonymization_level == "maximum":
-            # Full hash
+        if self.anonymization_level in ("full",):
             return self.hash_string(ip_address)
-        elif self.anonymization_level == "strict":
-            # Last octet zeroed
+        elif self.anonymization_level in ("medium",):
             parts = ip_address.split('.')
             if len(parts) == 4:
                 return '.'.join(parts[:3] + ['0'])
             return self.hash_string(ip_address)
         else:
-            # Basic: keep as is
             return ip_address
 
     def hash_string(self, value: str) -> str:
@@ -125,21 +116,4 @@ class PrivacyController:
         
         return True
 
-    def set_retention_policy(self, days: int) -> None:
-        self.data_retention_days = days
-        logger.info(f"Set retention policy to {days} days")
 
-    def enforce_retention(self, data_timestamp: datetime) -> bool:
-        cutoff = datetime.utcnow() - timedelta(days=self.data_retention_days)
-        return data_timestamp >= cutoff
-
-    def export_privacy_report(self) -> Dict:
-        return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "data_retention_days": self.data_retention_days,
-            "anonymization_level": self.anonymization_level,
-            "collect_command_lines": self.collect_command_lines,
-            "gdpr_compliant": True,
-            "data_minimization": True,
-            "anonymization": True,
-        }

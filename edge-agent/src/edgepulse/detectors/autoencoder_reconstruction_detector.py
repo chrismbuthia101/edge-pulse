@@ -1,6 +1,4 @@
-"""
-Secondary anomaly detector using autoencoder reconstruction error.
-"""
+
 
 from __future__ import annotations
 
@@ -85,7 +83,6 @@ class AutoencoderDetector(BaseDetector):
         return model
 
     def _convert_to_tflite(self, keras_model: Any, out_path: Path) -> Path:
-        """Convert trained Keras model to .tflite via TFLiteConverter."""
         if not TENSORFLOW_AVAILABLE:
             raise ModelError("TensorFlow is required for .tflite conversion")
 
@@ -152,7 +149,6 @@ class AutoencoderDetector(BaseDetector):
             arr = arr.reshape(1, -1)
 
         if self._backend is None:
-            # Try to load model on demand
             if not self.load_model():
                 return [(0, 0.0)] * len(arr)
 
@@ -186,10 +182,9 @@ class AutoencoderDetector(BaseDetector):
         save_path = Path(path) if path else self.model_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Convert + save as .tflite
         tflite_path = self._convert_to_tflite(self._keras_model, save_path)
 
-        # Save metadata sidecar
+
         import json
         meta = {
             "threshold_value": self.reconstruction_threshold,
@@ -220,7 +215,6 @@ class AutoencoderDetector(BaseDetector):
         try:
             self._backend = LiteRTBackend.from_file(str(load_path))
 
-            # Load metadata sidecar
             meta_path = load_path.with_suffix(".metadata.json")
             if meta_path.exists():
                 import json

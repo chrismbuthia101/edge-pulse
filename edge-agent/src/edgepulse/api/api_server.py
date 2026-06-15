@@ -1,12 +1,6 @@
-"""
-Adaptive API Server for EdgePulse
-===================================
-Selects FastAPI / minimal HTTP / Unix-socket server based on available
-system resources.
-"""
-
 import asyncio
 import json
+import sys
 import psutil
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -27,13 +21,11 @@ _detector_health_provider: Optional[Callable[[], Dict[str, Any]]] = None
 
 
 def register_detector_health_provider(fn: Callable[[], Dict[str, Any]]) -> None:
-    """Allow EdgePulseAgent to inject a detector-health callback."""
     global _detector_health_provider
     _detector_health_provider = fn
 
 
 def _get_detector_health() -> Dict[str, Any]:
-    """Return detector health dict, or a degraded placeholder."""
     if _detector_health_provider is not None:
         try:
             return _detector_health_provider()
@@ -262,7 +254,6 @@ class FastAPIServer(BaseAPIServer):
 
 
 class AdaptiveAPIServer:
-    """Picks the best server implementation based on available resources."""
 
     def __init__(
         self,
@@ -336,8 +327,8 @@ class AdaptiveAPIServer:
             available_mb = psutil.virtual_memory().available // (1024 * 1024)
 
             try:
-                import fastapi  # noqa: F401
-                import uvicorn  # noqa: F401
+                import fastapi
+                import uvicorn
                 fastapi_available = True
             except ImportError:
                 fastapi_available = False
@@ -352,7 +343,9 @@ class AdaptiveAPIServer:
             if fastapi_available and cpu_count >= self.min_cpu_cores and available_mb >= self.min_memory_mb:
                 return API_MODES["FASTAPI"]
             elif available_mb >= 256:
-                return API_MODES["SOCKET"]
+                if sys.platform.startswith("linux"):
+                    return API_MODES["SOCKET"]
+                return API_MODES["MINIMAL"]
             else:
                 return API_MODES["MINIMAL"]
 

@@ -1,7 +1,3 @@
-"""
-EdgePulse Agent Settings
-"""
-
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -9,12 +5,8 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from edgepulse.utils.device_id import get_default_device_id, validate_device_id
+from edgepulse.utils.device import get_default_device_id, validate_device_id
 
-
-# ---------------------------------------------------------------------------
-# Nested config blocks
-# ---------------------------------------------------------------------------
 
 class APIConfig(BaseModel):
     enabled: bool = Field(default=True)
@@ -115,10 +107,6 @@ class MetricsConfig(BaseModel):
     retention_hours: int = Field(default=168, ge=24)
 
 
-# ---------------------------------------------------------------------------
-# Main settings class
-# ---------------------------------------------------------------------------
-
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -204,10 +192,6 @@ class AgentSettings(BaseSettings):
 
         return self
 
-    # ------------------------------------------------------------------
-    # Convenience helpers
-    # ------------------------------------------------------------------
-
     def get_effective_config(self) -> Dict[str, Any]:
         return self.model_dump()
 
@@ -235,7 +219,6 @@ class AgentSettings(BaseSettings):
         )
 
     def is_enrolled(self) -> bool:
-        """Convenience: True when sync credentials are present."""
         return self.should_enable_sync()
 
     def should_enable_ml(self) -> bool:

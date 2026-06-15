@@ -1,6 +1,3 @@
-# Filesystem Monitor
-# Monitors filesystem events for security monitoring using watchdog.
-
 import os
 import sys
 import threading
@@ -27,7 +24,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class FilesystemEvent:
-    """Filesystem event data structure"""
     timestamp: str
     event_type: str
     file_path: str
@@ -39,8 +35,6 @@ class FilesystemEvent:
 
 
 class EdgePulseFileEventHandler(WatchdogEventHandler):
-    """Watchdog event handler for filesystem monitoring"""
-
     def __init__(self, collector: 'FileSystemMonitor'):
         super().__init__()
         self.collector = collector
@@ -71,7 +65,6 @@ class EdgePulseFileEventHandler(WatchdogEventHandler):
                     file_size = file_path.stat().st_size
                     file_extension = file_path.suffix.lower()
                 except OSError:
-                    # OSError covers both PermissionError and other IO errors
                     pass
 
             fs_event = FilesystemEvent(
@@ -121,8 +114,6 @@ class EdgePulseFileEventHandler(WatchdogEventHandler):
 
 
 class FileSystemMonitor(BaseCollector):
-    """Filesystem monitoring collector using watchdog"""
-
     def __init__(self, watched_directories: Optional[List[str]] = None):
         if not WATCHDOG_AVAILABLE:
             raise ImportError("watchdog is required for filesystem monitoring")

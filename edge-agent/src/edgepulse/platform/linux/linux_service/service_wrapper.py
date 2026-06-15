@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.platform._paths import _BASE_DIR, _CONFIG_DIR, _LOG_DIR, _safe_base_dir, write_default_config
 
 if sys.platform.startswith("linux"):
     from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
@@ -27,15 +28,7 @@ else:
 
 logger = get_logger(__name__)
 
-_BASE_DIR = Path("/var/lib/edgepulse")
-_CONFIG_DIR = Path("/etc/edgepulse")
-_LOG_DIR = Path("/var/log/edgepulse")
-
 os.environ["EDGE_PULSE_DATA_DIR"] = str(_BASE_DIR)
-
-
-def _safe_base_dir() -> Path:
-    return _BASE_DIR.resolve()
 
 
 def _load_credentials_into_env() -> bool:
@@ -228,32 +221,7 @@ class LinuxServiceWrapper:
             raise
 
     def _write_default_config(self) -> None:
-        import json as _json
-
-        config_file = _CONFIG_DIR / "agent_config.json"
-        if config_file.exists():
-            return
-
-        # Write config with empty (not placeholder) sync values so the
-        # pydantic validator does not complain on first start
-        default: dict = {
-            "sync": {
-                "supabase_url": "",
-                "supabase_key": ""
-            },
-            "collection_interval": 60,
-            "detection_threshold": 0.5,
-            "offline_queue_size": 10000,
-            "logging_level": "INFO",
-            "enable_process_monitoring": True,
-            "enable_network_monitoring": True,
-        }
-        try:
-            config_file.write_text(_json.dumps(default, indent=2))
-            config_file.chmod(0o640)
-            logger.info("default_config_written", path=str(config_file))
-        except Exception as exc:
-            logger.warning("default_config_write_failed", error=str(exc))
+        write_default_config(_CONFIG_DIR)
 
 
 # ── Entry points ──────────────────────────────────────────────────────────────

@@ -1,7 +1,3 @@
-"""
-Device Enrollment Client for EdgePulse
-"""
-
 import os
 import sys
 import json
@@ -21,9 +17,9 @@ from edgepulse.utils.version import get_agent_version
 
 logger = get_logger(__name__)
 
+
 @dataclass
 class EnrollmentResponse:
-    """Response from the /enroll-device edge function."""
     device_id: str
     api_key: str
     enrollment_token: Optional[str] = None
@@ -32,7 +28,6 @@ class EnrollmentResponse:
 
 @dataclass
 class EnrollmentConfig:
-    """Parsed content of enroll.cfg / enrollment.json."""
     supabase_url: str
     enrollment_token: str
     supabase_anon_key: Optional[str] = None
@@ -43,19 +38,12 @@ class EnrollmentConfig:
 
 
 class DeviceEnrollmentClient:
-    """Handles first-run enrollment and API-key rotation.
-    """
-
     def __init__(self, credential_manager: Optional[CredentialManager] = None):
         self.credential_manager = credential_manager or CredentialManager()
         self.platform = sys.platform
 
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx is required for device enrollment")
-
-    # ------------------------------------------------------------------
-    # Config file discovery
-    # ------------------------------------------------------------------
 
     def _config_search_paths(self) -> list[Path]:
         paths: list[Path] = []
@@ -74,11 +62,10 @@ class DeviceEnrollmentClient:
         if self.platform != "win32":
             paths.append(Path("/etc/edgepulse/enrollment.json"))
             paths.append(Path("/etc/edgepulse/enroll.cfg"))
-        
+
         return paths
 
     def read_enrollment_config(self) -> Optional[EnrollmentConfig]:
-        """Return the first enrollment config file found, or None."""
         for path in self._config_search_paths():
             if path.exists():
                 cfg = self._parse_config_file(path)
@@ -105,7 +92,6 @@ class DeviceEnrollmentClient:
                     timeout_seconds=data.get("timeout_seconds", 30),
                 )
             else:
-                # Simple KEY=VALUE format
                 cfg: dict = {}
                 for line in content.splitlines():
                     line = line.strip()
@@ -128,7 +114,6 @@ class DeviceEnrollmentClient:
             return None
 
     def delete_enrollment_config(self) -> bool:
-        """Delete all enrollment config files after successful enrollment."""
         deleted = False
         for path in self._config_search_paths():
             if path.exists():
@@ -140,12 +125,7 @@ class DeviceEnrollmentClient:
                     logger.warning("enrollment_config_delete_failed", path=str(path), error=str(e))
         return deleted
 
-    # ------------------------------------------------------------------
-    # Enrollment
-    # ------------------------------------------------------------------
-
     async def enroll_device(self, config: EnrollmentConfig) -> Optional[EnrollmentResponse]:
-        """POST to the Supabase enroll-device function and return credentials."""
         try:
             logger.info("enrollment_starting")
 
@@ -214,7 +194,6 @@ class DeviceEnrollmentClient:
             return None
 
     def complete_enrollment(self, response: EnrollmentResponse, supabase_url: Optional[str] = None, supabase_anon_key: Optional[str] = None) -> bool:
-        """Persist credentials via CredentialManager (single write path) and clean up."""
         try:
             credentials = DeviceCredentials(
                 device_id=response.device_id,
@@ -242,7 +221,6 @@ class DeviceEnrollmentClient:
             return False
 
     def _update_agent_config_device_id(self, device_id: str, supabase_url: Optional[str] = None, supabase_anon_key: Optional[str] = None) -> bool:
-        """Update agent_config.json with enrolled device_id, sync URL, and supabase_anon_key."""
         try:
             from edgepulse.utils.path_manager import PathManager
 
@@ -256,7 +234,6 @@ class DeviceEnrollmentClient:
 
             config["device_id"] = device_id
 
-            # Update sync configuration if provided
             if supabase_url or supabase_anon_key:
                 if "sync" not in config:
                     config["sync"] = {}
@@ -275,22 +252,13 @@ class DeviceEnrollmentClient:
             logger.warning("agent_config_update_failed", error=str(e))
             return False
 
-    # ------------------------------------------------------------------
-    # Convenience / compatibility
-    # ------------------------------------------------------------------
-
     def is_enrolled(self) -> bool:
         return self.credential_manager.is_enrolled()
 
     def get_device_credentials(self) -> Optional[DeviceCredentials]:
         return self.credential_manager.get_device_credentials()
 
-    # ------------------------------------------------------------------
-    # API-key rotation
-    # ------------------------------------------------------------------
-
     async def rotate_api_key(self, supabase_url: str) -> Optional[str]:
-        """Rotate the device API key via the backend and persist the new key."""
         try:
             credentials = self.credential_manager.get_device_credentials()
             if not credentials:
@@ -313,7 +281,6 @@ class DeviceEnrollmentClient:
 
             if response.status_code == 200:
                 new_key = response.json()["api_key"]
-                # Store via CredentialManager — the only write path
                 if self.credential_manager.store_credential("api_key", new_key):
                     logger.info("api_key_rotated", device_id=credentials.device_id)
                     return new_key
@@ -337,7 +304,6 @@ class DeviceEnrollmentClient:
             return None
 
     async def verify_enrollment(self, supabase_url: str) -> bool:
-        """Ping the Supabase REST root to confirm the stored credentials work."""
         try:
             credentials = self.credential_manager.get_device_credentials()
             if not credentials:
@@ -353,7 +319,6 @@ class DeviceEnrollmentClient:
                         "Authorization": "Bearer dummy",
                     },
                 )
-            # 200 = open, 401 = service alive but auth checked (both mean reachable)
             return response.status_code in (200, 401)
 
         except Exception as e:

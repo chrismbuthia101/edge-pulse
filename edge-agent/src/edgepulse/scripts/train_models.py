@@ -98,10 +98,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("train")
 
-# ---------------------------------------------------------------------------
-# Canonical feature schema — must stay in sync with feature_extractor.py
-# ---------------------------------------------------------------------------
-
 FEATURE_SCHEMA: List[str] = [
     # CPU 1-min (5)
     "cpu_mean_1min", "cpu_std_1min", "cpu_max_1min",
@@ -131,23 +127,20 @@ FEATURE_SCHEMA: List[str] = [
     "temporal_hour_sin", "temporal_hour_cos", "temporal_is_weekend",
 ]
 
-SCHEMA_LEN = len(FEATURE_SCHEMA)   # 36
-FEATURE_DIM = 50                   # padded dimension IsolationForestDetector expects
+SCHEMA_LEN = len(FEATURE_SCHEMA)
+FEATURE_DIM = 50
 
 PADDED_NAMES: List[str] = FEATURE_SCHEMA + [
     f"padding_{i}" for i in range(FEATURE_DIM - SCHEMA_LEN)
 ]
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
+
 
 def _empty_row() -> Dict[str, float]:
     return {f: 0.0 for f in FEATURE_SCHEMA}
 
 
 def _col(df: pd.DataFrame, *names: str, default: float = 0.0) -> pd.Series:
-    """Return first matching column as float, or a constant series."""
     for n in names:
         if n in df.columns:
             return pd.to_numeric(df[n], errors="coerce").fillna(default)
@@ -193,15 +186,8 @@ def _clean(arr: np.ndarray) -> np.ndarray:
     return np.nan_to_num(arr, nan=0.0, posinf=1e6, neginf=-1e6)
 
 
-# ---------------------------------------------------------------------------
-# 1. UNSW-NB15
-# ---------------------------------------------------------------------------
-
 def load_unsw_nb15(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Expects: <data_dir>/UNSW_NB15/*.parquet
-    Labels:  column 'label' (0 = normal, 1 = attack) or 'attack_cat' (non-empty = attack)
-    """
+    """Expects <data_dir>/UNSW_NB15/*.parquet; labels in 'label' (0/1) or 'attack_cat' (non-empty=attack)."""
     parquets = sorted(data_dir.glob("UNSW_NB15/*.parquet"))
     if not parquets:
         raise FileNotFoundError(f"No UNSW-NB15 parquet files found under {data_dir}/UNSW_NB15/")
@@ -217,7 +203,6 @@ def load_unsw_nb15(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray,
     df = pd.concat(frames, ignore_index=True)
     df.columns = df.columns.str.lower().str.strip()
 
-    # Labels
     label_col = next((c for c in ["label", "attack_cat"] if c in df.columns), None)
     if label_col == "attack_cat":
         y = (df[label_col].notna()
@@ -258,16 +243,9 @@ def load_unsw_nb15(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray,
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# 2. CSE-CIC-IDS2018
-# ---------------------------------------------------------------------------
-
 def load_cic_ids2018(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Expects: <data_dir>/CSE-CIC-IDS2018/CSE-CIC-IDS2018.csv
-    Labels:  column 'label' or 'class', value 'Benign' = normal
-    """
-    # Support both possible locations
+    """Expects <data_dir>/CSE-CIC-IDS2018/CSE-CIC-IDS2018.csv; 'Benign' label = normal."""
+
     candidates = [
         data_dir / "CSE-CIC-IDS2018" / "CSE-CIC-IDS2018.csv",
         data_dir / "CSE-CIC-IDS2018.csv",
@@ -321,15 +299,8 @@ def load_cic_ids2018(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarra
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# 3. CERT Insider Threat r4.2
-# ---------------------------------------------------------------------------
-
 def load_cert(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Expects: <data_dir>/CERT Insider Threat r4.2/*.csv
-    Labels:  none exposed — all treated as normal behaviour.
-    """
+    """Expects <data_dir>/CERT Insider Threat r4.2/*.csv; all treated as normal (no labels)."""
     cert_dir = data_dir / "CERT Insider Threat r4.2"
     if not cert_dir.exists():
         raise FileNotFoundError(f"CERT directory not found: {cert_dir}")
@@ -414,11 +385,6 @@ def load_cert(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.n
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# 4. ADFA-LD  (Linux syscall traces — .txt files)
-# ---------------------------------------------------------------------------
-
-# Suspicious Linux syscall numbers (common in privilege escalation / shellcode)
 ADFA_LD_SUSPICIOUS = {
     11,   # execve
     2,    # fork
@@ -434,7 +400,7 @@ ADFA_LD_PROCESS = {11, 2, 190, 120}
 
 
 def _parse_syscall_trace(path: Path) -> Optional[np.ndarray]:
-    """Read one syscall trace file — space-separated integers, one per line or all on one line."""
+    """Read one syscall trace file — space-separated integers."""
     try:
         text = path.read_text(errors="replace").strip()
         ids = np.array(
@@ -477,11 +443,7 @@ def _syscall_trace_to_features(syscalls: np.ndarray, suspicious: set, process: s
 
 
 def load_adfa_ld(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Expects: <data_dir>/ADFA-LD/
-      Training_Data_Master/   — normal .txt traces
-      Attack_Data_Master/     — subdirs containing attack .txt traces
-    """
+    """Expects <data_dir>/ADFA-LD/ with Training_Data_Master/ (normal) and Attack_Data_Master/ (attack) .txt traces."""
     base = data_dir / "ADFA-LD"
     if not base.exists():
         raise FileNotFoundError(f"ADFA-LD directory not found: {base}")
@@ -497,7 +459,6 @@ def load_adfa_ld(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
     rows_normal: List[Dict[str, float]] = []
     rows_attack: List[Dict[str, float]] = []
 
-    # Normal traces
     for f in sorted(train_dir.glob("*.txt")):
         if len(rows_normal) >= limit:
             break
@@ -505,7 +466,6 @@ def load_adfa_ld(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
         if sc is not None:
             rows_normal.append(_syscall_trace_to_features(sc, ADFA_LD_SUSPICIOUS, ADFA_LD_PROCESS))
 
-    # Attack traces — recurse into subdirs
     if attack_dir.exists():
         for f in sorted(attack_dir.rglob("*.txt")):
             if len(rows_attack) >= limit:
@@ -526,11 +486,6 @@ def load_adfa_ld(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# 5. ADFA-WD-SAA / Full_Process_Traces (Windows, .GHC files)
-# ---------------------------------------------------------------------------
-
-# Suspicious Windows NT syscall IDs
 ADFA_WD_SUSPICIOUS = {
     0x0078, 0x0079, 0x007A,  # CreateProcess family
     0x0029, 0x002A, 0x002B,  # Token manipulation
@@ -543,24 +498,15 @@ ADFA_WD_PROCESS = {0x0078, 0x0079, 0x007A, 0x0070, 0x0071}
 
 
 def _parse_ghc_trace(path: Path) -> Optional[np.ndarray]:
-    """Read one .GHC trace file — same format as .txt (space-separated ints)."""
-    return _parse_syscall_trace(path)  # same parser works
+    return _parse_syscall_trace(path)
 
 
 def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Supports two layouts:
-      Layout A — ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces/Full_Trace_Training_Data/*.GHC
-                 (the current correct location)
-      Layout B — Full_Process_Traces/ at datasets-dir root (Full_Trace_Training_Data/*.GHC, etc.)
-
-    Both layouts are tried in order.
-    """
+    """Tries Layout A (ADFA-WD-SAA_Master/...) then Layout B (Full_Process_Traces/ root)."""
     limit = max_rows or 50_000
     rows_normal: List[Dict[str, float]] = []
     rows_attack: List[Dict[str, float]] = []
 
-    # ── Layout A: ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces (primary data) ───
     saa_base = data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces" / "Full_Process_Traces"
     if saa_base.exists():
         log.info("  ADFA-WD  using ADFA-WD-SAA_Master/Full_Process_Traces/Full_Process_Traces/")
@@ -593,7 +539,6 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
                             _syscall_trace_to_features(sc, ADFA_WD_SUSPICIOUS, ADFA_WD_PROCESS)
                         )
 
-    # ── Layout B: Legacy scaffold layout (S1-S4/S-N-1..10 with .GHC files) ────────
     if not rows_normal:
         saa_fpt_candidates = [
             data_dir / "ADFA-WD-SAA_Master" / "Full_Process_Traces",
@@ -633,19 +578,8 @@ def load_adfa_wd(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, n
     return X, y
 
 
-# ---------------------------------------------------------------------------
-# 6. DAPT2020
-# ---------------------------------------------------------------------------
-
 def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Expects: <data_dir>/DAPT2020/*.pcap_Flow.csv
-    Labels:  filenames containing 'pvt' = attack (APT C2 traffic).
-             Files: enp0s3-monday.pcap_Flow.csv (normal)
-                    enp0s3-monday-pvt.pcap_Flow.csv (attack)
-                    enp0s3-pvt-tuesday.pcap_Flow.csv (attack)
-                    enp0s3-tcpdump-pvt-friday.pcap_Flow.csv (attack)
-    """
+    """Expects <data_dir>/DAPT2020/*.pcap_Flow.csv; filenames containing 'pvt' = attack."""
     dapt_dir = data_dir / "DAPT2020"
     if not dapt_dir.exists():
         raise FileNotFoundError(f"DAPT2020 directory not found: {dapt_dir}")
@@ -665,7 +599,6 @@ def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, 
     df = pd.concat(frames, ignore_index=True)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Label: file stem contains 'pvt' anywhere (handles -pvt-, pvt-, -pvt.)
     y = df["_source_file"].str.contains("pvt", case=False).astype(int).values
 
     fwd_pkts  = _col(df, "total_fwd_packets", "fwd_packets")
@@ -698,10 +631,6 @@ def load_dapt2020(data_dir: Path, max_rows: Optional[int]) -> Tuple[np.ndarray, 
     log.info("  DAPT  final X=%s  anomaly_rate=%.1f%%", X.shape, 100 * y.mean())
     return X, y
 
-
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 
 def train_isolation_forest(
     X_train: np.ndarray,
@@ -746,10 +675,6 @@ def evaluate(
         log.warning("  %-15s  evaluation error: %s", dataset_name, exc)
 
 
-# ---------------------------------------------------------------------------
-# Save — in IsolationForestDetector format
-# ---------------------------------------------------------------------------
-
 def save_model(
     model: IsolationForest,
     scaler: StandardScaler,
@@ -758,33 +683,25 @@ def save_model(
     background_data: np.ndarray,
     output_path: Path,
 ) -> None:
-    """
-    Save in the format read by IsolationForestDetector.load_model():
-      {model, is_trained, training_samples, n_estimators, contamination, hash, ...}
-    Extra keys (scaler, feature_names, background_data) are silently ignored by the loader
-    but are useful for downstream SklearnAnomalyDetector usage.
-    """
+    """Save in the format read by IsolationForestDetector.load_model()."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     model_data = {
-        # Keys required by IsolationForestDetector
         "model":            model,
         "is_trained":       True,
         "training_samples": training_samples,
         "n_estimators":     model.n_estimators,
         "contamination":    model.contamination,
-        # Extra keys (used by SklearnAnomalyDetector, ignored elsewhere)
         "scaler":           scaler,
         "feature_names":    feature_names,
         "feature_dimension": FEATURE_DIM,
         "feature_schema_version": "1.1",
         "background_data":  background_data,
-        "hash":             None,  # filled after first write
+        "hash":             None,
     }
 
     joblib.dump(model_data, output_path)
 
-    # Compute SHA-256 and embed it (IsolationForestDetector stores it too)
     digest = hashlib.sha256()
     with open(output_path, "rb") as fh:
         for chunk in iter(lambda: fh.read(65536), b""):
@@ -795,10 +712,6 @@ def save_model(
 
     log.info("Saved  %s  (SHA-256: %s...)", output_path, file_hash[:16])
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 DATASET_CHOICES = ["unsw", "cic", "cert", "adfa_ld", "adfa_wd", "dapt"]
 
@@ -884,7 +797,6 @@ def main() -> None:
             log.warning("  Skipping %s: %s", name, exc)
             continue
 
-        # Split normal rows 80/20; keep all attack rows in eval only
         normal_mask = y == 0
         X_normal = X[normal_mask].copy()
         rng = np.random.default_rng(args.seed)
@@ -906,7 +818,6 @@ def main() -> None:
         log.error("No training data could be loaded. Check your --datasets-dir path.")
         sys.exit(1)
 
-    # Combine and shuffle
     X_train = np.vstack(X_train_parts)
     rng = np.random.default_rng(args.seed)
     X_train = X_train[rng.permutation(len(X_train))]

@@ -1,5 +1,3 @@
-# Shared data schemas for EdgePulse components.
-
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -7,7 +5,6 @@ from enum import Enum
 import uuid
 
 class SeverityLevel(str, Enum):
-    """Standard severity levels for alerts and events"""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -15,7 +12,6 @@ class SeverityLevel(str, Enum):
 
 
 class DeviceStatus(str, Enum):
-    """Standard device status values"""
     ONLINE = "online"
     OFFLINE = "offline"
     WARNING = "warning"
@@ -23,7 +19,6 @@ class DeviceStatus(str, Enum):
 
 
 class EventType(str, Enum):
-    """Standard event types across the system"""
     ALERT = "alert"
     TELEMETRY = "telemetry"
     DETECTION = "detection"
@@ -32,7 +27,6 @@ class EventType(str, Enum):
 
 
 class BaseEvent(BaseModel):
-    """Base event schema with standard fields"""
     device_id: str = Field(..., description="Unique device identifier")
     timestamp: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat(),
@@ -63,7 +57,6 @@ class BaseEvent(BaseModel):
 
 
 class AlertEvent(BaseEvent):
-    """Standard alert event schema"""
     event_type: Literal[EventType.ALERT] = Field(
         default=EventType.ALERT, description="Type of event"
     )
@@ -90,7 +83,6 @@ class AlertEvent(BaseEvent):
 
 
 class TelemetryEvent(BaseEvent):
-    """Standard telemetry event schema"""
     event_type: Literal[EventType.TELEMETRY] = Field(
         default=EventType.TELEMETRY, description="Type of event"
     )
@@ -117,7 +109,6 @@ class TelemetryEvent(BaseEvent):
 
 
 class DetectionEvent(BaseEvent):
-    """Standard detection event schema"""
     event_type: Literal[EventType.DETECTION] = Field(
         default=EventType.DETECTION, description="Type of event"
     )
@@ -134,7 +125,6 @@ class DetectionEvent(BaseEvent):
 
 
 class DeviceInfo(BaseModel):
-    """Standard device information schema"""
     device_id: str = Field(..., description="Unique device identifier")
     status: DeviceStatus = Field(..., description="Device status")
     last_seen: str = Field(..., description="ISO format timestamp of last seen")
@@ -149,7 +139,6 @@ class DeviceInfo(BaseModel):
 
 
 class FeatureVector(BaseModel):
-    """Standard feature vector schema"""
     device_id: str = Field(..., description="Device identifier")
     timestamp: str = Field(..., description="ISO format timestamp")
     features: Dict[str, float] = Field(..., description="Feature name-value pairs")
@@ -178,12 +167,7 @@ class FeatureVector(BaseModel):
         return v
 
 
-# ---------------------------------------------------------------------------
-# Utility functions
-# ---------------------------------------------------------------------------
-
 def normalize_timestamp(timestamp: Union[str, datetime]) -> str:
-    """Normalize timestamp to ISO format string"""
     if isinstance(timestamp, datetime):
         return timestamp.isoformat()
     if isinstance(timestamp, str):
@@ -196,7 +180,6 @@ def normalize_timestamp(timestamp: Union[str, datetime]) -> str:
 
 
 def normalize_severity(severity: Union[str, SeverityLevel]) -> SeverityLevel:
-    """Normalize severity to enum value"""
     if isinstance(severity, SeverityLevel):
         return severity
     if isinstance(severity, str):
@@ -211,7 +194,6 @@ def normalize_severity(severity: Union[str, SeverityLevel]) -> SeverityLevel:
 
 
 def validate_standard_fields(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and standardize common fields"""
     if "timestamp" in data:
         data["timestamp"] = normalize_timestamp(data["timestamp"])
     if "severity" in data:
@@ -225,7 +207,6 @@ def create_standard_response(
     error: Optional[str] = None,
     timestamp: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Create a standardized API response"""
     return {
         "success": success,
         "timestamp": timestamp or datetime.utcnow().isoformat(),

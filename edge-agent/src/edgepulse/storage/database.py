@@ -1,9 +1,7 @@
-"""
-EdgePulse Database Manager
-"""
-
 import aiosqlite
+import hashlib
 import json
+import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,210 +10,19 @@ from datetime import datetime, timedelta
 
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.shared.schemas import (
-    SeverityLevel,
-    DeviceStatus,
     AlertEvent,
     TelemetryEvent,
     DetectionEvent,
-    DeviceInfo,
     FeatureVector,
-    normalize_timestamp,
 )
 
 logger = get_logger(__name__)
 
+_SCHEMA_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "schema.sql"
 
-class DatabaseManager:
-    """Async database manager with intrinsic standardised schema"""
 
-    TABLE_SCHEMAS = {
-        "telemetry_events": """
-            CREATE TABLE IF NOT EXISTS telemetry_events (
-                event_id TEXT PRIMARY KEY,
-                device_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                event_type TEXT NOT NULL
-                    CHECK (event_type IN ('PROCESS', 'NETWORK', 'FILE', 'RESOURCE')),
-                event_payload TEXT NOT NULL,
-                collection_agent_version TEXT NOT NULL,
-                payload_hash TEXT NOT NULL,
-                synced INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """,
-
-        "devices": """
-            CREATE TABLE IF NOT EXISTS devices (
-                id TEXT PRIMARY KEY,
-                last_seen TEXT NOT NULL,
-                status TEXT NOT NULL
-                    CHECK (status IN ('online', 'offline', 'warning', 'error')),
-                cpu_usage DECIMAL(5,2),
-                memory_usage DECIMAL(5,2),
-                alerts_count INTEGER DEFAULT 0,
-                version TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """,
-
-        "alerts": """
-            CREATE TABLE IF NOT EXISTS alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                alert_id TEXT UNIQUE NOT NULL,
-                timestamp TEXT NOT NULL,
-                device_id TEXT NOT NULL,
-                severity TEXT NOT NULL
-                    CHECK (severity IN ('low', 'medium', 'high', 'critical')),
-                anomaly_score DECIMAL(10,6) NOT NULL,
-                alert_type TEXT NOT NULL,
-                detector_type TEXT NOT NULL,
-                explanation_summary TEXT,
-                feature_importance TEXT,
-                data_json TEXT,
-                acknowledged BOOLEAN DEFAULT FALSE,
-                acknowledged_at TEXT,
-                acknowledged_by TEXT,
-                synced INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-            )
-        """,
-
-        "telemetry": """
-            CREATE TABLE IF NOT EXISTS telemetry (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                cpu_percent DECIMAL(5,2),
-                memory_percent DECIMAL(5,2),
-                disk_usage DECIMAL(5,2),
-                process_count INTEGER,
-                network_connections INTEGER,
-                metrics_json TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-            )
-        """,
-
-        "detections": """
-            CREATE TABLE IF NOT EXISTS detections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                detector_name TEXT NOT NULL,
-                label INTEGER NOT NULL CHECK (label IN (0, 1)),
-                anomaly_score DECIMAL(10,6),
-                confidence DECIMAL(10,6),
-                features_used TEXT,
-                model_version TEXT,
-                detection_metadata TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-            )
-        """,
-
-        "features": """
-            CREATE TABLE IF NOT EXISTS features (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                features_json TEXT NOT NULL,
-                feature_names TEXT NOT NULL,
-                model_version TEXT,
-                normalized BOOLEAN DEFAULT FALSE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-            )
-        """,
-
-        "sync_queue": """
-            CREATE TABLE IF NOT EXISTS sync_queue (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_type TEXT NOT NULL,
-                item_id TEXT NOT NULL,
-                data_json TEXT NOT NULL,
-                attempts INTEGER DEFAULT 0,
-                last_attempt TEXT,
-                next_retry TEXT,
-                priority INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """,
-
-        "events": """
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                event_type TEXT NOT NULL,
-                component TEXT NOT NULL,
-                data_json TEXT NOT NULL,
-                severity TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-            )
-        """,
-
-        "tamper_evident_log": """
-            CREATE TABLE IF NOT EXISTS tamper_evident_log (
-                log_id TEXT PRIMARY KEY,
-                device_id TEXT NOT NULL,
-                log_sequence_number BIGINT NOT NULL,
-                log_entry_type TEXT NOT NULL,
-                log_entry_reference_id TEXT,
-                entry_timestamp_utc TIMESTAMP NOT NULL,
-                entry_content_hash TEXT NOT NULL,
-                previous_entry_hash TEXT NOT NULL,
-                digital_signature TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT unique_device_sequence
-                    UNIQUE (device_id, log_sequence_number)
-            )
-        """,
-    }
-
-    INDEXES = [
-        "CREATE INDEX IF NOT EXISTS idx_devices_id ON devices(id)",
-        "CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status)",
-        "CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_alerts_device_id ON alerts(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity)",
-        "CREATE INDEX IF NOT EXISTS idx_alerts_synced ON alerts(synced)",
-        "CREATE INDEX IF NOT EXISTS idx_alerts_alert_id ON alerts(alert_id)",
-        "CREATE INDEX IF NOT EXISTS idx_alerts_device_timestamp ON alerts(device_id, timestamp DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_device_id ON telemetry(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry(timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_device_timestamp ON telemetry(device_id, timestamp DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_detections_device_id ON detections(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_detections_timestamp ON detections(timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_detections_detector ON detections(detector_name)",
-        "CREATE INDEX IF NOT EXISTS idx_detections_device_timestamp ON detections(device_id, timestamp DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_features_device_id ON features(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_features_timestamp ON features(timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_features_device_timestamp ON features(device_id, timestamp DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_type ON sync_queue(item_type)",
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_priority ON sync_queue(priority DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at)",
-
-        "CREATE INDEX IF NOT EXISTS idx_events_device_id ON events(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type)",
-        "CREATE INDEX IF NOT EXISTS idx_events_device_timestamp ON events(device_id, timestamp DESC)",
-
-        "CREATE INDEX IF NOT EXISTS idx_tamper_device_seq ON tamper_evident_log(device_id, log_sequence_number)",
-
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_events_device ON telemetry_events(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_events_ts ON telemetry_events(timestamp DESC)",
-    ]
+class Database:
+    """Async database connection whose schema is driven by the canonical schema.sql file."""
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -223,26 +30,53 @@ class DatabaseManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info("db_manager_initialized", db_path=str(db_path))
 
-    async def initialize(self) -> None:
-        """Initialize database with standardised schema"""
+    @staticmethod
+    def _load_schema() -> Tuple[Dict[str, str], List[str]]:
+        content = _SCHEMA_FILE.read_text(encoding="utf-8")
+        content = re.sub(r"(?:'[^']*')|--.*$", lambda m: m.group(0) if m.group(0).startswith("'") else "", content, flags=re.MULTILINE)
+
+        statements = [s.strip() for s in content.split(";") if s.strip()]
+
+        table_schemas: Dict[str, str] = {}
+        auxiliary: List[str] = []
+
+        for stmt in statements:
+            upper = stmt.upper()
+            if upper.startswith("CREATE TABLE"):
+                m = re.search(
+                    r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", upper
+                )
+                if m:
+                    table_schemas[m.group(1).lower()] = stmt + ";"
+            elif upper.startswith(("CREATE INDEX", "CREATE TRIGGER")):
+                auxiliary.append(stmt + ";")
+
+        return table_schemas, auxiliary
+
+    async def initialize(self, tables: Optional[List[str]] = None) -> None:
         if self._initialized:
             return
 
+        table_schemas, auxiliary = self._load_schema()
+
         async with self.connection() as conn:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            await conn.execute("PRAGMA journal_mode = WAL")
-            await conn.execute("PRAGMA synchronous = NORMAL")
-            await conn.execute("PRAGMA busy_timeout = 30000")
 
-            for table_name, schema in self.TABLE_SCHEMAS.items():
-                await conn.execute(schema)
-                logger.debug("table_created", table=table_name)
+            if tables is not None:
+                lower_tables = [t.lower() for t in tables]
+                for name in lower_tables:
+                    ddl = table_schemas.get(name)
+                    if ddl:
+                        await conn.execute(ddl)
+                        logger.debug("table_created", table=name)
+                    else:
+                        logger.warning("table_not_found_in_schema", table=name)
+            else:
+                for name, ddl in table_schemas.items():
+                    await conn.execute(ddl)
+                    logger.debug("table_created", table=name)
+                for stmt in auxiliary:
+                    await conn.execute(stmt)
 
-            for index_sql in self.INDEXES:
-                await conn.execute(index_sql)
-
-            await self._run_migrations(conn)
-            await self._create_triggers(conn)
             await conn.commit()
             self._initialized = True
 
@@ -254,64 +88,9 @@ class DatabaseManager:
             conn.row_factory = aiosqlite.Row
             await conn.execute("PRAGMA foreign_keys = ON")
             await conn.execute("PRAGMA journal_mode = WAL")
+            await conn.execute("PRAGMA synchronous = NORMAL")
+            await conn.execute("PRAGMA busy_timeout = 30000")
             yield conn
-
-    async def _run_migrations(self, conn: aiosqlite.Connection) -> None:
-        """Run database migrations for existing tables."""
-        migrations = [
-            ("telemetry_events", """
-                ALTER TABLE telemetry_events ADD COLUMN synced INTEGER DEFAULT 0
-            """),
-            ("alerts", """
-                ALTER TABLE alerts ADD COLUMN synced INTEGER DEFAULT 0
-            """),
-            ("tamper_evident_log", """
-                ALTER TABLE tamper_evident_log ADD COLUMN synced INTEGER DEFAULT 0
-            """),
-        ]
-
-        for table_name, sql in migrations:
-            try:
-                result = await conn.execute(f"SELECT synced FROM {table_name} LIMIT 1")
-                await result.fetchone()
-                logger.debug("migration_skipped", table=table_name, reason="column_exists")
-            except Exception:
-                try:
-                    await conn.execute(sql)
-                    logger.info("migration_applied", table=table_name)
-                except Exception as e:
-                    logger.debug("migration_skipped", table=table_name, reason=str(e))
-
-    async def _create_triggers(self, conn: aiosqlite.Connection) -> None:
-        triggers = [
-            """
-            CREATE TRIGGER IF NOT EXISTS update_devices_updated_at
-                AFTER UPDATE ON devices FOR EACH ROW
-            BEGIN
-                UPDATE devices SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-            END
-            """,
-            """
-            CREATE TRIGGER IF NOT EXISTS update_alerts_updated_at
-                AFTER UPDATE ON alerts FOR EACH ROW
-            BEGIN
-                UPDATE alerts SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-            END
-            """,
-            """
-            CREATE TRIGGER IF NOT EXISTS update_sync_queue_updated_at
-                AFTER UPDATE ON sync_queue FOR EACH ROW
-            BEGIN
-                UPDATE sync_queue SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-            END
-            """,
-        ]
-        for trigger_sql in triggers:
-            await conn.execute(trigger_sql)
-
-    # ------------------------------------------------------------------
-    # Generic query helpers
-    # ------------------------------------------------------------------
 
     async def execute_query(
         self, query: str, params: Tuple = ()
@@ -342,55 +121,7 @@ class DatabaseManager:
             await conn.executemany(query, params_list)
             await conn.commit()
 
-    # ------------------------------------------------------------------
-    # Device operations
-    # ------------------------------------------------------------------
-
-    async def upsert_device(self, device_info: DeviceInfo) -> int:
-        device_info.updated_at = datetime.utcnow().isoformat()
-
-        query = """
-            INSERT OR REPLACE INTO devices (
-                id, last_seen, status, cpu_usage, memory_usage,
-                alerts_count, version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        # Resolve status value safely
-        status_val = (
-            device_info.status.value
-            if hasattr(device_info.status, "value")
-            else str(device_info.status)
-        )
-        params = (
-            device_info.device_id,
-            device_info.last_seen,
-            status_val,
-            device_info.cpu_usage,
-            device_info.memory_usage,
-            device_info.alerts_count,
-            device_info.version,
-            device_info.created_at,
-            device_info.updated_at,
-        )
-        async with self.connection() as conn:
-            cursor = await conn.execute(query, params)
-            await conn.commit()
-            return cursor.rowcount
-
-    async def get_device(self, device_id: str) -> Optional[Dict[str, Any]]:
-        query = "SELECT * FROM devices WHERE id = ?"
-        async with self.connection() as conn:
-            async with conn.execute(query, (device_id,)) as cursor:
-                row = await cursor.fetchone()
-                return dict(row) if row else None
-
-    # ------------------------------------------------------------------
-    # Alert operations
-    # ------------------------------------------------------------------
-
     async def insert_alert(self, alert: AlertEvent) -> int:
-        """Insert an alert record. Uses alert.alert_id as the unique key."""
-        # Resolve severity safely
         severity_val = (
             alert.severity.value
             if hasattr(alert.severity, "value")
@@ -424,42 +155,12 @@ class DatabaseManager:
             await conn.commit()
             return cursor.lastrowid or 0
 
-    async def get_alerts(
-        self,
-        device_id: Optional[str] = None,
-        severity: Optional[str] = None,
-        acknowledged: Optional[bool] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> List[Dict[str, Any]]:
-        query = "SELECT * FROM alerts WHERE 1=1"
-        params: list = []
-
-        if device_id:
-            query += " AND device_id = ?"
-            params.append(device_id)
-        if severity:
-            query += " AND severity = ?"
-            params.append(severity)
-        if acknowledged is not None:
-            query += " AND acknowledged = ?"
-            params.append(1 if acknowledged else 0)
-
-        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-        async with self.connection() as conn:
-            async with conn.execute(query, params) as cursor:
-                rows = await cursor.fetchall()
-                return [dict(row) for row in rows]
-
     async def get_recent_alerts(
         self,
         device_id: Optional[str] = None,
         hours: int = 24,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Get alerts from the last N hours."""
         cutoff_time = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
         query = "SELECT * FROM alerts WHERE timestamp >= ?"
         params: list = [cutoff_time]
@@ -476,12 +177,7 @@ class DatabaseManager:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
-    # ------------------------------------------------------------------
-    # Telemetry operations (high-level telemetry table)
-    # ------------------------------------------------------------------
-
     async def insert_telemetry(self, telemetry: TelemetryEvent) -> int:
-        """Write to the `telemetry` summary table."""
         query = """
             INSERT INTO telemetry (
                 device_id, timestamp, cpu_percent, memory_percent, disk_usage,
@@ -511,14 +207,9 @@ class DatabaseManager:
         agent_version: str = "1.0.0",
         payload_hash: str = "",
     ) -> int:
-        """Write to the canonical `telemetry_events` table."""
-        import hashlib
-
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         if not payload_hash:
             payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
-
-        # Validate event_type
         valid_types = {"PROCESS", "NETWORK", "FILE", "RESOURCE"}
         safe_event_type = event_type.upper() if event_type.upper() in valid_types else "RESOURCE"
 
@@ -541,24 +232,6 @@ class DatabaseManager:
             cursor = await conn.execute(query, params)
             await conn.commit()
             return cursor.lastrowid or 0
-
-    async def get_latest_telemetry(
-        self, device_id: str, limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        query = """
-            SELECT * FROM telemetry
-            WHERE device_id = ?
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """
-        async with self.connection() as conn:
-            async with conn.execute(query, (device_id, limit)) as cursor:
-                rows = await cursor.fetchall()
-                return [dict(row) for row in rows]
-
-    # ------------------------------------------------------------------
-    # Detection operations
-    # ------------------------------------------------------------------
 
     async def insert_detection(self, detection: DetectionEvent) -> int:
         query = """
@@ -585,11 +258,7 @@ class DatabaseManager:
             await conn.commit()
             return cursor.lastrowid or 0
 
-    # ------------------------------------------------------------------
-    # Feature operations
-    # ------------------------------------------------------------------
-
-    async def insert_features(self, features: FeatureVector) -> int:
+    async def _insert_features(self, features: FeatureVector) -> int:
         query = """
             INSERT INTO features (
                 device_id, timestamp, features_json, feature_names,
@@ -633,14 +302,10 @@ class DatabaseManager:
                 model_version=model_version,
                 normalized=normalized,
             )
-            return await self.insert_features(fv)
+            return await self._insert_features(fv)
         except Exception as exc:
             logger.error("insert_feature_array_error", error=str(exc))
             return 0
-
-    # ------------------------------------------------------------------
-    # Sync queue operations
-    # ------------------------------------------------------------------
 
     async def enqueue_sync_item(
         self,
@@ -683,41 +348,6 @@ class DatabaseManager:
             async with conn.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
-
-    # ------------------------------------------------------------------
-    # Event operations
-    # ------------------------------------------------------------------
-
-    async def insert_event(
-        self,
-        device_id: str,
-        timestamp: str,
-        event_type: str,
-        component: str,
-        data: Dict[str, Any],
-        severity: Optional[str] = None,
-    ) -> int:
-        query = """
-            INSERT INTO events (
-                device_id, timestamp, event_type, component, data_json, severity
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        """
-        params = (
-            device_id,
-            normalize_timestamp(timestamp),
-            event_type,
-            component,
-            json.dumps(data),
-            severity,
-        )
-        async with self.connection() as conn:
-            cursor = await conn.execute(query, params)
-            await conn.commit()
-            return cursor.lastrowid or 0
-
-    # ------------------------------------------------------------------
-    # Maintenance
-    # ------------------------------------------------------------------
 
     async def cleanup_old_data(self, retention_days: int) -> Dict[str, int]:
         cutoff = datetime.utcnow() - timedelta(days=retention_days)

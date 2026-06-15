@@ -1,9 +1,4 @@
-"""
-Model Manager for EdgePulse Anomaly Detection
 
-Manages model lifecycle, training, switching, and integrity verification.
-Integrates with scikit-learn Isolation Forest and TensorFlow Lite Autoencoder.
-"""
 
 import asyncio
 import time
@@ -22,7 +17,6 @@ logger = get_logger(__name__)
 
 
 class ModelManager:
-    """Manages ML models for anomaly detection"""
 
     def __init__(
         self,
@@ -52,7 +46,6 @@ class ModelManager:
         logger.info("ModelManager initialized")
 
     async def initialize(self) -> bool:
-        """Initialize model manager"""
         try:
             logger.info("Initializing ModelManager")
 
@@ -71,8 +64,6 @@ class ModelManager:
             return False
 
     async def _load_model_config(self) -> None:
-        """Load model configuration from config manager.
-        """
         if self.config_manager is None:
             logger.debug("No config_manager available; using default model config")
             return
@@ -99,7 +90,6 @@ class ModelManager:
             logger.error(f"Error loading model config: {e}")
 
     async def _initialize_current_detector(self) -> bool:
-        """Initialize the current detector"""
         try:
             self.current_detector = EnsembleDetector(
                 self.model_id, self.current_model_type
@@ -127,7 +117,6 @@ class ModelManager:
             return False
 
     async def detect_anomaly(self, features: np.ndarray) -> Optional[Dict[str, Any]]:
-        """Perform anomaly detection"""
         try:
             if not self.current_detector:
                 logger.error("No detector available")
@@ -154,8 +143,6 @@ class ModelManager:
         training_data: Optional[np.ndarray] = None,
         feature_names: Optional[List[str]] = None,
     ) -> bool:
-        """Train the current model.
-        """
         try:
             if not self.current_detector:
                 logger.error("No detector available for training")
@@ -177,7 +164,6 @@ class ModelManager:
                 self.current_detector.train, training_data, train_config
             )
 
-            # Persist the trained model.
             model_path = (
                 self.models_dir
                 / f"{self.model_id}_{self.current_model_type}.joblib"
@@ -214,7 +200,6 @@ class ModelManager:
             return False
 
     async def switch_model(self, new_model_type: str) -> bool:
-        """Switch to a different model type"""
         try:
             if not self.current_detector:
                 logger.error("No current detector")
@@ -261,7 +246,6 @@ class ModelManager:
             return False
 
     async def add_training_sample(self, features: np.ndarray) -> None:
-        """Add training sample to buffer"""
         try:
             self.training_data_buffer.append(features)
 
@@ -278,7 +262,6 @@ class ModelManager:
             logger.error(f"Error adding training sample: {e}")
 
     async def detect_model_drift(self, new_data: np.ndarray) -> bool:
-        """Detect model drift"""
         try:
             if not self.current_detector:
                 return False
@@ -288,7 +271,6 @@ class ModelManager:
             return False
 
     async def get_model_info(self) -> Dict[str, Any]:
-        """Get model information"""
         try:
             info: Dict[str, Any] = {
                 "current_model_type": self.current_model_type,
@@ -309,7 +291,6 @@ class ModelManager:
             return {}
 
     async def set_detection_threshold(self, threshold: float) -> bool:
-        """Set detection threshold"""
         try:
             if 0.0 <= threshold <= 1.0:
                 self.detection_threshold = threshold
@@ -333,7 +314,6 @@ class ModelManager:
             return False
 
     async def validate_model_integrity(self) -> bool:
-        """Validate current model integrity using integrity verifier"""
         try:
             if not self.current_detector:
                 return False
@@ -356,7 +336,6 @@ class ModelManager:
             return False
 
     async def cleanup(self) -> None:
-        """Cleanup resources"""
         try:
             logger.info("Cleaning up ModelManager")
             self.current_detector = None
@@ -365,7 +344,6 @@ class ModelManager:
             logger.error(f"Error in ModelManager cleanup: {e}")
 
     def get_training_status(self) -> Dict[str, Any]:
-        """Get training status"""
         return {
             "training_buffer_size": len(self.training_data_buffer),
             "min_training_samples": 100,

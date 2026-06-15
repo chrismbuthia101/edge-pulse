@@ -1,13 +1,9 @@
-# Local Notifier
-# Delivers alerts to local user via multiple channels.
-
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict, Optional
 from datetime import datetime, time
 
 from edgepulse.utils.error_handler import LoggingError
 
-# Try to import notify-py at module level
 try:
     from notify_py import Notify
     NOTIFY_AVAILABLE = True
@@ -34,7 +30,6 @@ class LocalNotifier:
         self.quiet_hours_start = quiet_hours_start
         self.quiet_hours_end = quiet_hours_end
         
-        # Set toast availability based on module-level import
         self.toast_available = enable_system_tray and NOTIFY_AVAILABLE
         if enable_system_tray and not NOTIFY_AVAILABLE:
             logger.warning("notify-py not available, system tray notifications disabled")
@@ -45,7 +40,6 @@ class LocalNotifier:
         
         now = datetime.now().time()
         
-        # Handle quiet hours that span midnight
         if self.quiet_hours_start <= self.quiet_hours_end:
             return self.quiet_hours_start <= now <= self.quiet_hours_end
         else:
@@ -79,7 +73,6 @@ class LocalNotifier:
         if not self.enable_system_tray or not self.toast_available:
             return
         
-        # Skip during quiet hours
         if self._is_quiet_hours():
             return
         

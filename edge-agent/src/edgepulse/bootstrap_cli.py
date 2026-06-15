@@ -1,9 +1,4 @@
-"""
-bootstrap_cli.py
-================
-Exposes ``edge-agent bootstrap`` as a CLI subcommand so the Windows
-NSIS installer and Linux postinst script can call it consistently:
-"""
+"""Exposes ``edge-agent bootstrap`` as a CLI subcommand for NSIS/postinst scripts."""
 
 from __future__ import annotations
 
@@ -13,7 +8,6 @@ from pathlib import Path
 
 
 def add_bootstrap_subcommand(subparsers: argparse._SubParsersAction) -> None:
-    """Register the `bootstrap` subcommand with the CLI parser."""
     bootstrap_parser = subparsers.add_parser(
         "bootstrap",
         help="Bootstrap the Isolation Forest model (required on first install)",
@@ -47,11 +41,6 @@ def add_bootstrap_subcommand(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run_bootstrap(args: argparse.Namespace) -> int:
-    """
-    Execute the bootstrap procedure.
-
-    Returns 0 on success, 1 on failure.
-    """
     import os
     import platform
 
@@ -77,7 +66,6 @@ def run_bootstrap(args: argparse.Namespace) -> int:
     try:
         import importlib.util, os
 
-        # Locations to search for bootstrap_model.py
         candidates = [
             Path(sys.executable).parent / "bootstrap_model.py",
             Path(__file__).parent / "scripts" / "bootstrap_model.py",
@@ -99,7 +87,6 @@ def run_bootstrap(args: argparse.Namespace) -> int:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
 
-        # Call main with our args injected
         sys.argv = [
             "bootstrap_model.py",
             "--output-dir", str(output_dir),

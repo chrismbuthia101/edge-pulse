@@ -1,5 +1,3 @@
-# ML Anomaly Detection Modules
-# Machine learning models for detecting anomalous behavior.
 
 from edgepulse.detectors.base import BaseDetector
 
@@ -7,7 +5,6 @@ __all__ = [
     "BaseDetector",
 ]
 
-# Lazy imports for heavy dependencies
 def get_isolation_forest_detector():
     from edgepulse.detectors.isolation_forest_detector import IsolationForestDetector
     return IsolationForestDetector

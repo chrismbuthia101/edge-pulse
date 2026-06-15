@@ -1,14 +1,7 @@
-"""
-Windows Service implementation for EdgePulse Agent
 
-This module provides Windows Service functionality using pywin32,
-allowing the EdgePulse agent to run as a proper Windows Service
-under LocalSystem account with auto-start capability.
-"""
 
 import sys
 
-# Add conditional import for Windows-specific modules
 if sys.platform == "win32":
     try:
         import win32service
@@ -25,8 +18,16 @@ if sys.platform == "win32":
 else:
     WINDOWS_AVAILABLE = False
 
-from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
-from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+if WINDOWS_AVAILABLE:
+    try:
+        from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
+        from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+    except ImportError:
+        EdgePulseWindowsService = None  # type: ignore
+        ServiceInstaller = None  # type: ignore
+else:
+    EdgePulseWindowsService = None  # type: ignore
+    ServiceInstaller = None  # type: ignore
 
 __all__ = [
     'EdgePulseWindowsService',

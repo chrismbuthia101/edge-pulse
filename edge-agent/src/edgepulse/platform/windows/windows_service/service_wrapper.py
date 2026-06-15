@@ -12,12 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from edgepulse.utils.log_handler import get_logger
-
-
-def _safe_program_data() -> Path:
-    """Return C:\\ProgramData resolved — prevents environment-variable traversal."""
-    return Path("C:\\ProgramData").resolve()
-
+from edgepulse.platform._paths import _safe_program_data, write_default_config
 
 if sys.platform == "win32":
     import win32serviceutil
@@ -50,8 +45,7 @@ class WindowsServiceWrapper:
         # The running EdgePulseAgent instance — set in run_agent()
         self.agent = None
 
-        base = _safe_program_data()
-        self.program_data_path = base / "EdgePulse"
+        self.program_data_path = _safe_program_data()
         self.models_path = self.program_data_path / "models"
         self.logs_path = self.program_data_path / "logs"
 
@@ -189,23 +183,7 @@ class WindowsServiceWrapper:
             raise
 
     def _write_default_config(self) -> None:
-        config_file = self.program_data_path / "agent_config.json"
-        if config_file.exists():
-            return
-
-        default: dict = {
-            "collection_interval": 60,
-            "detection_threshold": 0.5,
-            "offline_queue_size": 10000,
-            "logging_level": "INFO",
-            "enable_process_monitoring": True,
-            "enable_network_monitoring": True,
-        }
-        try:
-            config_file.write_text(json.dumps(default, indent=2))
-            logger.info("default_config_written", path=str(config_file))
-        except Exception as exc:
-            logger.warning("default_config_write_failed", error=str(exc))
+        write_default_config(self.program_data_path)
 
 
 # ── Entry points ──────────────────────────────────────────────────────────────

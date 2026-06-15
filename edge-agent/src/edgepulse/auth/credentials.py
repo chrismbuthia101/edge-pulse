@@ -31,18 +31,13 @@ except ImportError:
     KEYRING_AVAILABLE = False
 
 
-def get_safe_program_data_path() -> Path:
-    """Get safe ProgramData path without using environment variables"""
-    return Path('C:\\ProgramData').resolve()
-
+from edgepulse.platform._paths import _safe_program_data
 
 logger = get_logger(__name__)
 
-# Credential service and application names
 SERVICE_NAME = "EdgePulse"
 APP_NAME = "EdgePulseAgent"
 
-# Credential keys
 DEVICE_ID_KEY = "device_id"
 API_KEY_KEY = "api_key"
 ENROLLMENT_TOKEN_KEY = "enrollment_token"
@@ -51,7 +46,6 @@ SUPABASE_URL_KEY = "supabase_url"
 
 @dataclass
 class DeviceCredentials:
-    """Device credential information"""
     device_id: str
     api_key: str
     enrollment_token: Optional[str] = None
@@ -59,8 +53,6 @@ class DeviceCredentials:
 
 
 class CredentialManager:
-    """Manages secure storage of device credentials"""
-
     def __init__(self):
         self.platform = platform.system()
         self._fallback_storage = None
@@ -81,17 +73,15 @@ class CredentialManager:
             self._init_fallback_storage()
 
     def _init_fallback_storage(self):
-        """Initialize fallback encrypted storage"""
         try:
             if self.platform == "Windows":
-                base_path = get_safe_program_data_path()
-                data_dir = base_path / 'EdgePulse'
+                data_dir = _safe_program_data()
             else:
                 data_dir = Path.home() / '.edgepulse'
 
             data_dir = data_dir.resolve()
             if self.platform == "Windows" and not str(data_dir).startswith(
-                str(get_safe_program_data_path())
+                str(_safe_program_data())
             ):
                 raise ValueError("Invalid path: traversal detected")
 
@@ -104,7 +94,6 @@ class CredentialManager:
             raise
 
     def _get_fallback_key(self) -> bytes:
-        """Generate encryption key for fallback storage"""
         machine_id = platform.node() + platform.machine()
         if self.platform == "Windows":
             try:
@@ -119,21 +108,18 @@ class CredentialManager:
         return hashlib.sha256(machine_id.encode()).digest()
 
     def _encrypt_fallback(self, data: str) -> bytes:
-        """Encrypt data for fallback storage"""
         key = self._get_fallback_key()
         fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key).digest()[:32])
         fernet = Fernet(fernet_key)
         return fernet.encrypt(data.encode())
 
     def _decrypt_fallback(self, encrypted_data: bytes) -> str:
-        """Decrypt data from fallback storage"""
         key = self._get_fallback_key()
         fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key).digest()[:32])
         fernet = Fernet(fernet_key)
         return fernet.decrypt(encrypted_data).decode()
 
     def store_credential(self, key: str, value: str) -> bool:
-        """Store a credential securely"""
         try:
             if self._use_keyring:
                 keyring.set_password(SERVICE_NAME, key, value)
@@ -150,7 +136,6 @@ class CredentialManager:
             return False
 
     def get_credential(self, key: str) -> Optional[str]:
-        """Retrieve a credential securely"""
         try:
             if self._use_keyring:
                 value = keyring.get_password(SERVICE_NAME, key)
@@ -166,7 +151,6 @@ class CredentialManager:
             return None
 
     def delete_credential(self, key: str) -> bool:
-        """Delete a credential securely"""
         try:
             if self._use_keyring:
                 try:
@@ -187,7 +171,6 @@ class CredentialManager:
             return False
 
     def _load_fallback_credentials(self) -> dict:
-        """Load credentials from fallback storage"""
         try:
             if not self._fallback_storage or not self._fallback_storage.exists():
                 return {}
@@ -200,7 +183,6 @@ class CredentialManager:
             return {}
 
     def _save_fallback_credentials(self, credentials: dict):
-        """Save credentials to fallback storage"""
         try:
             data = json.dumps(credentials)
             encrypted_data = self._encrypt_fallback(data)
@@ -213,7 +195,6 @@ class CredentialManager:
             raise
 
     def generate_device_id(self) -> str:
-        """Generate a unique device ID"""
         try:
             machine_id = platform.node() + platform.machine()
             if self.platform == "Windows":
@@ -235,11 +216,9 @@ class CredentialManager:
             return secrets.token_hex(16)
 
     def generate_api_key(self) -> str:
-        """Generate a secure API key"""
         return f"ep_{secrets.token_urlsafe(32)}"
 
     def get_device_credentials(self) -> Optional[DeviceCredentials]:
-        """Get all device credentials"""
         try:
             device_id = self.get_credential(DEVICE_ID_KEY)
             api_key = self.get_credential(API_KEY_KEY)
@@ -258,7 +237,6 @@ class CredentialManager:
             return None
 
     def store_device_credentials(self, credentials: DeviceCredentials) -> bool:
-        """Store all device credentials"""
         try:
             success = True
             if not self.store_credential(DEVICE_ID_KEY, credentials.device_id):
@@ -277,7 +255,6 @@ class CredentialManager:
             return False
 
     def clear_credentials(self) -> bool:
-        """Clear all stored credentials"""
         try:
             success = True
             for key in [DEVICE_ID_KEY, API_KEY_KEY, ENROLLMENT_TOKEN_KEY, SUPABASE_URL_KEY]:
@@ -289,11 +266,9 @@ class CredentialManager:
             return False
 
     def is_enrolled(self) -> bool:
-        """Check if device is enrolled"""
         device_id = self.get_credential(DEVICE_ID_KEY)
         api_key = self.get_credential(API_KEY_KEY)
         return bool(device_id and api_key)
 
     def clear_enrollment_token(self) -> bool:
-        """Clear the enrollment token after successful enrollment"""
         return self.delete_credential(ENROLLMENT_TOKEN_KEY)

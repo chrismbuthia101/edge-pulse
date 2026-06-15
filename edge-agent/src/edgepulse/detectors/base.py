@@ -1,6 +1,4 @@
-"""
-Base detector interface
-"""
+
 
 import time
 import hashlib
@@ -16,7 +14,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class DetectionResult:
-    """Result of anomaly detection with metadata"""
     anomaly_score: float
     detection_threshold_applied: float
     is_alert_triggered: bool
@@ -30,7 +27,6 @@ class DetectionResult:
 
 @dataclass
 class ModelMetadata:
-    """Model metadata for integrity verification"""
     model_id: str
     model_version: str
     model_hash: str
@@ -40,7 +36,6 @@ class ModelMetadata:
 
 
 class BaseDetector(ABC):
-    """Base class for anomaly detectors with checklist requirements"""
     
     def __init__(self, model_id: str, model_version: str = "1.0"):
         self.model_id = model_id
@@ -51,37 +46,29 @@ class BaseDetector(ABC):
         
     @abstractmethod
     def train(self, training_data: Any, config: Dict[str, Any]) -> None:
-        """Train the detector"""
         pass
-        
+
     @abstractmethod
     def _detect_internal(self, features: Any) -> float:
-        """Internal detection method to be implemented by subclasses"""
         pass
-    
+
     def detect(self, features: Any) -> DetectionResult:
-        """Detect anomalies with latency measurement and metadata"""
         start_time = time.perf_counter()
         
         try:
-            # Verify model integrity only if metadata exists and not already verified
             if not self._integrity_verified and self.model_metadata:
                 self._verify_model_integrity()
             
-            # Perform detection
             anomaly_score = self._detect_internal(features)
-            
-            # Apply detection threshold
+
             is_alert_triggered = anomaly_score >= self.detection_threshold
-            
-            # Calculate inference latency
+
             end_time = time.perf_counter()
             inference_latency_ms = int((end_time - start_time) * 1000)
-            
-            # Create features hash for integrity tracking
+
             features_hash = self._hash_features(features)
-            
-            # Create detection result
+
+
             result = DetectionResult(
                 anomaly_score=anomaly_score,
                 detection_threshold_applied=self.detection_threshold,
@@ -98,7 +85,6 @@ class BaseDetector(ABC):
             
         except Exception as e:
             logger.error(f"Error during detection: {e}")
-            # Return error result
             end_time = time.perf_counter()
             inference_latency_ms = int((end_time - start_time) * 1000)
             
@@ -113,7 +99,6 @@ class BaseDetector(ABC):
             )
     
     def detect_batch(self, features_list: List[Any]) -> List[DetectionResult]:
-        """Detect anomalies for multiple feature sets"""
         results = []
         total_start_time = time.perf_counter()
         
@@ -129,31 +114,25 @@ class BaseDetector(ABC):
     
     @abstractmethod
     def evaluate(self, test_data: Any) -> Dict[str, float]:
-        """Evaluate detector performance"""
         pass
-    
+
     @abstractmethod
     def save_model(self, file_path: str) -> bool:
-        """Save the trained model"""
         pass
-    
+
     @abstractmethod
     def load_model(self, file_path: str) -> bool:
-        """Load a trained model"""
         pass
-    
+
     def load_model_with_integrity(self, file_path: str) -> bool:
-        """Load model with integrity verification"""
         try:
-            # Load the model
             success = self.load_model(file_path)
             if not success:
                 return False
-            
-            # Calculate and store model metadata
+
             self.model_metadata = self._calculate_model_metadata(file_path)
-            
-            # Verify integrity
+
+
             integrity_ok = self._verify_model_integrity()
             
             if integrity_ok:
@@ -168,14 +147,12 @@ class BaseDetector(ABC):
             return False
     
     def _calculate_model_metadata(self, file_path: str) -> ModelMetadata:
-        """Calculate model metadata for integrity verification"""
         try:
             import os
             
-            # Calculate file hash
             file_hash = self._calculate_file_hash(file_path)
-            
-            # Get file creation time
+
+
             stat = os.stat(file_path)
             created_at = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(stat.st_ctime))
             
@@ -192,7 +169,6 @@ class BaseDetector(ABC):
             
         except Exception as e:
             logger.error(f"Error calculating model metadata: {e}")
-            # Return minimal metadata
             return ModelMetadata(
                 model_id=self.model_id,
                 model_version=self.model_version,
@@ -203,7 +179,6 @@ class BaseDetector(ABC):
             )
     
     def _calculate_file_hash(self, file_path: str) -> str:
-        """Calculate SHA-256 hash of model file"""
         try:
             hash_sha256 = hashlib.sha256()
             with open(file_path, "rb") as f:
@@ -215,16 +190,14 @@ class BaseDetector(ABC):
             return "unknown"
     
     def _verify_model_integrity(self) -> bool:
-        """Verify model integrity using stored metadata"""
         try:
             if not self.model_metadata:
                 logger.warning("No model metadata available for integrity verification")
                 return False
             
-            # Recalculate file hash
             current_hash = self._calculate_file_hash(self.model_metadata.file_path)
-            
-            # Compare hashes
+
+
             integrity_ok = current_hash == self.model_metadata.model_hash
             
             if integrity_ok:
@@ -243,20 +216,14 @@ class BaseDetector(ABC):
             return False
     
     def _hash_features(self, features: Any) -> str:
-        """Calculate hash of features for integrity tracking"""
         try:
-            # Convert features to JSON string
             if hasattr(features, 'tolist'):
-                # NumPy array
                 features_json = json.dumps(features.tolist(), sort_keys=True)
             elif hasattr(features, '__dict__'):
-                # Object with dict representation
                 features_json = json.dumps(features.__dict__, sort_keys=True)
             else:
-                # Try direct JSON serialization
                 features_json = json.dumps(features, sort_keys=True)
             
-            # Calculate hash
             return hashlib.sha256(features_json.encode('utf-8')).hexdigest()
             
         except Exception as e:
@@ -264,7 +231,6 @@ class BaseDetector(ABC):
             return hashlib.sha256(str(features).encode('utf-8')).hexdigest()
     
     def set_detection_threshold(self, threshold: float) -> None:
-        """Set the detection threshold"""
         if 0.0 <= threshold <= 1.0:
             self.detection_threshold = threshold
             logger.info(f"Detection threshold set to: {threshold}")
@@ -272,7 +238,6 @@ class BaseDetector(ABC):
             raise ValueError("Detection threshold must be between 0.0 and 1.0")
     
     def get_model_info(self) -> Dict[str, Any]:
-        """Get model information"""
         return {
             "model_id": self.model_id,
             "model_version": self.model_version,
@@ -282,11 +247,9 @@ class BaseDetector(ABC):
         }
     
     def is_integrity_verified(self) -> bool:
-        """Check if model integrity has been verified"""
         return self._integrity_verified
     
     def update_baseline(self, new_threshold: float) -> bool:
-        """Update baseline detection threshold (for drift detection)"""
         try:
             old_threshold = self.detection_threshold
             self.set_detection_threshold(new_threshold)
@@ -299,20 +262,17 @@ class BaseDetector(ABC):
             return False
     
     def detect_drift(self, recent_scores: List[float], window_size: int = 100) -> Dict[str, Any]:
-        """Simple drift detection based on recent score distribution"""
         try:
             if len(recent_scores) < window_size:
                 return {"drift_detected": False, "reason": "Insufficient data"}
             
-            # Calculate statistics for recent window
             recent_mean = sum(recent_scores[-window_size:]) / window_size
             recent_variance = sum((x - recent_mean) ** 2 for x in recent_scores[-window_size:]) / window_size
             
-            # Simple drift detection: if mean changes significantly
-            baseline_mean = 0.5  # Expected mean for normal behavior
+            baseline_mean = 0.5
             mean_change = abs(recent_mean - baseline_mean)
-            
-            drift_detected = mean_change > 0.2  # Threshold for drift detection
+
+            drift_detected = mean_change > 0.2
             
             result = {
                 "drift_detected": drift_detected,

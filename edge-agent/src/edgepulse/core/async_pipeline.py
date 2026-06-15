@@ -7,7 +7,7 @@ from edgepulse.core.events_bus import EventBus, Event, EventType, get_event_bus
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import EdgePulseError, DetectionError
 from edgepulse.shared import create_metrics_collector, StandardMetrics, TelemetryEvent
-from edgepulse.storage.database import DatabaseManager
+from edgepulse.storage.database import Database
 
 logger = get_logger(__name__)
 
@@ -15,7 +15,6 @@ _COLLECTOR_TIMEOUT_SECONDS = 30.0
 
 
 class PipelineMetrics:
-    """Metrics tracking for pipeline operations"""
 
     def __init__(self, metrics_collector):
         self.metrics = metrics_collector
@@ -53,7 +52,6 @@ class PipelineMetrics:
 
 
 class AsyncPipeline:
-    """Async pipeline for processing telemetry data"""
 
     def __init__(
         self,
@@ -64,7 +62,8 @@ class AsyncPipeline:
         device_id: str = "default-device",
         event_bus: Optional[EventBus] = None,
         metrics_collector: Optional[Any] = None,
-        database: Optional[DatabaseManager] = None,
+        database: Optional[Database] = None,
+        sync_queue: Optional[Any] = None,
     ):
         self.collectors = collectors
         self.extractor = feature_extractor
@@ -72,6 +71,7 @@ class AsyncPipeline:
         self.alert_engine = alert_engine
         self.device_id = device_id
         self.database = database
+        self.sync_queue = sync_queue
 
         self.event_bus = event_bus or get_event_bus()
         self.metrics = metrics_collector or create_metrics_collector(
@@ -83,10 +83,6 @@ class AsyncPipeline:
         self._collection_interval: float = 60.0
 
         logger.info("async_pipeline_initialized", device_id=device_id)
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
 
     async def start(self, interval: float = 60.0) -> None:
         if self._running:
@@ -133,10 +129,6 @@ class AsyncPipeline:
 
         logger.info("pipeline_stopped")
 
-    # ------------------------------------------------------------------
-    # Main loop
-    # ------------------------------------------------------------------
-
     async def _run_loop(self) -> None:
         pipeline_metrics = PipelineMetrics(self.metrics)
 
@@ -162,10 +154,6 @@ class AsyncPipeline:
                 logger.error("pipeline_error", error=str(e))
                 await self._publish_error_event(str(e), "UnexpectedError")
                 await asyncio.sleep(min(self._collection_interval, 10.0))
-
-    # ------------------------------------------------------------------
-    # Cycle
-    # ------------------------------------------------------------------
 
     async def process_cycle(self) -> Dict[str, Any]:
         logger.debug("starting_cycle")
@@ -210,10 +198,6 @@ class AsyncPipeline:
 
         logger.debug("cycle_completed", **result)
         return result
-
-    # ------------------------------------------------------------------
-    # Collection
-    # ------------------------------------------------------------------
 
     async def _collect_telemetry(self) -> Dict[str, Any]:
         logger.debug("collecting_telemetry")
@@ -311,10 +295,6 @@ class AsyncPipeline:
             )
             raise
 
-    # ------------------------------------------------------------------
-    # Feature extraction
-    # ------------------------------------------------------------------
-
     async def _extract_features(self, telemetry: Dict[str, Any]) -> Optional[Any]:
         try:
             if hasattr(self.extractor, "extract_all_features"):
@@ -330,10 +310,6 @@ class AsyncPipeline:
         except Exception as e:
             logger.error("feature_extraction_error", error=str(e))
             return None
-
-    # ------------------------------------------------------------------
-    # Detection
-    # ------------------------------------------------------------------
 
     async def _run_detectors(self, features: Any) -> List[Dict[str, Any]]:
         if not self.detectors:
@@ -431,10 +407,6 @@ class AsyncPipeline:
             )
             raise
 
-    # ------------------------------------------------------------------
-    # Alerting
-    # ------------------------------------------------------------------
-
     async def _process_detections(
         self, detections: List[Dict[str, Any]], features: Any
     ) -> int:
@@ -460,12 +432,7 @@ class AsyncPipeline:
 
         return alerts_generated
 
-    # ------------------------------------------------------------------
-    # DB persistence helpers
-    # ------------------------------------------------------------------
-
     async def _save_telemetry(self, telemetry: Dict[str, Any]) -> None:
-        """Write a row to the `telemetry` summary table."""
         if not self.database:
             return
 
@@ -475,7 +442,6 @@ class AsyncPipeline:
             memory = system_metrics.get("memory", {})
             disk = system_metrics.get("disk", {})
 
-            # Safely extract cpu/memory/disk percent
             cpu_pct = cpu.get("cpu_percent") or cpu.get("cpu_percent_total")
             mem_pct = memory.get("memory_percent")
             disk_pct = None
@@ -505,7 +471,6 @@ class AsyncPipeline:
             logger.error("telemetry_save_error", error=str(e))
 
     async def _save_telemetry_event(self, telemetry: Dict[str, Any]) -> None:
-        """Write a row to the canonical `telemetry_events` table."""
         if not self.database:
             return
         try:
@@ -522,7 +487,14 @@ class AsyncPipeline:
                 payload=payload,
                 agent_version="1.0.0",
             )
-          
+
+            if self.sync_queue:
+                await self.sync_queue.enqueue(
+                    "telemetry_events",
+                    {"device_id": self.device_id, **payload},
+                    priority=1,
+                )
+
             await self.event_bus.publish(Event(
                 type=EventType.TELEMETRY,
                 data={"telemetry": payload, "source": "async_pipeline"},
@@ -533,7 +505,6 @@ class AsyncPipeline:
             logger.error("telemetry_event_save_error", error=str(e))
 
     async def _save_features(self, features: Any) -> None:
-        """Persist the feature vector to the `features` table."""
         if not self.database:
             return
         try:
@@ -557,10 +528,6 @@ class AsyncPipeline:
                 timestamp=datetime.utcnow(),
                 source="async_pipeline",
             ))
-
-    # ------------------------------------------------------------------
-    # Control
-    # ------------------------------------------------------------------
 
     def set_collection_interval(self, interval: float) -> None:
         self._collection_interval = max(5.0, min(3600.0, interval))
