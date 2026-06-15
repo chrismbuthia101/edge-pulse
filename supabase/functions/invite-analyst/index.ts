@@ -1,6 +1,6 @@
 // EdgePulse Invite Analyst Function v1.0.0
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from 'std/http/server.ts'
+import { createClient } from '@supabase/supabase-js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +13,7 @@ interface InviteRequest {
   full_name: string
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -35,8 +35,8 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabaseSecretKey = Deno.env.get('SUPABASE_SECRET_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
@@ -75,7 +75,7 @@ serve(async (req) => {
       )
     }
 
-    const { email, full_name, department }: InviteRequest = await req.json()
+    const { email, full_name }: InviteRequest = await req.json()
     if (!email || !full_name) {
       return new Response(
         JSON.stringify({ success: false, error: 'Email and full_name required' }),
@@ -83,25 +83,19 @@ serve(async (req) => {
       )
     }
 
-    const existingUser = await supabase
-      .from('users')
-      .select('id, account_status')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    const defaultPassword = crypto.randomUUID().replace(/-/g, '').substring(0, 16) + 'Aa1!'
-
-    const { data: invitedUser, error: createError } = await supabase.auth.admin.createUser({
+    const { data: linkData, error: createError } = await supabase.auth.admin.generateLink({
+      type: 'invite',
       email,
-      password: defaultPassword,
-      email_confirm: true,
-      user_metadata: {
-        invited_by: user.id,
-        organization_id: inviter.organization_id,
+      options: {
+        redirectTo: `${Deno.env.get('PUBLIC_APP_URL') || 'https://app.edgepulse.dev'}/accept-invite`,
+        data: {
+          invited_by: user.id,
+          organization_id: inviter.organization_id,
+        },
       },
     })
 
-    if (createError || !invitedUser.user) {
+    if (createError || !linkData.user) {
       console.error('User creation error:', createError)
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create user. Email may already be registered.' }),
@@ -112,16 +106,15 @@ serve(async (req) => {
     const { error: profileError } = await supabase
       .from('users')
       .insert({
-        id: invitedUser.user.id,
+        id: linkData.user.id,
         full_name,
-        department: department || null,
         role: 'ORG_ANALYST',
         account_status: 'PENDING',
         organization_id: inviter.organization_id,
       })
 
     if (profileError) {
-      await supabase.auth.admin.deleteUser(invitedUser.user.id)
+      await supabase.auth.admin.deleteUser(linkData.user.id)
       console.error('Profile creation error:', profileError)
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to create user profile' }),
@@ -129,11 +122,11 @@ serve(async (req) => {
       )
     }
 
-    await supabase.from('audit_logs').insert({
+    await supabase.schema('internal').from('audit_logs').insert({
       user_id: user.id,
       action: 'USER_INVITED',
       resource_type: 'users',
-      resource_id: invitedUser.user.id,
+      resource_id: linkData.user.id,
       new_values: { email, full_name, role: 'ORG_ANALYST' },
       severity: 'INFO',
       organization_id: inviter.organization_id,
@@ -142,8 +135,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        user_id: invitedUser.user.id,
-        message: 'Analyst invited successfully. They will receive credentials separately.',
+        user_id: linkData.user.id,
+        invite_link: linkData.properties?.action_link,
+        message: 'Analyst invited successfully.',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

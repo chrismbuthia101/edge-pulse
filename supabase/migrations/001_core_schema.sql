@@ -1,5 +1,5 @@
 -- ============================================================
--- EdgePulse Schema v3.0.0 — Multi-Tenant
+-- EdgePulse Schema v3.1.0 — Multi-Tenant
 -- Migration: 001_core_schema
 -- Description: Core tables, enums, schemas, triggers, and views.
 -- ============================================================
@@ -84,13 +84,16 @@ CREATE TABLE public.devices (
     cpu_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
     ram_percent         NUMERIC(5,2)    NOT NULL DEFAULT 0,
     sync_queue_depth    INTEGER         NOT NULL DEFAULT 0,
-    hash_chain_ok       BOOLEAN         NOT NULL DEFAULT TRUE,
     actively_reporting  BOOLEAN         NOT NULL DEFAULT FALSE,
     enrolled_by         UUID            REFERENCES public.users(id),
     enrolled_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     last_seen           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
+    deactivated_at      TIMESTAMPTZ,
+    deactivated_reason  TEXT,
+    deactivated_by      UUID            REFERENCES public.users(id),
     organization_id     UUID            NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
+    tags                TEXT[]          NOT NULL DEFAULT '{}',
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
@@ -158,31 +161,37 @@ CREATE INDEX idx_device_assignments_assigned_by ON public.device_assignments(ass
 CREATE TABLE telemetry.events (
     id                       UUID          PRIMARY KEY DEFAULT uuid_generate_v4(),
     device_id                UUID          NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
-    collected_at             TIMESTAMPTZ   NOT NULL,
-    received_at              TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    source                   telemetry_src NOT NULL,
+    event_id                 UUID          REFERENCES telemetry.events(id) ON DELETE CASCADE,
+    feature_name             TEXT          NOT NULL,
+    feature_type             TEXT          NOT NULL CHECK (feature_type IN ('statistical', 'temporal', 'frequency_domain', 'custom')),
+    value                    DOUBLE PRECISION NOT NULL,
+    metadata                 JSONB,
+    source                   TEXT,
+    session_id               UUID,
     payload                  JSONB         NOT NULL DEFAULT '{}',
-    collection_agent_version TEXT          NOT NULL,
-    connectivity_state       TEXT          NOT NULL DEFAULT 'online'
-                                           CHECK (connectivity_state IN ('online','offline')),
-    payload_hash             TEXT          NOT NULL,
+    collected_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     organization_id          UUID          NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
-    created_at               TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_at               TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    received_at              TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    integrity_hash           TEXT
 );
-CREATE INDEX idx_events_device_collected ON telemetry.events(device_id, collected_at DESC);
+CREATE INDEX idx_events_device_collected ON telemetry.events(device_id, created_at DESC);
 CREATE INDEX idx_events_org_source       ON telemetry.events(organization_id, source);
 CREATE INDEX idx_events_received         ON telemetry.events(received_at DESC);
+CREATE INDEX idx_events_session          ON telemetry.events(session_id);
+CREATE INDEX idx_events_payload_gin      ON telemetry.events USING GIN (payload);
 
 -- ─── Feature Vectors (telemetry) ───────────────────────────────────────────
 CREATE TABLE telemetry.feature_vectors (
     id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    event_id            UUID        NOT NULL REFERENCES telemetry.events(id) ON DELETE CASCADE,
+    event_id            UUID        REFERENCES telemetry.events(id) ON DELETE CASCADE,
     device_id           UUID        NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
     computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     model_id            TEXT        NOT NULL,
     features            JSONB       NOT NULL DEFAULT '{}',
     feature_version     TEXT        NOT NULL DEFAULT 'v1.0',
-    organization_id     UUID        NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE
+    organization_id     UUID        NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
+    integrity_hash      TEXT
 );
 CREATE INDEX idx_fv_device_computed ON telemetry.feature_vectors(device_id, computed_at DESC);
 CREATE INDEX idx_fv_org             ON telemetry.feature_vectors(organization_id);
@@ -190,7 +199,7 @@ CREATE INDEX idx_fv_event           ON telemetry.feature_vectors(event_id);
 
 -- ─── Anomaly Scores (telemetry) ────────────────────────────────────────────
 CREATE TABLE telemetry.anomaly_scores (
-    id                      UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                      UUID            NOT NULL DEFAULT uuid_generate_v4(),
     feature_vector_id       UUID            REFERENCES telemetry.feature_vectors(id) ON DELETE SET NULL,
     device_id               UUID            NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
     model_id                TEXT            NOT NULL,
@@ -203,24 +212,29 @@ CREATE TABLE telemetry.anomaly_scores (
                                             CHECK (connectivity_state IN ('online','offline')),
     organization_id         UUID            NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    scored_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
-);
+    scored_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    integrity_hash          TEXT,
+    PRIMARY KEY (id, scored_at)
+) PARTITION BY RANGE (scored_at);
+
+CREATE TABLE telemetry.anomaly_scores_default PARTITION OF telemetry.anomaly_scores DEFAULT;
+
 CREATE INDEX idx_asc_device_score    ON telemetry.anomaly_scores(device_id, score DESC);
 CREATE INDEX idx_asc_above_threshold ON telemetry.anomaly_scores(device_id, above_threshold, created_at DESC);
 CREATE INDEX idx_asc_org             ON telemetry.anomaly_scores(organization_id);
 CREATE INDEX idx_asc_feature_vector  ON telemetry.anomaly_scores(feature_vector_id);
+CREATE INDEX idx_asc_created         ON telemetry.anomaly_scores(created_at DESC);
 
 -- ─── Alerts (public) ───────────────────────────────────────────────────────
 CREATE TABLE public.alerts (
     id                       UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
     device_id                UUID            NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
-    device_name              TEXT            NOT NULL,
+    parent_alert_id          UUID            REFERENCES public.alerts(id) ON DELETE SET NULL,
     event_id                 UUID            REFERENCES telemetry.events(id) ON DELETE SET NULL,
     feature_vector_id        UUID            REFERENCES telemetry.feature_vectors(id) ON DELETE SET NULL,
-    anomaly_score_id         UUID            REFERENCES telemetry.anomaly_scores(id) ON DELETE SET NULL,
+    anomaly_score_id         UUID,
     anomaly_score            NUMERIC(10,8)   NOT NULL CHECK (anomaly_score BETWEEN 0 AND 1),
     model_id                 TEXT            NOT NULL,
-    collection_agent_version TEXT            NOT NULL,
     inference_latency_ms     INTEGER         NOT NULL DEFAULT 0,
     telemetry_source         telemetry_src   NOT NULL,
     title                    TEXT            NOT NULL,
@@ -232,8 +246,10 @@ CREATE TABLE public.alerts (
     detector_type            TEXT            DEFAULT 'unknown',
     detection_window_start   TIMESTAMPTZ,
     detection_window_end     TIMESTAMPTZ,
-    detection_window_minutes INTEGER,
     explanation_json         JSONB           NOT NULL DEFAULT '{}',
+    tags                     TEXT[],
+    source_ip                INET,
+    mitre_technique_id       TEXT,
     net_destination_ip       INET,
     net_destination_port     INTEGER         CHECK (net_destination_port BETWEEN 1 AND 65535 OR net_destination_port IS NULL),
     net_protocol             TEXT,
@@ -251,7 +267,8 @@ CREATE TABLE public.alerts (
     investigated_at          TIMESTAMPTZ,
     investigated_by          UUID            REFERENCES public.users(id),
     closed_at                TIMESTAMPTZ,
-    closed_by                UUID            REFERENCES public.users(id)
+    closed_by                UUID            REFERENCES public.users(id),
+    integrity_hash           TEXT
 );
 CREATE INDEX idx_alerts_device_created  ON public.alerts(device_id, created_at DESC);
 CREATE INDEX idx_alerts_org_severity    ON public.alerts(organization_id, severity, status);
@@ -263,35 +280,11 @@ CREATE INDEX idx_alerts_closed_by       ON public.alerts(closed_by);
 CREATE INDEX idx_alerts_event           ON public.alerts(event_id);
 CREATE INDEX idx_alerts_feature_vector  ON public.alerts(feature_vector_id);
 CREATE INDEX idx_alerts_anomaly_score   ON public.alerts(anomaly_score_id);
-
--- ─── Hash Chain Log (telemetry) ────────────────────────────────────────────
-CREATE TABLE telemetry.hash_chain_log (
-    id                      UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    device_id               UUID        NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
-    sequence_number         BIGINT      NOT NULL,
-    entry_type              TEXT        NOT NULL CHECK (entry_type IN (
-                                            'TELEMETRY','ALERT','DETECTION','SYNC',
-                                            'SYSTEM','AGENT','ANOMALY','ALERT_EVENT','HEALTH')),
-    reference_id            TEXT,
-    entry_timestamp         TIMESTAMPTZ NOT NULL,
-    content_hash            TEXT        NOT NULL,
-    previous_hash           TEXT        NOT NULL,
-    digital_signature       TEXT,
-    verified                BOOLEAN     NOT NULL DEFAULT FALSE,
-    organization_id         UUID        NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(device_id, sequence_number),
-    CONSTRAINT seq_positive CHECK (sequence_number > 0)
-);
-CREATE INDEX idx_hash_chain_device_seq ON telemetry.hash_chain_log(device_id, sequence_number);
-CREATE INDEX idx_hash_chain_org        ON telemetry.hash_chain_log(organization_id);
-CREATE INDEX idx_hash_chain_content    ON telemetry.hash_chain_log(content_hash);
-CREATE INDEX idx_hash_chain_previous   ON telemetry.hash_chain_log(previous_hash);
-CREATE INDEX idx_hash_chain_type       ON telemetry.hash_chain_log(entry_type);
+CREATE INDEX idx_alerts_pending_unread  ON public.alerts(status, read) WHERE status = 'PENDING' AND read = FALSE;
 
 -- ─── Device Health (telemetry) ────────────────────────────────────────────
 CREATE TABLE telemetry.device_health (
-    id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID        NOT NULL DEFAULT uuid_generate_v4(),
     device_id           UUID        NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
     status              TEXT        NOT NULL CHECK (status IN ('ONLINE','OFFLINE','WARNING','ERROR')),
     cpu_usage           NUMERIC(5,2),
@@ -305,8 +298,14 @@ CREATE TABLE telemetry.device_health (
     warning_count       INTEGER     NOT NULL DEFAULT 0,
     last_restart        TIMESTAMPTZ,
     organization_id     UUID        NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    integrity_hash      TEXT,
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+-- Default partition catches all rows; create monthly partitions in production for performance.
+CREATE TABLE telemetry.device_health_default PARTITION OF telemetry.device_health DEFAULT;
+
 CREATE INDEX idx_device_health_device_created ON telemetry.device_health(device_id, created_at DESC);
 CREATE INDEX idx_device_health_org            ON telemetry.device_health(organization_id);
 
@@ -341,7 +340,7 @@ CREATE TABLE public.retention_settings (
     organization_id UUID        NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
     device_id       UUID        REFERENCES public.devices(id) ON DELETE CASCADE,
     retention_days  INTEGER     NOT NULL DEFAULT 90 CHECK (retention_days > 0),
-    data_types      JSONB       NOT NULL DEFAULT '["events","alerts","features","health","hash_chain"]',
+    data_types      TEXT[]      NOT NULL DEFAULT ARRAY['events','alerts','features','health'],
     created_by      UUID        REFERENCES public.users(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -386,6 +385,43 @@ CREATE INDEX idx_audit_logs_user_time     ON internal.audit_logs(user_id, timest
 CREATE INDEX idx_audit_logs_org_time      ON internal.audit_logs(organization_id, timestamp DESC);
 CREATE INDEX idx_audit_logs_action        ON internal.audit_logs(action, timestamp DESC);
 
+-- ─── ML Model Registry (internal) ────────────────────────────────────────────
+CREATE TABLE internal.models (
+    id              UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID            NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
+    model_id        TEXT            NOT NULL,
+    name            TEXT            NOT NULL,
+    version         TEXT            NOT NULL,
+    description     TEXT,
+    threshold       NUMERIC(10,8)   NOT NULL DEFAULT 0.75,
+    detector_type   TEXT,
+    metadata        JSONB           NOT NULL DEFAULT '{}',
+    is_active       BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_by      UUID            REFERENCES public.users(id),
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    UNIQUE(organization_id, model_id, version)
+);
+CREATE INDEX idx_models_org              ON internal.models(organization_id);
+CREATE INDEX idx_models_active           ON internal.models(organization_id, is_active);
+
+-- ─── Notifications (public) ────────────────────────────────────────────────
+CREATE TABLE public.notifications (
+    id              UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID            NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    organization_id UUID            NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
+    title           TEXT            NOT NULL,
+    message         TEXT            NOT NULL,
+    severity        alert_severity  NOT NULL DEFAULT 'low',
+    category        TEXT            NOT NULL DEFAULT 'alert',
+    read            BOOLEAN         NOT NULL DEFAULT FALSE,
+    alert_id        UUID            REFERENCES public.alerts(id) ON DELETE CASCADE,
+    read_at         TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_notifications_user       ON public.notifications(user_id, read, created_at DESC);
+CREATE INDEX idx_notifications_org        ON public.notifications(organization_id, created_at DESC);
+
 -- ─── Device Config (devices) ──────────────────────────────────────────────
 CREATE TABLE devices.config (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -401,68 +437,21 @@ CREATE TABLE devices.config (
 CREATE INDEX idx_config_org       ON devices.config(organization_id);
 CREATE INDEX idx_config_updated_by ON devices.config(updated_by);
 
--- ─── Views ────────────────────────────────────────────────────────────────────
+-- ─── Retention purge composite indexes ─────────────────────────────────────────
+CREATE INDEX idx_events_org_collected    ON telemetry.events(organization_id, collected_at);
+CREATE INDEX idx_asc_org_scored          ON telemetry.anomaly_scores(organization_id, scored_at);
+CREATE INDEX idx_fv_org_computed         ON telemetry.feature_vectors(organization_id, computed_at);
+-- ─── BRIN indexes (append-only time-series) ───────────────────────────────────
+CREATE INDEX idx_events_received_brin    ON telemetry.events USING BRIN (received_at) WITH (pages_per_range = 32);
+CREATE INDEX idx_asc_scored_at_brin      ON telemetry.anomaly_scores USING BRIN (scored_at) WITH (pages_per_range = 32);
+CREATE INDEX idx_fv_computed_at_brin     ON telemetry.feature_vectors USING BRIN (computed_at) WITH (pages_per_range = 32);
+CREATE INDEX idx_alerts_created_brin     ON public.alerts USING BRIN (created_at) WITH (pages_per_range = 32);
 
-CREATE VIEW public.device_log_summary WITH (security_invoker = on) AS
-SELECT
-    d.id   AS device_id,
-    d.name AS device_name,
-    COALESCE(s.log_count, 0)          AS log_count,
-    COALESCE(s.last_sequence, 0)      AS last_sequence,
-    s.last_entry_timestamp
-FROM public.devices d
-LEFT JOIN (
-    SELECT
-        device_id,
-        COUNT(*)                  AS log_count,
-        MAX(sequence_number)      AS last_sequence,
-        MAX(entry_timestamp)      AS last_entry_timestamp
-    FROM telemetry.hash_chain_log
-    GROUP BY device_id
-) s ON d.id = s.device_id;
-
-CREATE VIEW public.alert_summary WITH (security_invoker = on) AS
-SELECT
-    id,
-    device_id,
-    device_name,
-    event_id,
-    feature_vector_id,
-    anomaly_score_id,
-    anomaly_score,
-    model_id,
-    collection_agent_version,
-    inference_latency_ms,
-    telemetry_source,
-    title,
-    description,
-    severity,
-    category,
-    confidence,
-    alert_type,
-    detector_type,
-    detection_window_start,
-    detection_window_end,
-    detection_window_minutes,
-    explanation_json,
-    net_destination_ip,
-    net_destination_port,
-    net_protocol,
-    net_duration_ms,
-    proc_name,
-    proc_privilege_level,
-    proc_pid,
-    status,
-    read,
-    created_at,
-    updated_at,
-    acknowledged_at,
-    acknowledged_by,
-    investigated_at,
-    investigated_by,
-    closed_at,
-    closed_by
-FROM public.alerts;
+-- ─── Partial indexes (frequent query filters) ─────────────────────────────────
+CREATE INDEX idx_alerts_org_pending_active ON public.alerts(organization_id, created_at DESC)
+    WHERE status = 'PENDING' AND read = FALSE;
+CREATE INDEX idx_alerts_org_unread         ON public.alerts(organization_id, created_at DESC)
+    WHERE read = FALSE;
 
 -- ─── Trigger functions ──────────────────────────────────────────────────────────
 
@@ -474,7 +463,7 @@ BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$;
 
 -- Sync organization_id into auth.users raw_app_meta_data for JWT claims
-CREATE OR REPLACE FUNCTION extensions.sync_organization_to_jwt()
+CREATE OR REPLACE FUNCTION internal.sync_organization_to_jwt()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = ''
 AS $$
@@ -490,7 +479,7 @@ $$;
 
 CREATE TRIGGER tr_sync_organization_to_jwt
     AFTER INSERT OR UPDATE OF organization_id ON public.users
-    FOR EACH ROW EXECUTE FUNCTION extensions.sync_organization_to_jwt();
+    FOR EACH ROW EXECUTE FUNCTION internal.sync_organization_to_jwt();
 
 -- ─── updated_at triggers ────────────────────────────────────────────────────────
 
@@ -525,3 +514,72 @@ CREATE TRIGGER tr_sync_queue_updated
 CREATE TRIGGER tr_retention_settings_updated
     BEFORE UPDATE ON public.retention_settings
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ─── Monthly Partition Auto-Creation ──────────────────────────────────────────
+CREATE OR REPLACE FUNCTION internal.create_monthly_partition()
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_next_month      DATE;
+    v_partition_name  TEXT;
+    v_start_date      TEXT;
+    v_end_date        TEXT;
+BEGIN
+    v_next_month := date_trunc('month', NOW() + INTERVAL '1 month')::DATE;
+    v_start_date := to_char(v_next_month, 'YYYY-MM-DD"T"00:00:00');
+    v_end_date   := to_char(v_next_month + INTERVAL '1 month', 'YYYY-MM-DD"T"00:00:00');
+
+    -- anomaly_scores
+    v_partition_name := 'anomaly_scores_' || to_char(v_next_month, 'YYYY_MM');
+    IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = v_partition_name) THEN
+        EXECUTE format(
+            'CREATE TABLE telemetry.%I PARTITION OF telemetry.anomaly_scores FOR VALUES FROM (%L) TO (%L)',
+            v_partition_name, v_start_date, v_end_date
+        );
+    END IF;
+
+    -- device_health
+    v_partition_name := 'device_health_' || to_char(v_next_month, 'YYYY_MM');
+    IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = v_partition_name) THEN
+        EXECUTE format(
+            'CREATE TABLE telemetry.%I PARTITION OF telemetry.device_health FOR VALUES FROM (%L) TO (%L)',
+            v_partition_name, v_start_date, v_end_date
+        );
+    END IF;
+END;
+$$;
+
+-- ─── Retention Purge RPC ────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION internal.purge_table_data(
+    p_schema TEXT,
+    p_table TEXT,
+    p_column TEXT,
+    p_cutoff TIMESTAMPTZ,
+    p_org_id UUID,
+    p_device_id UUID DEFAULT NULL
+) RETURNS INTEGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_count INTEGER;
+    v_sql TEXT;
+BEGIN
+    v_sql := format(
+        'DELETE FROM %I.%I WHERE %I < $1 AND organization_id = $2',
+        p_schema, p_table, p_column
+    );
+
+    IF p_device_id IS NOT NULL THEN
+        v_sql := v_sql || ' AND device_id = $3';
+        EXECUTE v_sql USING p_cutoff, p_org_id, p_device_id;
+    ELSE
+        EXECUTE v_sql USING p_cutoff, p_org_id;
+    END IF;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+END;
+$$;

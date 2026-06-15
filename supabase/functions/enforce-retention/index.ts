@@ -1,7 +1,7 @@
 // EdgePulse Enforce Retention Function v1.0.0
 // Run on a schedule (e.g. daily via pg_cron) or trigger on-demand via POST.
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from 'std/http/server.ts'
+import { createClient } from '@supabase/supabase-js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +19,6 @@ interface PurgeResult {
   alerts_deleted: number
   features_deleted: number
   health_deleted: number
-  hash_chain_deleted: number
   errors: string[]
 }
 
@@ -36,10 +35,9 @@ const DATA_TYPE_TABLES: Record<string, { table: string; date_column: string; sch
   alerts:      { table: 'alerts',      date_column: 'created_at',  schema: 'public' },
   features:    { table: 'feature_vectors', date_column: 'computed_at', schema: 'telemetry' },
   health:      { table: 'device_health',   date_column: 'created_at',  schema: 'telemetry' },
-  hash_chain:  { table: 'hash_chain_log',  date_column: 'entry_timestamp', schema: 'telemetry' },
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -52,39 +50,37 @@ serve(async (req) => {
       )
     }
 
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: corsHeaders }
-      )
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabaseSecretKey = Deno.env.get('SUPABASE_SECRET_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid authentication' }),
-        { status: 401, headers: corsHeaders }
+    // Auth is optional — when invoked via cron/schedule, no user context exists.
+    // When invoked on-demand with a JWT, validate the caller has admin rights.
+    let effectiveUserId: string | null = null
+    let effectiveOrgId: string | null = null
+
+    const authHeader = req.headers.get('authorization')
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
       )
-    }
+      if (!authError && user) {
+        const { data: caller } = await supabase
+          .from('users')
+          .select('id, role, organization_id')
+          .eq('id', user.id)
+          .single()
 
-    const { data: caller } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!caller || (caller.role !== 'ORG_ADMIN' && caller.role !== 'PLATFORM_ADMIN')) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Insufficient permissions' }),
-        { status: 403, headers: corsHeaders }
-      )
+        if (caller && (caller.role === 'ORG_ADMIN' || caller.role === 'PLATFORM_ADMIN')) {
+          effectiveUserId = caller.id
+          effectiveOrgId = caller.organization_id
+        } else {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Insufficient permissions' }),
+            { status: 403, headers: corsHeaders }
+          )
+        }
+      }
     }
 
     const filters: PurgeRequest = await req.json()
@@ -113,7 +109,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: true, message: 'No retention settings found', purged: {
           events_deleted: 0, alerts_deleted: 0, features_deleted: 0,
-          health_deleted: 0, hash_chain_deleted: 0, errors: [],
+          health_deleted: 0, errors: [],
         }}),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -124,7 +120,6 @@ serve(async (req) => {
       alerts_deleted: 0,
       features_deleted: 0,
       health_deleted: 0,
-      hash_chain_deleted: 0,
       errors: [],
     }
 
@@ -133,61 +128,59 @@ serve(async (req) => {
       cutoff.setDate(cutoff.getDate() - row.retention_days)
       const cutoffISO = cutoff.toISOString()
 
+      const rowBefore = { ...totalResult }
+
       for (const dataType of row.data_types) {
         const mapping = DATA_TYPE_TABLES[dataType]
         if (!mapping) continue
 
         try {
-          let deleteQuery = supabase
-            .from(mapping.table)
-            .delete()
-            .lt(mapping.date_column, cutoffISO)
-            .eq('organization_id', row.organization_id)
-
-          if (row.device_id) {
-            deleteQuery = deleteQuery.eq('device_id', row.device_id)
-          }
-
-          const { data: deleted, error: deleteError } = await deleteQuery.select('id')
+          const { data: count, error: deleteError } = await supabase.schema('internal').rpc('purge_table_data', {
+            p_schema: mapping.schema,
+            p_table: mapping.table,
+            p_column: mapping.date_column,
+            p_cutoff: cutoffISO,
+            p_org_id: row.organization_id,
+            p_device_id: row.device_id,
+          })
 
           if (deleteError) {
             totalResult.errors.push(`${mapping.table}: ${deleteError.message}`)
             continue
           }
 
-          const count = deleted?.length || 0
           switch (dataType) {
             case 'events':     totalResult.events_deleted     += count; break
             case 'alerts':     totalResult.alerts_deleted     += count; break
             case 'features':   totalResult.features_deleted   += count; break
             case 'health':     totalResult.health_deleted     += count; break
-            case 'hash_chain': totalResult.hash_chain_deleted += count; break
           }
         } catch (e) {
           totalResult.errors.push(`${dataType}: ${e instanceof Error ? e.message : 'Unknown error'}`)
         }
       }
 
-      await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        action: 'RETENTION_PURGED',
-        resource_type: 'retention_settings',
-        resource_id: row.id,
-        new_values: {
-          retention_days: row.retention_days,
-          data_types: row.data_types,
-          cutoff: cutoffISO,
-          result: {
-            events: totalResult.events_deleted,
-            alerts: totalResult.alerts_deleted,
-            features: totalResult.features_deleted,
-            health: totalResult.health_deleted,
-            hash_chain: totalResult.hash_chain_deleted,
+      if (effectiveUserId) {
+        await supabase.schema('internal').from('audit_logs').insert({
+          user_id: effectiveUserId,
+          action: 'RETENTION_PURGED',
+          resource_type: 'retention_settings',
+          resource_id: row.id,
+          new_values: {
+            retention_days: row.retention_days,
+            data_types: row.data_types,
+            cutoff: cutoffISO,
+            result: {
+              events: totalResult.events_deleted - rowBefore.events_deleted,
+              alerts: totalResult.alerts_deleted - rowBefore.alerts_deleted,
+              features: totalResult.features_deleted - rowBefore.features_deleted,
+              health: totalResult.health_deleted - rowBefore.health_deleted,
+            },
           },
-        },
-        severity: totalResult.errors.length > 0 ? 'WARNING' : 'INFO',
-        organization_id: row.organization_id,
-      })
+          severity: totalResult.errors.length > 0 ? 'WARNING' : 'INFO',
+          organization_id: row.organization_id,
+        })
+      }
     }
 
     const isSuccess = totalResult.errors.length === 0

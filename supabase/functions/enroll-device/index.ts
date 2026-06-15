@@ -1,8 +1,8 @@
 // EdgePulse Enrollment Function v3.0.0
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts'
+import { serve } from 'std/http/server.ts'
+import { crypto } from 'std/crypto/mod.ts'
+import { createClient } from '@supabase/supabase-js'
+import { encodeBase64 } from 'std/encoding/base64.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,7 +24,7 @@ interface EnrollmentResponse {
   error?: string
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -47,12 +47,13 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabaseSecretKey = Deno.env.get('SUPABASE_SECRET_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
     const tokenHash = await hashToken(enrollmentData.enrollment_token)
 
     const { data: tokenData, error: tokenError } = await supabase
+      .schema('devices')
       .from('enrollment_tokens')
       .select('*')
       .eq('token_hash', tokenHash)
@@ -110,6 +111,7 @@ serve(async (req) => {
     }
 
     const { data: apiKeyData, error: apiKeyError } = await supabase
+      .schema('devices')
       .from('api_keys')
       .insert({
         device_id: deviceId,
@@ -134,6 +136,7 @@ serve(async (req) => {
     const isFullyUsed = newCurrentUses >= tokenData.max_uses
 
     await supabase
+      .schema('devices')
       .from('enrollment_tokens')
       .update({
         current_uses: newCurrentUses,
@@ -144,6 +147,7 @@ serve(async (req) => {
       .eq('id', tokenData.id)
 
     await supabase
+      .schema('internal')
       .from('audit_logs')
       .insert({
         device_id: deviceId,

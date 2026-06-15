@@ -116,7 +116,6 @@ edge-pulse/
 │   └── functions/
 │       └── enroll-device/
 │       └── rotate-api-key/
-│       └── verify-hash-chain/
 └── client/
 ```
 
