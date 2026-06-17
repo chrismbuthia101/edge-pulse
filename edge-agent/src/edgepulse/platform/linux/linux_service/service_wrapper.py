@@ -1,9 +1,3 @@
-"""
-Linux Service Wrapper for EdgePulse
-====================================
-Runs the canonical EdgePulseAgent (core/agent.py) under systemd.
-"""
-
 import asyncio
 import json
 import os
@@ -11,55 +5,26 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from edgepulse.auth.credentials import load_credentials_into_env
 from edgepulse.utils.log_handler import get_logger
-from edgepulse.platform._paths import _BASE_DIR, _CONFIG_DIR, _LOG_DIR, _safe_base_dir, write_default_config
-
-if sys.platform.startswith("linux"):
-    from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
-    from edgepulse.platform.linux.linux_service.installer import ServiceInstaller, SERVICE_NAME
-else:
-    class EdgePulseLinuxService:  # type: ignore[no-redef]
-        pass
-
-    class ServiceInstaller:  # type: ignore[no-redef]
-        pass
-
-    SERVICE_NAME = "edgepulse-agent"
+from edgepulse.platform._paths import (
+    _BASE_DIR,
+    _CONFIG_DIR,
+    _LOG_DIR,
+    _safe_base_dir,
+    write_default_config,
+)
+from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
+from edgepulse.platform.linux.linux_service.installer import ServiceInstaller, SERVICE_NAME
 
 logger = get_logger(__name__)
 
-os.environ["EDGE_PULSE_DATA_DIR"] = str(_BASE_DIR)
-
-
-def _load_credentials_into_env() -> bool:
-    """
-    Attempt to inject stored device credentials as environment variables.
-    Returns True if both URL and key were set (device is enrolled).
-    """
-    import os
-    try:
-        from edgepulse.auth.credentials import CredentialManager
-        credential_manager = CredentialManager()
-        credentials = credential_manager.get_device_credentials()
-        if credentials:
-            if credentials.supabase_url:
-                os.environ["SYNC__SUPABASE_URL"] = credentials.supabase_url
-                logger.info(f"Set SYNC__SUPABASE_URL from credentials: {credentials.supabase_url[:30]}...")
-            if credentials.api_key:
-                os.environ["SYNC__SUPABASE_KEY"] = credentials.api_key
-                logger.info(f"Set SYNC__SUPABASE_KEY from credentials")
-            if credentials.device_id:
-                os.environ["DEVICE_ID"] = credentials.device_id
-            return bool(credentials.supabase_url and credentials.api_key)
-    except Exception as exc:
-        logger.warning("credentials_load_failed", error=str(exc))
-    return False
-
 
 class LinuxServiceWrapper:
-    """Thin systemd wrapper around EdgePulseAgent."""
 
     def __init__(self) -> None:
+        os.environ["EDGE_PULSE_DATA_DIR"] = str(_BASE_DIR)
+
         self.service_name = SERVICE_NAME
         self.service_display_name = "EdgePulse Monitoring Agent"
         self.service_description = (
@@ -81,21 +46,11 @@ class LinuxServiceWrapper:
             except PermissionError:
                 logger.debug("directory_skipped_no_permission", path=str(d))
 
-    # ------------------------------------------------------------------
-    # Settings — built from config file + credential store
-    # ------------------------------------------------------------------
-
     def _build_settings(self):
-        """
-        Return an AgentSettings instance.
-        """
         from edgepulse.config.settings import AgentSettings
-        import os
 
-        # Inject credentials from the credential store first
-        enrolled = _load_credentials_into_env()
+        enrolled = load_credentials_into_env()
 
-        # Parse agent_config.json for non-credential overrides
         config_file = _CONFIG_DIR / "agent_config.json"
         overrides: dict = {}
         if config_file.exists():
@@ -104,30 +59,20 @@ class LinuxServiceWrapper:
             except Exception as exc:
                 logger.error("agent_config_parse_failed", error=str(exc))
 
-        # Map flat config keys → AgentSettings env-var names
         key_map = {
-            "collection_interval":            "COLLECTION__INTERVAL",
-            "detection_threshold":            "DETECTION__THRESHOLD",
-            "offline_queue_size":             "SYNC__OFFLINE_QUEUE_MAX",
-            "logging_level":                  "LOG__LEVEL",
-            "enable_process_monitoring":      "COLLECTION__ENABLE_PROCESS_MONITORING",
-            "enable_network_monitoring":      "COLLECTION__ENABLE_NETWORK_MONITORING",
+            "collection_interval": "COLLECTION__INTERVAL",
+            "detection_threshold": "DETECTION__THRESHOLD",
+            "offline_queue_size": "SYNC__OFFLINE_QUEUE_MAX",
+            "logging_level": "LOG__LEVEL",
+            "enable_process_monitoring": "COLLECTION__ENABLE_PROCESS_MONITORING",
+            "enable_network_monitoring": "COLLECTION__ENABLE_NETWORK_MONITORING",
         }
 
-        original: dict = {}
         for cfg_key, env_key in key_map.items():
             if cfg_key in overrides:
-                original[env_key] = os.environ.get(env_key)
                 os.environ[env_key] = str(overrides[cfg_key])
 
-        try:
-            settings = AgentSettings()
-        finally:
-            for env_key, orig_v in original.items():
-                if orig_v is None:
-                    os.environ.pop(env_key, None)
-                else:
-                    os.environ[env_key] = orig_v
+        settings = AgentSettings()
 
         if not enrolled:
             logger.warning(
@@ -143,12 +88,7 @@ class LinuxServiceWrapper:
 
         return settings
 
-    # ------------------------------------------------------------------
-    # Main coroutine
-    # ------------------------------------------------------------------
-
     async def run_agent(self) -> None:
-        """Create and run EdgePulseAgent."""
         from edgepulse.core.agent import EdgePulseAgent
 
         try:
@@ -170,10 +110,6 @@ class LinuxServiceWrapper:
             self.agent = None
             logger.info("linux_wrapper_agent_stopped")
 
-    # ------------------------------------------------------------------
-    # Service lifecycle helpers
-    # ------------------------------------------------------------------
-
     def install_service(self, python_exe: Optional[str] = None) -> bool:
         if not sys.platform.startswith("linux"):
             logger.error("install_service_linux_only")
@@ -181,7 +117,7 @@ class LinuxServiceWrapper:
         installer = ServiceInstaller()
         success = installer.install_service(python_exe)
         if success:
-            self._write_default_config()
+            write_default_config(_CONFIG_DIR)
         return success
 
     def uninstall_service(self) -> bool:
@@ -205,12 +141,10 @@ class LinuxServiceWrapper:
         return ServiceInstaller().get_service_status()
 
     def run_as_service(self) -> None:
-        """Entry point when launched by systemd."""
         service_instance = EdgePulseLinuxService(agent_wrapper=self)
         service_instance.run_sync()
 
     def run_standalone(self) -> None:
-        """Entry point for foreground / development runs."""
         try:
             logger.info("linux_wrapper_standalone_mode")
             asyncio.run(self.run_agent())
@@ -220,11 +154,6 @@ class LinuxServiceWrapper:
             logger.error("linux_wrapper_standalone_error", error=str(exc))
             raise
 
-    def _write_default_config(self) -> None:
-        write_default_config(_CONFIG_DIR)
-
-
-# ── Entry points ──────────────────────────────────────────────────────────────
 
 def service_main() -> None:
     wrapper = LinuxServiceWrapper()

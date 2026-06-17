@@ -1,28 +1,11 @@
-"""
-EdgePulse Linux Service Main Entry Point
-
-This script is invoked by systemd via the ExecStart directive in the unit file:
-
-    ExecStart=/usr/bin/python3 /path/to/service_main.py --service-mode
-
-It can also be executed directly for foreground (development) runs:
-
-    python service_main.py              # foreground / standalone
-    python service_main.py --service-mode  # emulate service mode
-"""
-
 import logging
-import signal
 import sys
 from pathlib import Path
-
-_AGENT_PATH = Path(__file__).resolve().parents[5]
-if str(_AGENT_PATH) not in sys.path:
-    sys.path.insert(0, str(_AGENT_PATH))
 
 from edgepulse.utils.log_handler import get_logger
 
 logger = get_logger(__name__)
+
 
 def setup_service_logging() -> None:
     log_dir = Path("/var/log/edgepulse")
@@ -38,7 +21,6 @@ def setup_service_logging() -> None:
         )
         handlers.append(file_handler)
     except PermissionError:
-        # Running as non-root; skip file handler
         pass
     except Exception as exc:
         print(f"Warning: Could not open log file {log_file}: {exc}", file=sys.stderr)
@@ -52,21 +34,8 @@ def setup_service_logging() -> None:
     logger.info("linux_service_logging_configured")
 
 
-# ─── Signal helpers ───────────────────────────────────────────────────────────
-
-def _noop_signal_handler(signum: int, frame) -> None:  # noqa: ANN001
-    logger.debug("linux_main_signal_received", signum=signum)
-
-
-# ─── Entry point ──────────────────────────────────────────────────────────────
-
 def main() -> None:
     setup_service_logging()
-
-    # Install placeholder signal handlers; the service/asyncio loop will
-    # replace these with its own after it starts.
-    signal.signal(signal.SIGTERM, _noop_signal_handler)
-    signal.signal(signal.SIGINT, _noop_signal_handler)
 
     service_mode = "--service-mode" in sys.argv
 

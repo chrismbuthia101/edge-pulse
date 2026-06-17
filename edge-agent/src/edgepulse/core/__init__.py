@@ -2,6 +2,4 @@
 
 from edgepulse.core.agent import EdgePulseAgent
 
-__all__ = [
-    "EdgePulseAgent"
-]
+__all__ = ["EdgePulseAgent"]

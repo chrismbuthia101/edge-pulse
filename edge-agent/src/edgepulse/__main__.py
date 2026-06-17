@@ -1,4 +1,3 @@
-
 import sys
 from edgepulse.cli import main
 

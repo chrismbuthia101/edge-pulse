@@ -173,3 +173,17 @@ CREATE TRIGGER IF NOT EXISTS update_sync_queue_updated_at
 BEGIN
     UPDATE sync_queue SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+
+-- ─── Dead-letter queue for permanently failed sync items ───────────────────
+CREATE TABLE IF NOT EXISTS dead_letter_queue (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_type       TEXT    NOT NULL,
+    item_id         TEXT,
+    data_json       TEXT    NOT NULL,
+    attempts        INTEGER DEFAULT 0,
+    error_info      TEXT,
+    failed_at       TEXT    NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dead_letter_type ON dead_letter_queue(item_type);
+CREATE INDEX IF NOT EXISTS idx_dead_letter_failed ON dead_letter_queue(failed_at DESC);

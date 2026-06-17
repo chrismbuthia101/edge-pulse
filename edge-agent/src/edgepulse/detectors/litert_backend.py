@@ -1,18 +1,13 @@
-"""
-litert_backend.py
-=================
-Unified LiteRT / TFLite inference wrapper for EdgePulse.
-"""
-
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from edgepulse.utils.log_handler import get_logger
+
+logger = get_logger(__name__)
 
 _LITERT_BACKEND: str = "none"
 _CompiledModel: Optional[Any] = None
@@ -20,6 +15,7 @@ _Interpreter: Optional[Any] = None
 
 try:
     from ai_edge_litert.interpreter import Interpreter as _Interpreter  # type: ignore[import]
+
     _LITERT_BACKEND = "ai_edge_litert_interpreter"
     logger.debug("LiteRT: using ai_edge_litert.interpreter")
 except ImportError:
@@ -27,6 +23,7 @@ except ImportError:
 
 try:
     from ai_edge_litert.compiled_model import CompiledModel as _CompiledModel  # type: ignore[import]
+
     _LITERT_BACKEND = "ai_edge_litert_compiled"
     logger.debug("LiteRT: using ai_edge_litert.compiled_model (CompiledModel API)")
 except ImportError:
@@ -35,6 +32,7 @@ except ImportError:
 if _LITERT_BACKEND == "none":
     try:
         import tensorflow as _tf  # type: ignore[import]
+
         _Interpreter = _tf.lite.Interpreter  # type: ignore[assignment]
         _LITERT_BACKEND = "tensorflow"
         logger.debug("LiteRT: using tensorflow.lite.Interpreter (full TF)")
@@ -43,6 +41,7 @@ if _LITERT_BACKEND == "none":
 
 LITERT_AVAILABLE: bool = _LITERT_BACKEND != "none"
 COMPILED_MODEL_AVAILABLE: bool = _CompiledModel is not None
+
 
 class LiteRTBackend:
 
@@ -63,8 +62,7 @@ class LiteRTBackend:
 
         if not LITERT_AVAILABLE:
             raise RuntimeError(
-                "No LiteRT/TFLite runtime found. "
-                "Install: pip install ai-edge-litert"
+                "No LiteRT/TFLite runtime found. " "Install: pip install ai-edge-litert"
             )
 
         if COMPILED_MODEL_AVAILABLE:
@@ -74,7 +72,7 @@ class LiteRTBackend:
                 Path(model_path).name,
             )
         else:
-            self._interp = _Interpreter(model_path=self._model_path)  # type: ignore[misc]
+            assert self._interp is not None
             self._interp.allocate_tensors()
             self._input_details = self._interp.get_input_details()
             self._output_details = self._interp.get_output_details()
@@ -113,7 +111,8 @@ class LiteRTBackend:
         if self._compiled is not None:
             bufs = self._compiled.create_input_buffers(self._sig_idx)
             return tuple(bufs[0].shape)
-        assert self._input_details is not None
+        if self._input_details is None:
+            raise RuntimeError("Model not loaded: no input details available")
         return tuple(self._input_details[0]["shape"])
 
     @property
@@ -121,14 +120,16 @@ class LiteRTBackend:
         if self._compiled is not None:
             bufs = self._compiled.create_output_buffers(self._sig_idx)
             return tuple(bufs[0].shape)
-        assert self._output_details is not None
+        if self._output_details is None:
+            raise RuntimeError("Model not loaded: no output details available")
         return tuple(self._output_details[0]["shape"])
 
     @property
     def input_dtype(self) -> np.dtype:
         if self._compiled is not None:
-            return np.float32  
-        assert self._input_details is not None
+            return np.dtype(np.float32)
+        if self._input_details is None:
+            raise RuntimeError("Model not loaded: no input details available")
         return np.dtype(self._input_details[0]["dtype"])
 
     def is_quantized(self) -> bool:
@@ -159,7 +160,8 @@ class LiteRTBackend:
 
     def _run_compiled(self, data: np.ndarray) -> np.ndarray:
         """Inference via the CompiledModel API (ai-edge-litert ≥ 2.0)."""
-        in_bufs  = self._compiled.create_input_buffers(self._sig_idx)
+        assert self._compiled is not None
+        in_bufs = self._compiled.create_input_buffers(self._sig_idx)
         out_bufs = self._compiled.create_output_buffers(self._sig_idx)
 
         in_bufs[0].write(data)
@@ -170,9 +172,12 @@ class LiteRTBackend:
 
     def _run_interpreter(self, data: np.ndarray) -> np.ndarray:
         """Inference via the legacy Interpreter API."""
-        assert self._interp is not None
-        assert self._input_details is not None
-        assert self._output_details is not None
+        if self._interp is None:
+            raise RuntimeError("Interpreter not initialized")
+        if self._input_details is None:
+            raise RuntimeError("Input details not initialized")
+        if self._output_details is None:
+            raise RuntimeError("Output details not initialized")
 
         inp = self._input_details[0]
         out = self._output_details[0]

@@ -52,7 +52,7 @@ class ExplainerService:
         detectors: List[Any],
         feature_extractor: Any,
     ) -> bool:
-   
+
         if self._init_attempted:
             return self.is_available
         self._init_attempted = True
@@ -71,9 +71,7 @@ class ExplainerService:
             feature_names = feature_extractor.get_feature_names()
             n_features = len(feature_names)
 
-            synthetic_bg = np.random.normal(
-                0, 0.5, size=(100, n_features)
-            ).astype(np.float32)
+            synthetic_bg = np.random.normal(0, 0.5, size=(100, n_features)).astype(np.float32)
 
             manager = ExplainableAIManager(
                 model_id=f"{self.device_id}_primary",
@@ -114,14 +112,12 @@ class ExplainerService:
         anomaly_score: float,
         detection_threshold: float = 0.5,
     ) -> Optional[StrictExplanationJSON]:
-    
+
         if self._manager is None or not self._manager.is_initialized:
             return None
         try:
             feat = np.asarray(features, dtype=float).flatten()
-            return self._manager.explain_prediction(
-                feat, anomaly_score, detection_threshold
-            )
+            return self._manager.explain_prediction(feat, anomaly_score, detection_threshold)
         except Exception as exc:
             logger.error("explainer_service_explain_error", error=str(exc))
             return None

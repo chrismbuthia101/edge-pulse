@@ -3,7 +3,7 @@
 # Requires: poetry (https://python-poetry.org)
 
 .DEFAULT_GOAL := help
-.PHONY: help install install-all bootstrap dev run test lint fmt typecheck clean \
+.PHONY: help install dev run test lint fmt typecheck clean \
         service-install service-start service-stop service-status service-logs \
         wheel deb rpm windows enroll
 
@@ -16,10 +16,8 @@ help:
 	@echo "  $(CYAN)EdgePulse Agent — available targets$(RESET)"
 	@echo ""
 	@echo "  Setup"
-	@echo "    make install          Install core dependencies (inference only)"
-	@echo "    make install-full     Install with TensorFlow training support"
+	@echo "    make install          Install with dev dependencies and core extras"
 	@echo "    make install-all      Install all optional extras"
-	@echo "    make bootstrap        Generate the baseline ML model (required first run)"
 	@echo "    make env              Copy .env.example → .env (skips if .env exists)"
 	@echo ""
 	@echo "  Run"
@@ -54,18 +52,10 @@ help:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
-	poetry install --extras "api-full notifications ml-inference linux"
-
-install-full:
-	poetry install --extras "api-full notifications ml-full"
+	poetry install --extras "api-full ml-inference linux" --with dev
 
 install-all:
 	poetry install --extras "all"
-
-bootstrap:
-	@echo "$(CYAN)Bootstrapping Isolation Forest model…$(RESET)"
-	poetry run python src/edgepulse/scripts/bootstrap_model.py
-	@echo "$(CYAN)Done. Model written to models/$(RESET)"
 
 env:
 	@if [ -f .env ]; then \

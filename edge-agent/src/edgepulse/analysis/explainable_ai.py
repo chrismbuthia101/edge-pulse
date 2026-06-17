@@ -12,12 +12,14 @@ from collections import OrderedDict
 
 try:
     import numpy as np
+
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False
 
 try:
     import shap
+
     SHAP_AVAILABLE = True
 except ImportError:
     SHAP_AVAILABLE = False
@@ -25,6 +27,7 @@ except ImportError:
 try:
     import lime
     import lime.lime_tabular
+
     LIME_AVAILABLE = True
 except ImportError:
     LIME_AVAILABLE = False
@@ -38,6 +41,7 @@ DEFAULT_THRESHOLD = 0.5
 MAX_CACHE_SIZE = 256
 LIME_SAMPLE_SIZE = 100
 
+
 class ExplanationType(str, Enum):
     SHAP = "shap"
     LIME = "lime"
@@ -49,6 +53,7 @@ class ContributionType(str, Enum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
     NEUTRAL = "neutral"
+
 
 @dataclass
 class FeatureExplanation:
@@ -126,8 +131,14 @@ class StrictExplanationJSON:
 
     def validate(self) -> Tuple[bool, List[str]]:
         errors: List[str] = []
-        required = ["version", "explanation_type", "model_id", "timestamp",
-                    "anomaly_score", "detection_threshold"]
+        required = [
+            "version",
+            "explanation_type",
+            "model_id",
+            "timestamp",
+            "anomaly_score",
+            "detection_threshold",
+        ]
         for attr in required:
             if not getattr(self, attr, None) and getattr(self, attr, None) != 0.0:
                 errors.append(f"Missing or empty required field: {attr}")
@@ -194,18 +205,13 @@ class BaseExplainer(ABC):
         model: Any,
         training_data: Optional["np.ndarray"] = None,
         feature_names: Optional[List[str]] = None,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
-    def _compute_attributions(
-        self, features: "np.ndarray"
-    ) -> "np.ndarray":
-        ...
+    def _compute_attributions(self, features: "np.ndarray") -> "np.ndarray": ...
 
     @abstractmethod
-    def get_explanation_type(self) -> ExplanationType:
-        ...
+    def get_explanation_type(self) -> ExplanationType: ...
 
     def explain_prediction(
         self,
@@ -217,8 +223,9 @@ class BaseExplainer(ABC):
 
         if not self.is_initialized:
             logger.error("%s explainer not initialised", self.get_explanation_type())
-            return self._fallback(anomaly_score, detection_threshold, start,
-                                  error="Explainer not initialised")
+            return self._fallback(
+                anomaly_score, detection_threshold, start, error="Explainer not initialised"
+            )
 
         flat = np.asarray(features, dtype=float).flatten()
 
@@ -243,22 +250,32 @@ class BaseExplainer(ABC):
             else:
                 ctype = ContributionType.NEGATIVE
 
-            feature_explanations.append(FeatureExplanation(
-                feature_name=self._feature_names[i],
-                feature_value=float(flat[i]),
-                attribution_score=score,
-                normalised_attribution=abs(score) / abs_sum,
-                contribution_type=ctype,
-                rank=0,
-            ))
+            feature_explanations.append(
+                FeatureExplanation(
+                    feature_name=self._feature_names[i],
+                    feature_value=float(flat[i]),
+                    attribution_score=score,
+                    normalised_attribution=abs(score) / abs_sum,
+                    contribution_type=ctype,
+                    rank=0,
+                )
+            )
 
         feature_explanations.sort(key=lambda x: abs(x.attribution_score), reverse=True)
         for rank, fe in enumerate(feature_explanations, start=1):
             fe.rank = rank
 
         top3 = feature_explanations[:3]
-        positives = [f.feature_name for f in feature_explanations if f.contribution_type == ContributionType.POSITIVE][:3]
-        negatives = [f.feature_name for f in feature_explanations if f.contribution_type == ContributionType.NEGATIVE][:3]
+        positives = [
+            f.feature_name
+            for f in feature_explanations
+            if f.contribution_type == ContributionType.POSITIVE
+        ][:3]
+        negatives = [
+            f.feature_name
+            for f in feature_explanations
+            if f.contribution_type == ContributionType.NEGATIVE
+        ][:3]
 
         processing_ms = int((time.perf_counter() - start) * 1000)
         summary = ExplanationSummary(
@@ -377,11 +394,9 @@ class SHAPExplainer(BaseExplainer):
                         )
                         return False
                     bg = training_data[:LIME_SAMPLE_SIZE]
-               
+
                     predict_fn = (
-                        model.score_samples
-                        if hasattr(model, "score_samples")
-                        else model.predict
+                        model.score_samples if hasattr(model, "score_samples") else model.predict
                     )
                     self._explainer = shap.KernelExplainer(predict_fn, bg)
                     self._uses_kernel = True
@@ -395,9 +410,7 @@ class SHAPExplainer(BaseExplainer):
                     return False
                 bg = training_data[:LIME_SAMPLE_SIZE]
                 predict_fn = (
-                    model.score_samples
-                    if hasattr(model, "score_samples")
-                    else model.predict
+                    model.score_samples if hasattr(model, "score_samples") else model.predict
                 )
                 self._explainer = shap.KernelExplainer(predict_fn, bg)
                 self._uses_kernel = True
@@ -434,6 +447,7 @@ class SHAPExplainer(BaseExplainer):
             arr = arr.flatten()
 
         return arr
+
 
 class LIMEExplainer(BaseExplainer):
 
@@ -495,6 +509,7 @@ class LIMEExplainer(BaseExplainer):
                 attributions[idx] = weight
         return attributions
 
+
 class ExplainableAIManager:
 
     def __init__(self, model_id: str, cache_size: int = MAX_CACHE_SIZE):
@@ -519,7 +534,8 @@ class ExplainableAIManager:
         fallback_method: Optional[ExplanationType] = None
         if enable_fallback:
             fallback_method = (
-                ExplanationType.LIME if primary_method == ExplanationType.SHAP
+                ExplanationType.LIME
+                if primary_method == ExplanationType.SHAP
                 else ExplanationType.SHAP
             )
 
@@ -547,9 +563,7 @@ class ExplainableAIManager:
                 if ok_fallback:
                     self._fallback_explainer = explainer
                 else:
-                    logger.warning(
-                        "Fallback %s explainer failed to initialise", fallback_method
-                    )
+                    logger.warning("Fallback %s explainer failed to initialise", fallback_method)
 
         if not enable_cache:
             self._cache = None
@@ -559,9 +573,7 @@ class ExplainableAIManager:
             logger.error("No XAI explainer available for model '%s'", self.model_id)
         else:
             available = [
-                e.get_explanation_type()
-                for e in (self._primary, self._fallback_explainer)
-                if e
+                e.get_explanation_type() for e in (self._primary, self._fallback_explainer) if e
             ]
             logger.info("ExplainableAIManager ready. Methods: %s", available)
         return self.is_initialized
@@ -622,11 +634,7 @@ class ExplainableAIManager:
         return self.is_initialized
 
     def get_available_methods(self) -> List[ExplanationType]:
-        return [
-            e.get_explanation_type()
-            for e in (self._primary, self._fallback_explainer)
-            if e
-        ]
+        return [e.get_explanation_type() for e in (self._primary, self._fallback_explainer) if e]
 
     def cache_stats(self) -> Dict[str, int]:
         if self._cache is None:

@@ -43,6 +43,10 @@ class EventBus:
 
         self._start_lock: Optional[asyncio.Lock] = None
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
     def _get_or_create_lock(self) -> asyncio.Lock:
         if self._start_lock is None:
             self._start_lock = asyncio.Lock()

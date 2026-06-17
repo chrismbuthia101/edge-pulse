@@ -8,8 +8,13 @@ from edgepulse.shared import AlertEvent, create_metrics_collector, StandardMetri
 from edgepulse.storage.database import Database
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import SyncError, log_sync_operation
+from edgepulse.sync.cloud_sync import CloudSync
 
 logger = get_logger(__name__)
+
+_ITEM_TYPE_ALERTS = frozenset({"alert", "alert_records"})
+_ITEM_TYPE_TELEMETRY = frozenset({"telemetry", "telemetry_events"})
+
 
 class SyncQueue:
 
@@ -32,6 +37,8 @@ class SyncQueue:
 
         self._worker_task: Optional[asyncio.Task] = None
         self._running = False
+        self._flush_requested = False
+        self._was_online = True
 
         self.metrics = create_metrics_collector(f"sync_queue_{device_id}", device_id)
 
@@ -58,7 +65,7 @@ class SyncQueue:
         await self.db.initialize(tables=["sync_queue"])
         await self._load_persisted_items()
 
-    async def start_worker(self, sync_client: Any) -> None:
+    async def start_worker(self, sync_client: CloudSync) -> None:
         if self._running:
             logger.warning("sync_queue_worker_already_running", device_id=self.device_id)
             return
@@ -87,9 +94,7 @@ class SyncQueue:
 
         logger.info("sync_queue_stopped", stats=self.stats)
 
-    async def enqueue(
-        self, item_type: str, item_data: Dict[str, Any], priority: int = 0
-    ) -> bool:
+    async def enqueue(self, item_type: str, item_data: Dict[str, Any], priority: int = 0) -> bool:
         if self.queue is None:
             raise RuntimeError("Sync queue not initialized")
 
@@ -156,7 +161,7 @@ class SyncQueue:
 
         return batch
 
-    async def _sync_worker(self, sync_client: Any) -> None:
+    async def _sync_worker(self, sync_client: CloudSync) -> None:
         logger.info("sync_worker_started")
 
         while self._running:
@@ -164,6 +169,12 @@ class SyncQueue:
                 batch = await self.get_batch(timeout=1.0)
                 if batch:
                     await self._process_batch(sync_client, batch)
+                elif self._flush_requested:
+                    self._flush_requested = False
+                    batch = await self.get_batch(timeout=0.5)
+                    if batch:
+                        await self._process_batch(sync_client, batch)
+                    continue
                 else:
                     await asyncio.sleep(0.1)
             except asyncio.CancelledError:
@@ -174,70 +185,63 @@ class SyncQueue:
 
         logger.info("sync_worker_stopped")
 
-    async def _process_batch(
-        self, sync_client: Any, batch: List[Dict[str, Any]]
-    ) -> None:
+    async def _process_batch(self, sync_client: CloudSync, batch: List[Dict[str, Any]]) -> None:
         if not batch:
             return
 
-        items_by_type: Dict[str, List[Dict[str, Any]]] = {}
+        batch.sort(key=self._item_priority_key)
+
         for item in batch:
-            item_type = item["type"]
-            items_by_type.setdefault(item_type, []).append(item)
-
-        for item_type, items in items_by_type.items():
             try:
-                await self._sync_items_by_type(sync_client, item_type, items)
+                item_type = item["type"]
+                if item_type in _ITEM_TYPE_ALERTS:
+                    await self._sync_alerts(sync_client, [item])
+                elif item_type in _ITEM_TYPE_TELEMETRY:
+                    await self._sync_telemetry(sync_client, [item])
+                else:
+                    logger.warning("unknown_item_type", item_type=item_type)
+                    continue
+
+                if not self._was_online:
+                    self._was_online = True
+                    self.request_flush()
+                    logger.info("sync_connectivity_restored", device_id=self.device_id)
+
+                self.metrics.increment_counter(
+                    StandardMetrics.SYNC_ATTEMPTS_TOTAL,
+                    labels={"item_type": item_type, "status": "success"},
+                )
+                log_sync_operation(
+                    operation=f"sync_{item_type}",
+                    item_type=item_type,
+                    item_count=1,
+                    device_id=self.device_id,
+                    status="success",
+                )
+
             except Exception as e:
-                logger.error("batch_sync_error", item_type=item_type, error=str(e))
-                for item in items:
-                    await self._handle_failed_item(item)
+                self._was_online = False
+                self.metrics.increment_counter(
+                    StandardMetrics.SYNC_ATTEMPTS_TOTAL,
+                    labels={"item_type": item.get("type", "unknown"), "status": "error"},
+                )
+                log_sync_operation(
+                    operation=f"sync_{item.get('type', 'unknown')}",
+                    item_type=item.get("type", "unknown"),
+                    item_count=1,
+                    device_id=self.device_id,
+                    status="error",
+                    error_details=str(e),
+                )
+                await self._handle_failed_item(item)
 
-    async def _sync_items_by_type(
-        self,
-        sync_client: Any,
-        item_type: str,
-        items: List[Dict[str, Any]],
-    ) -> None:
-        try:
-            if item_type in ("alert", "alert_records"):
-                await self._sync_alerts(sync_client, items)
-            elif item_type in ("telemetry", "telemetry_events"):
-                await self._sync_telemetry(sync_client, items)
-            else:
-                logger.warning("unknown_item_type", item_type=item_type)
-                return
+    def _item_priority_key(self, item: Dict[str, Any]) -> int:
+        item_type = item.get("type", "")
+        if item_type in _ITEM_TYPE_ALERTS:
+            return 0
+        return 1
 
-            self.metrics.increment_counter(
-                StandardMetrics.SYNC_ATTEMPTS_TOTAL,
-                labels={"item_type": item_type, "status": "success"},
-            )
-            log_sync_operation(
-                operation=f"sync_{item_type}",
-                item_type=item_type,
-                item_count=len(items),
-                device_id=self.device_id,
-                status="success",
-            )
-
-        except Exception as e:
-            self.metrics.increment_counter(
-                StandardMetrics.SYNC_ATTEMPTS_TOTAL,
-                labels={"item_type": item_type, "status": "error"},
-            )
-            log_sync_operation(
-                operation=f"sync_{item_type}",
-                item_type=item_type,
-                item_count=len(items),
-                device_id=self.device_id,
-                status="error",
-                error_details=str(e),
-            )
-            raise
-
-    async def _sync_alerts(
-        self, sync_client: Any, items: List[Dict[str, Any]]
-    ) -> None:
+    async def _sync_alerts(self, sync_client: CloudSync, items: List[Dict[str, Any]]) -> None:
         alert_data: List[Dict[str, Any]] = []
 
         for item in items:
@@ -264,9 +268,7 @@ class SyncQueue:
         else:
             raise SyncError("Alert batch sync failed")
 
-    async def _sync_telemetry(
-        self, sync_client: Any, items: List[Dict[str, Any]]
-    ) -> None:
+    async def _sync_telemetry(self, sync_client: CloudSync, items: List[Dict[str, Any]]) -> None:
         telemetry_data = [item["data"] for item in items]
         success = await sync_client.batch_sync_telemetry(telemetry_data)
 
@@ -282,16 +284,21 @@ class SyncQueue:
         if item["attempts"] >= self.max_retry_attempts:
             self.stats["total_failed"] += 1
             logger.error(
-                "item_permanently_dropped",
+                "item_moved_to_dead_letter",
                 item_type=item["type"],
                 attempts=item["attempts"],
-                data_preview=str(item.get("data", ""))[:200],
             )
+            try:
+                await self.db.insert_dead_letter(
+                    item_type=item["type"],
+                    item_data=item.get("data", {}),
+                    attempts=item["attempts"],
+                )
+            except Exception as exc:
+                logger.error("dead_letter_persist_error", error=str(exc))
         else:
             backoff_seconds = min(300, 2 ** item["attempts"])
-            item["next_retry"] = datetime.utcnow() + timedelta(
-                seconds=backoff_seconds
-            )
+            item["next_retry"] = datetime.utcnow() + timedelta(seconds=backoff_seconds)
 
             try:
                 if self.queue is None:
@@ -316,9 +323,7 @@ class SyncQueue:
                     "attempts": row["attempts"],
                     "first_queued": datetime.fromisoformat(row["created_at"]),
                     "last_attempt": (
-                        datetime.fromisoformat(row["last_attempt"])
-                        if row["last_attempt"]
-                        else None
+                        datetime.fromisoformat(row["last_attempt"]) if row["last_attempt"] else None
                     ),
                     "next_retry": (
                         datetime.fromisoformat(row["next_retry"])
@@ -360,11 +365,7 @@ class SyncQueue:
                     item.get("data", {}).get("id", "unknown"),
                     json.dumps(item.get("data", {})),
                     item.get("attempts", 0),
-                    (
-                        item["last_attempt"].isoformat()
-                        if item.get("last_attempt")
-                        else None
-                    ),
+                    (item["last_attempt"].isoformat() if item.get("last_attempt") else None),
                 )
                 for item in items
             ]
@@ -393,3 +394,24 @@ class SyncQueue:
         if self.queue is not None:
             self.stats["queue_size"] = self.queue.qsize()
         return self.stats.copy()
+
+    def request_flush(self) -> None:
+        self._flush_requested = True
+        logger.info("sync_flush_requested", device_id=self.device_id)
+
+    def get_status(self) -> Dict[str, Any]:
+        stats = self.get_stats()
+        return {
+            "online": self._was_online,
+            "queue_depth": stats.get("queue_size", 0),
+            "total_enqueued": stats.get("total_enqueued", 0),
+            "total_processed": stats.get("total_processed", 0),
+            "total_failed": stats.get("total_failed", 0),
+            "total_retries": stats.get("total_retries", 0),
+            "max_retry_attempts": self.max_retry_attempts,
+            "unsynced_alerts": stats.get("queue_size", 0),
+        }
+
+    async def get_dead_letter_items(self) -> Dict[str, Any]:
+        items = await self.db.get_dead_letter_items()
+        return {"items": items, "total": len(items)}

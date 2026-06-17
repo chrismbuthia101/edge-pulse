@@ -7,14 +7,14 @@ from typing import Optional, Tuple
 def get_hostname() -> str:
     try:
         hostname = platform.node()
-        if hostname and hostname != 'localhost':
+        if hostname and hostname != "localhost":
             return hostname
     except Exception:
         pass
 
     try:
         hostname = socket.gethostname()
-        if hostname and hostname != 'localhost':
+        if hostname and hostname != "localhost":
             return hostname
     except Exception:
         pass
@@ -27,8 +27,8 @@ def sanitize_hostname(hostname: str) -> str:
         return "unknown-device"
 
     hostname = hostname.lower().strip()
-    hostname = re.sub(r'[^a-z0-9_-]', '', hostname)
-    hostname = hostname.strip('-_')
+    hostname = re.sub(r"[^a-z0-9_-]", "", hostname)
+    hostname = hostname.strip("-_")
 
     if not hostname:
         return "unknown-device"
@@ -39,8 +39,9 @@ def sanitize_hostname(hostname: str) -> str:
     return hostname
 
 
-def generate_device_id_from_hostname(hostname: Optional[str] = None,
-                                     include_platform: bool = True) -> str:
+def generate_device_id_from_hostname(
+    hostname: Optional[str] = None, include_platform: bool = True
+) -> str:
     if hostname is None:
         hostname = get_hostname()
 
@@ -67,13 +68,13 @@ def validate_device_id(device_id: str) -> Tuple[bool, Optional[str]]:
     if len(device_id) > 253:
         return False, "Device ID cannot exceed 253 characters"
 
-    if re.search(r'[^a-zA-Z0-9_-]', device_id):
+    if re.search(r"[^a-zA-Z0-9_-]", device_id):
         return False, "Device ID can only contain letters, numbers, hyphens, and underscores"
 
-    if device_id.startswith('-') or device_id.startswith('_'):
+    if device_id.startswith("-") or device_id.startswith("_"):
         return False, "Device ID cannot start with hyphen or underscore"
 
-    if device_id.endswith('-') or device_id.endswith('_'):
+    if device_id.endswith("-") or device_id.endswith("_"):
         return False, "Device ID cannot end with hyphen or underscore"
 
     return True, None

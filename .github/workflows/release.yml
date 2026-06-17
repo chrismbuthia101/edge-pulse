@@ -63,14 +63,6 @@ jobs:
       - name: Install build tools
         run: pip install "poetry==1.8.2" build twine
 
-      - name: Bootstrap ML model
-        working-directory: edge-agent
-        run: |
-          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
-          python src/edgepulse/scripts/bootstrap_model.py \
-            --output-dir src/models/ \
-            --n-samples 2000
-
       - name: Build wheel + sdist
         working-directory: edge-agent
         run: poetry build
@@ -107,14 +99,6 @@ jobs:
           sudo apt-get install -y ruby ruby-dev rubygems build-essential
           sudo gem install --no-document fpm
 
-      - name: Bootstrap ML model
-        working-directory: edge-agent
-        run: |
-          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
-          python src/edgepulse/scripts/bootstrap_model.py \
-            --output-dir src/models/ \
-            --n-samples 2000
-
       - name: Build .deb
         working-directory: edge-agent
         run: bash packaging/linux/build_deb.sh
@@ -146,14 +130,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ruby ruby-dev rubygems rpm
           sudo gem install --no-document fpm
-
-      - name: Bootstrap ML model
-        working-directory: edge-agent
-        run: |
-          pip install "scikit-learn>=1.4.0,<2.0.0" "numpy>=1.26.0,<3.0.0" joblib
-          python src/edgepulse/scripts/bootstrap_model.py \
-            --output-dir src/models/ \
-            --n-samples 2000
 
       - name: Build .rpm
         working-directory: edge-agent
@@ -195,7 +171,7 @@ jobs:
 
       - name: Build Windows installer
         run: |
-          .\packaging\windows\build_windows.ps1 -SkipBootstrap:$false
+          .\packaging\windows\build_windows.ps1
 
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4

@@ -15,12 +15,12 @@ class SyncService:
         self,
         sync_queue: Any,
         supabase_url: str,
-        supabase_key: str,
+        api_key: str,
         device_id: str,
     ) -> None:
         self._sync_queue = sync_queue
         self._supabase_url = supabase_url
-        self._supabase_key = supabase_key
+        self._api_key = api_key
         self._device_id = device_id
         self._client: Optional[Any] = None
 
@@ -30,8 +30,9 @@ class SyncService:
 
     async def initialize(self) -> bool:
         try:
-            from edgepulse.sync.cloud_sync import CloudSync
+            from edgepulse.auth.auth_client import EdgePulseClient, ClientConfig
             from edgepulse.auth.credentials import CredentialManager
+            from edgepulse.sync.cloud_sync import CloudSync
 
             device_id = self._device_id
             api_key: Optional[str] = None
@@ -45,14 +46,15 @@ class SyncService:
             except Exception as exc:
                 logger.warning("sync_credentials_load_failed", error=str(exc))
 
-            self._client = CloudSync(
-                supabase_url=self._supabase_url,
-                supabase_key=self._supabase_key,
-                device_id=device_id,
-                api_key=api_key,
-                timeout=10.0,
-                max_retries=3,
+            client = EdgePulseClient(
+                ClientConfig(
+                    supabase_url=self._supabase_url,
+                    timeout_seconds=10,
+                    max_retries=3,
+                ),
+                credential_manager=cred_manager,
             )
+            self._client = CloudSync(client)
             await self._client.initialize()
             logger.info("sync_client_initialized")
             return True

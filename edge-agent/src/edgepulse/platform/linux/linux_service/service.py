@@ -1,16 +1,7 @@
-"""
-EdgePulse Linux Service Core
-
-Provides the EdgePulseLinuxService class which manages the agent lifecycle
-when running under systemd.
-"""
-
 import asyncio
 import signal
-import sys
 import threading
-from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from edgepulse.utils.log_handler import get_logger
 
@@ -26,7 +17,7 @@ SERVICE_DESCRIPTION = (
 
 class EdgePulseLinuxService:
 
-    def __init__(self, agent_wrapper) -> None:
+    def __init__(self, agent_wrapper: Any) -> None:
         self._agent_wrapper = agent_wrapper
         self._is_running: bool = False
         self._shutdown_event: Optional[asyncio.Event] = None
@@ -35,14 +26,11 @@ class EdgePulseLinuxService:
 
         logger.info("linux_service_initialized", service=SERVICE_NAME)
 
-    # ── Public API ────────────────────────────────────────────────────────────
-
     @property
     def is_running(self) -> bool:
         return self._is_running
 
     def start(self) -> None:
-        """Start the agent in a background thread (non-blocking)."""
         if self._is_running:
             logger.warning("linux_service_already_running")
             return
@@ -60,7 +48,6 @@ class EdgePulseLinuxService:
         logger.info("linux_service_stop_requested")
         self._is_running = False
 
-        # Wake the asyncio shutdown event from any thread
         if self._shutdown_event is not None and self._loop is not None:
             self._loop.call_soon_threadsafe(self._shutdown_event.set)
 
@@ -74,7 +61,6 @@ class EdgePulseLinuxService:
     def run_sync(self) -> None:
         self.start()
 
-        # Wait for SIGTERM / SIGINT or for the agent thread to exit naturally.
         try:
             if self._agent_thread is not None:
                 self._agent_thread.join()
@@ -82,8 +68,6 @@ class EdgePulseLinuxService:
             logger.info("linux_service_keyboard_interrupt")
         finally:
             self.stop()
-
-    # ── Internal ──────────────────────────────────────────────────────────────
 
     def _run_agent_loop(self) -> None:
         loop = asyncio.new_event_loop()
@@ -99,22 +83,19 @@ class EdgePulseLinuxService:
             logger.error("linux_service_agent_loop_error", error=str(exc))
         finally:
             try:
-                # Cancel any lingering tasks
                 pending = asyncio.all_tasks(loop)
                 for task in pending:
                     task.cancel()
                 if pending:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             finally:
                 loop.close()
                 self._is_running = False
                 logger.info("linux_service_event_loop_closed")
 
     async def _run_agent_coroutine(self) -> None:
-        """Main agent coroutine: starts the wrapper, waits for shutdown."""
-        assert self._shutdown_event is not None  # set in _run_agent_loop
+        if self._shutdown_event is None:
+            return
 
         try:
             logger.info("linux_service_agent_starting")
@@ -130,13 +111,10 @@ class EdgePulseLinuxService:
             )
 
             if not agent_task.done():
-                if (
-                    self._agent_wrapper is not None
-                    and hasattr(self._agent_wrapper, "agent")
-                    and self._agent_wrapper.agent is not None
-                ):
+                agent = getattr(self._agent_wrapper, "agent", None)
+                if agent is not None:
                     try:
-                        await self._agent_wrapper.agent.stop()
+                        await agent.stop()
                     except Exception as exc:
                         logger.error("linux_service_agent_stop_error", error=str(exc))
                 agent_task.cancel()
@@ -152,21 +130,23 @@ class EdgePulseLinuxService:
         finally:
             logger.info("linux_service_agent_coroutine_finished")
 
-    def _register_signal_handlers(self, loop: asyncio.AbstractEventLoop) -> None:
-        def _request_shutdown(signum: int) -> None:
-            sig_name = signal.Signals(signum).name
-            logger.info("linux_service_signal_received", signal=sig_name)
-            if self._shutdown_event is not None:
+    def _request_shutdown(self, signum: int) -> None:
+        sig_name = signal.Signals(signum).name
+        logger.info("linux_service_signal_received", signal=sig_name)
+        if self._shutdown_event is not None:
+            loop = self._loop
+            if loop is not None:
                 loop.call_soon_threadsafe(self._shutdown_event.set)
 
+    def _register_signal_handlers(self, loop: asyncio.AbstractEventLoop) -> None:
         try:
             loop.add_signal_handler(
                 signal.SIGTERM,
-                lambda: _request_shutdown(signal.SIGTERM),
+                lambda: self._request_shutdown(signal.SIGTERM),
             )
             loop.add_signal_handler(
                 signal.SIGINT,
-                lambda: _request_shutdown(signal.SIGINT),
+                lambda: self._request_shutdown(signal.SIGINT),
             )
             logger.debug("linux_service_signal_handlers_registered")
         except (NotImplementedError, RuntimeError) as exc:
@@ -175,8 +155,8 @@ class EdgePulseLinuxService:
                 reason=str(exc),
             )
 
-            def _fallback_handler(signum, frame):  # noqa: ANN001
-                _request_shutdown(signum)
+            def _fallback_handler(signum: int, frame: Any | None = None) -> None:
+                self._request_shutdown(signum)
 
             signal.signal(signal.SIGTERM, _fallback_handler)
             signal.signal(signal.SIGINT, _fallback_handler)

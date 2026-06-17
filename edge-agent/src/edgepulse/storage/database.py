@@ -13,6 +13,7 @@ from edgepulse.shared.schemas import (
     AlertEvent,
     TelemetryEvent,
     DetectionEvent,
+    DeviceInfo,
     FeatureVector,
 )
 
@@ -33,7 +34,12 @@ class Database:
     @staticmethod
     def _load_schema() -> Tuple[Dict[str, str], List[str]]:
         content = _SCHEMA_FILE.read_text(encoding="utf-8")
-        content = re.sub(r"(?:'[^']*')|--.*$", lambda m: m.group(0) if m.group(0).startswith("'") else "", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"(?:'[^']*')|--.*$",
+            lambda m: m.group(0) if m.group(0).startswith("'") else "",
+            content,
+            flags=re.MULTILINE,
+        )
 
         statements = [s.strip() for s in content.split(";") if s.strip()]
 
@@ -43,9 +49,7 @@ class Database:
         for stmt in statements:
             upper = stmt.upper()
             if upper.startswith("CREATE TABLE"):
-                m = re.search(
-                    r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", upper
-                )
+                m = re.search(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", upper)
                 if m:
                     table_schemas[m.group(1).lower()] = stmt + ";"
             elif upper.startswith(("CREATE INDEX", "CREATE TRIGGER")):
@@ -92,9 +96,7 @@ class Database:
             await conn.execute("PRAGMA busy_timeout = 30000")
             yield conn
 
-    async def execute_query(
-        self, query: str, params: Tuple = ()
-    ) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         query_upper = query.strip().upper()
         is_select = query_upper.startswith("SELECT")
 
@@ -114,18 +116,14 @@ class Database:
             await conn.commit()
             return cursor.rowcount or 0
 
-    async def execute_many(
-        self, query: str, params_list: List[Tuple]
-    ) -> None:
+    async def execute_many(self, query: str, params_list: List[Tuple]) -> None:
         async with self.connection() as conn:
             await conn.executemany(query, params_list)
             await conn.commit()
 
     async def insert_alert(self, alert: AlertEvent) -> int:
         severity_val = (
-            alert.severity.value
-            if hasattr(alert.severity, "value")
-            else str(alert.severity)
+            alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity)
         )
 
         query = """
@@ -176,6 +174,85 @@ class Database:
             async with conn.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
+
+    async def get_alerts(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        severity: Optional[str] = None,
+        synced: Optional[int] = None,
+        since: Optional[str] = None,
+        device_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        if since:
+            conditions.append("timestamp >= ?")
+            params.append(since)
+        if severity:
+            conditions.append("severity = ?")
+            params.append(severity)
+        if synced is not None:
+            conditions.append("synced = ?")
+            params.append(synced)
+        if device_id:
+            conditions.append("device_id = ?")
+            params.append(device_id)
+
+        where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        query = f"SELECT * FROM alerts{where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        async with self.connection() as conn:
+            async with conn.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def get_alert_summary(self, device_id: Optional[str] = None) -> Dict[str, Any]:
+        device_filter = " WHERE device_id = ?" if device_id else ""
+        params: List[Any] = [device_id] if device_id else []
+
+        count_query = f"SELECT COUNT(*) as total FROM alerts{device_filter}"
+        severity_query = f"""
+            SELECT severity, COUNT(*) as count FROM alerts{device_filter}
+            GROUP BY severity
+        """
+        synced_query = f"""
+            SELECT synced, COUNT(*) as count FROM alerts{device_filter}
+            GROUP BY synced
+        """
+
+        async with self.connection() as conn:
+            async with conn.execute(count_query, params) as cursor:
+                total = (await cursor.fetchone())["total"]
+
+            async with conn.execute(severity_query, params) as cursor:
+                rows = await cursor.fetchall()
+                by_severity = {str(row["severity"]): row["count"] for row in rows}
+
+            async with conn.execute(synced_query, params) as cursor:
+                rows = await cursor.fetchall()
+                by_synced = {bool(row["synced"]): row["count"] for row in rows}
+
+        return {
+            "total": total,
+            "by_severity": by_severity,
+            "synced": by_synced.get(True, 0),
+            "unsynced": by_synced.get(False, 0),
+        }
+
+    async def acknowledge_alert(self, alert_id: str, acknowledged_by: Optional[str] = None) -> bool:
+        query = """
+            UPDATE alerts
+            SET acknowledged = 1,
+                acknowledged_at = ?,
+                acknowledged_by = ?
+            WHERE alert_id = ?
+        """
+        now = datetime.utcnow().isoformat()
+        result = await self.execute_update(query, (now, acknowledged_by, alert_id))
+        return result > 0
 
     async def insert_telemetry(self, telemetry: TelemetryEvent) -> int:
         query = """
@@ -249,9 +326,7 @@ class Database:
             detection.confidence,
             json.dumps(detection.features_used) if detection.features_used else None,
             detection.model_version,
-            json.dumps(detection.detection_metadata)
-            if detection.detection_metadata
-            else None,
+            json.dumps(detection.detection_metadata) if detection.detection_metadata else None,
         )
         async with self.connection() as conn:
             cursor = await conn.execute(query, params)
@@ -289,16 +364,13 @@ class Database:
         """Convenience helper: insert a numpy feature array directly."""
         try:
             import numpy as np
+
             arr = np.asarray(feature_array, dtype=float).flatten()
-            features_dict = {
-                name: float(val)
-                for name, val in zip(feature_names, arr)
-            }
+            features_dict = {name: float(val) for name, val in zip(feature_names, arr)}
             fv = FeatureVector(
                 device_id=device_id,
                 timestamp=datetime.utcnow().isoformat(),
                 features=features_dict,
-                feature_names=feature_names,
                 model_version=model_version,
                 normalized=normalized,
             )
@@ -319,9 +391,7 @@ class Database:
             VALUES (?, ?, ?, ?)
         """
         async with self.connection() as conn:
-            cursor = await conn.execute(
-                query, (item_type, item_id, json.dumps(data), priority)
-            )
+            cursor = await conn.execute(query, (item_type, item_id, json.dumps(data), priority))
             await conn.commit()
             return cursor.lastrowid or 0
 
@@ -349,20 +419,89 @@ class Database:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
-    async def cleanup_old_data(self, retention_days: int) -> Dict[str, int]:
-        cutoff = datetime.utcnow() - timedelta(days=retention_days)
-        cutoff_iso = cutoff.isoformat()
+    async def upsert_device(self, info: DeviceInfo) -> int:
+        query = """
+            INSERT INTO devices (id, last_seen, status, cpu_usage, memory_usage, alerts_count, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                last_seen   = COALESCE(excluded.last_seen, devices.last_seen),
+                status      = excluded.status,
+                cpu_usage   = COALESCE(excluded.cpu_usage, devices.cpu_usage),
+                memory_usage = COALESCE(excluded.memory_usage, devices.memory_usage),
+                alerts_count = COALESCE(excluded.alerts_count, devices.alerts_count),
+                version     = COALESCE(excluded.version, devices.version)
+        """
+        last_seen_val = info.last_seen or datetime.utcnow().isoformat()
+        return await self.execute_update(
+            query,
+            (
+                info.device_id,
+                last_seen_val,
+                info.status,
+                info.cpu_usage,
+                info.memory_usage,
+                info.alerts_count,
+                info.version,
+            ),
+        )
+
+    async def insert_dead_letter(
+        self,
+        item_type: str,
+        item_data: Dict[str, Any],
+        error_info: Optional[str] = None,
+        attempts: int = 0,
+    ) -> int:
+        query = """
+            INSERT INTO dead_letter_queue (item_type, item_id, data_json, attempts, error_info, failed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """
+        item_id = str(item_data.get("alert_id") or item_data.get("id") or "unknown")
+        now = datetime.utcnow().isoformat()
+        return await self.execute_update(
+            query,
+            (item_type, item_id, json.dumps(item_data), attempts, error_info, now),
+        )
+
+    async def get_dead_letter_items(
+        self, limit: int = 100, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        query = """
+            SELECT * FROM dead_letter_queue
+            ORDER BY failed_at DESC LIMIT ? OFFSET ?
+        """
+        async with self.connection() as conn:
+            async with conn.execute(query, (limit, offset)) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def cleanup_old_data(
+        self,
+        retention_days: int,
+        alert_retention_days: Optional[int] = None,
+    ) -> Dict[str, int]:
+        alert_cutoff = datetime.utcnow() - timedelta(days=alert_retention_days or retention_days)
+        general_cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        alert_cutoff_iso = alert_cutoff.isoformat()
+        general_cutoff_iso = general_cutoff.isoformat()
 
         delete_statements = {
-            "alerts": ("DELETE FROM alerts WHERE timestamp < ?", (cutoff_iso,)),
-            "telemetry": ("DELETE FROM telemetry WHERE timestamp < ?", (cutoff_iso,)),
+            "alerts": (
+                "DELETE FROM alerts WHERE synced = 1 AND timestamp < ?",
+                (alert_cutoff_iso,),
+            ),
+            "dead_letter_queue": (
+                "DELETE FROM dead_letter_queue WHERE failed_at < ?",
+                (alert_cutoff_iso,),
+            ),
+            "telemetry": ("DELETE FROM telemetry WHERE timestamp < ?", (general_cutoff_iso,)),
             "telemetry_events": (
                 "DELETE FROM telemetry_events WHERE timestamp < ?",
-                (cutoff_iso,),
+                (general_cutoff_iso,),
             ),
-            "detections": ("DELETE FROM detections WHERE timestamp < ?", (cutoff_iso,)),
-            "features": ("DELETE FROM features WHERE timestamp < ?", (cutoff_iso,)),
-            "events": ("DELETE FROM events WHERE timestamp < ?", (cutoff_iso,)),
+            "detections": ("DELETE FROM detections WHERE timestamp < ?", (general_cutoff_iso,)),
+            "features": ("DELETE FROM features WHERE timestamp < ?", (general_cutoff_iso,)),
+            "events": ("DELETE FROM events WHERE timestamp < ?", (general_cutoff_iso,)),
         }
 
         results: Dict[str, int] = {}
@@ -372,5 +511,10 @@ class Database:
                 results[table] = cursor.rowcount or 0
             await conn.commit()
 
-        logger.info("old_data_cleaned", cutoff=cutoff_iso, deleted=results)
+        logger.info(
+            "old_data_cleaned",
+            general_cutoff=general_cutoff_iso,
+            alert_cutoff=alert_cutoff_iso,
+            deleted=results,
+        )
         return results

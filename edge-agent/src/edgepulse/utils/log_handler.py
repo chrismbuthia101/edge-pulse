@@ -19,13 +19,13 @@ class EdgePulseError(Exception):
 class ConfigurationError(EdgePulseError):
     pass
 
+
 class LoggingError(EdgePulseError):
     pass
 
+
 def configure_logging(
-    log_level: str = "INFO",
-    log_file: Optional[Path] = None,
-    device_id: Optional[str] = None
+    log_level: str = "INFO", log_file: Optional[Path] = None, device_id: Optional[str] = None
 ) -> None:
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if log_level.upper() not in valid_levels:
@@ -35,7 +35,7 @@ def configure_logging(
     if log_file:
         try:
             log_file.parent.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(log_file, mode='a')
+            file_handler = logging.FileHandler(log_file, mode="a")
             file_handler.setFormatter(logging.Formatter("%(message)s"))
         except (OSError, IOError) as e:
             raise LoggingError(f"Failed to setup log file {log_file}: {e}") from e
@@ -44,7 +44,7 @@ def configure_logging(
         format="%(message)s",
         level=getattr(logging, log_level.upper()),
         handlers=[file_handler] if file_handler else None,
-        force=True
+        force=True,
     )
 
     processors = [
@@ -65,9 +65,7 @@ def configure_logging(
 
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, log_level.upper())
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, log_level.upper())),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,

@@ -1,7 +1,4 @@
-
-
 import asyncio
-import json
 import signal
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -16,7 +13,7 @@ from edgepulse.config.settings import AgentSettings
 from edgepulse.utils.log_handler import configure_logging, get_logger
 from edgepulse.storage.database import Database
 from edgepulse.sync.sync_queue import SyncQueue
-from edgepulse.api.api_server import AdaptiveAPIServer, register_detector_health_provider
+from edgepulse.api import FastAPIServer, APIDependencies
 
 from edgepulse.collectors.system_collector import SystemMetricsCollector
 from edgepulse.collectors.process_collector import ProcessMonitor
@@ -25,15 +22,16 @@ from edgepulse.features.feature_extractor import FeatureExtractor
 from edgepulse.features.feature_normalizer import DeviceNormalizer
 from edgepulse.detectors.isolation_forest_detector import IsolationForestDetector
 from edgepulse.detectors.autoencoder_reconstruction_detector import AutoencoderDetector
-from edgepulse.detectors.ensemble_detector import EnsembleDetector
 from edgepulse.analysis.report_generator import ReportGenerator
 from edgepulse.alerts.alert_engine import AlertEngine
 from edgepulse.alerts.notifier import LocalNotifier
-from edgepulse.config.privacy import PrivacyController
 from edgepulse.utils.path_manager import PathManager
 from edgepulse.utils.error_handler import (
-    EdgePulseError, ConfigurationError, ModelError,
-    SyncError, NetworkError,
+    EdgePulseError,
+    ConfigurationError,
+    ModelError,
+    SyncError,
+    NetworkError,
 )
 from edgepulse.shared.metrics import create_metrics_collector, StandardMetrics
 from edgepulse.core.device_registry import DeviceRegistry
@@ -56,15 +54,13 @@ class EdgePulseAgent:
         event_bus: Optional[EventBus] = None,
         database: Optional[Database] = None,
         sync_queue: Optional[SyncQueue] = None,
-        api_server: Optional[AdaptiveAPIServer] = None,
+        api_server: Optional[FastAPIServer] = None,
         collectors: Optional[List[Any]] = None,
         detectors: Optional[List[Any]] = None,
         feature_extractor: Optional[Any] = None,
         alert_engine: Optional[Any] = None,
         device_registry: Optional[DeviceRegistry] = None,
         explainer_service: Optional[ExplainerService] = None,
-        alert_handler: Optional[AlertHandler] = None,
-        sync_service: Optional[SyncService] = None,
     ):
         self.settings = settings or AgentSettings()
         if device_id:
@@ -73,6 +69,7 @@ class EdgePulseAgent:
         # Load credentials early to get the real device_id
         try:
             from edgepulse.auth.credentials import CredentialManager
+
             cred_manager = CredentialManager()
             creds = cred_manager.get_device_credentials()
             if creds and creds.device_id:
@@ -86,21 +83,18 @@ class EdgePulseAgent:
         self.device_id = self.settings.device_id
 
         self.event_bus = event_bus or get_event_bus()
-        self.database = database or Database(
-            PathManager().data_dir / "edgepulse.db"
-        )
+        self.database = database or Database(PathManager().data_dir / "edgepulse.db")
         self.sync_queue = sync_queue or SyncQueue(
             PathManager().data_dir / "sync",
             max_size=self.settings.sync.offline_queue_max,
             max_retry_attempts=self.settings.sync.retry_max_attempts,
             batch_size=self.settings.sync.batch_size,
         )
-        self.api_server = api_server or AdaptiveAPIServer(
-            mode=self.settings.api.mode,
+        self.api_server = api_server or FastAPIServer(
             port=self.settings.api.port,
-            min_memory_mb=self.settings.api.min_memory_mb,
-            min_cpu_cores=self.settings.api.min_cpu_cores,
+            host=self.settings.api.host,
         )
+        self._api_deps: Optional[APIDependencies] = None
         self.metrics = create_metrics_collector("agent", self.device_id)
         self._health_snapshot_interval = 300
 
@@ -118,7 +112,8 @@ class EdgePulseAgent:
         self._alert_engine = alert_engine or self._create_alert_engine()
 
         self.device_registry = device_registry or DeviceRegistry(
-            self.device_id, self.database,
+            self.device_id,
+            self.database,
             agent_version=get_agent_version(),
         )
         self.explainer_service = explainer_service or ExplainerService(self.device_id)
@@ -186,22 +181,24 @@ class EdgePulseAgent:
             await self.event_bus.start()
 
             if self._pipeline:
-                await self._pipeline.start(self.settings.get_collection_interval_seconds())
+                await self._pipeline.start(self.settings.collection.interval)
 
             if self.sync_service:
                 await self.sync_service.start_worker()
 
-            if self.settings.should_enable_api():
-                await self.api_server.start()
+            if self.settings.api.enabled:
+                await self.api_server.start(deps=self._api_deps)
 
             await self._start_background_tasks()
 
-            await self.event_bus.publish(Event(
-                type=EventType.SYSTEM,
-                data={"device_id": self.device_id, "event": "agent_started"},
-                timestamp=datetime.utcnow(),
-                source="async_agent",
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.SYSTEM,
+                    data={"device_id": self.device_id, "event": "agent_started"},
+                    timestamp=datetime.utcnow(),
+                    source="async_agent",
+                )
+            )
 
             logger.info("agent_started", device_id=self.device_id)
 
@@ -241,7 +238,7 @@ class EdgePulseAgent:
             self._tasks.clear()
 
             for collector in self._collectors:
-                if hasattr(collector, 'stop'):
+                if hasattr(collector, "stop"):
                     collector.stop()
                     logger.info("collector_stopped", collector=collector.__class__.__name__)
 
@@ -257,12 +254,14 @@ class EdgePulseAgent:
                 await self.sync_queue.stop()
 
             await self._save_state()
-            await self.event_bus.publish(Event(
-                type=EventType.SYSTEM,
-                data={"device_id": self.device_id, "event": "agent_stopped"},
-                timestamp=datetime.utcnow(),
-                source="async_agent",
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.SYSTEM,
+                    data={"device_id": self.device_id, "event": "agent_stopped"},
+                    timestamp=datetime.utcnow(),
+                    source="async_agent",
+                )
+            )
 
             await self.event_bus.stop()
 
@@ -306,6 +305,7 @@ class EdgePulseAgent:
                 self._shutdown_event.set()
 
         if is_windows():
+
             def _windows_sigint_handler(signum, frame) -> None:
                 loop.call_soon_threadsafe(request_shutdown)
 
@@ -321,7 +321,7 @@ class EdgePulseAgent:
             logger.debug("signal_handlers_registered", platform="unix")
 
     def _create_collectors(self) -> List[Any]:
-        collectors = [
+        collectors: List[Any] = [
             SystemMetricsCollector(collection_interval=self.settings.collection.interval)
         ]
         if self.settings.collection.enable_process_monitoring:
@@ -332,8 +332,8 @@ class EdgePulseAgent:
 
     def _create_detectors(self) -> List[Any]:
         path_manager = PathManager()
-        detectors = []
-        models_loaded = []
+        detectors: List[Any] = []
+        models_loaded: List[str] = []
 
         isolation_forest = IsolationForestDetector(
             n_estimators=self.settings.detection.isolation_forest_n_estimators,
@@ -348,14 +348,6 @@ class EdgePulseAgent:
 
         if self.settings.detection.use_autoencoder:
             autoencoder = AutoencoderDetector(
-                input_dim=(
-                    self.settings.detection.autoencoder_input_dim
-                    or self.settings.features.feature_dimension
-                ),
-                encoding_dim=self.settings.detection.autoencoder_encoding_dim,
-                hidden_layers=self.settings.detection.autoencoder_hidden_layers,
-                learning_rate=self.settings.detection.autoencoder_learning_rate,
-                use_tflite=self.settings.detection.autoencoder_use_tflite,
                 device_id=self.device_id,
                 path_manager=path_manager,
             )
@@ -395,7 +387,7 @@ class EdgePulseAgent:
 
     async def _initialize_components(self) -> None:
         for collector in self._collectors:
-            if hasattr(collector, 'start'):
+            if hasattr(collector, "start"):
                 collector.start()
                 logger.info("collector_started", collector=collector.__class__.__name__)
 
@@ -426,51 +418,60 @@ class EdgePulseAgent:
             database=self.database,
             sync_queue=self.sync_queue,
             metrics=self.metrics,
-            notifier=getattr(self, 'notifier', None),
+            notifier=getattr(self, "notifier", None),
         )
 
         primary_detectors = [d for d in self._detectors if hasattr(d, "get_health")]
 
+        detector_health_provider: Any
         if primary_detectors:
             primary = primary_detectors[0]
-            register_detector_health_provider(primary.get_health)
+            detector_health_provider = primary.get_health
             logger.info(
                 "detector_health_provider_registered",
                 detector=primary.__class__.__name__,
             )
-            self.explainer_service.try_initialize(
-                self._detectors, self._feature_extractor
-            )
+            self.explainer_service.try_initialize(self._detectors, self._feature_extractor)
         else:
-            def _no_detector_health():
+
+            def detector_health_provider():
                 return {
                     "status": "degraded",
                     "is_trained": False,
-                    "action_required": (
-                        "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart."
-                    ),
+                    "action_required": ("Trained model not found — reinstall the package."),
                 }
-            register_detector_health_provider(_no_detector_health)
+
             logger.warning("no_trained_detector_health_provider_registered")
+
+        sync_dead_letter_provider: Any = None
+        if self.sync_queue:
+
+            async def _dead_letter_provider():
+                return await self.sync_queue.get_dead_letter_items()
+
+            sync_dead_letter_provider = _dead_letter_provider
+
+        self._api_deps = APIDependencies(
+            database=self.database,
+            sync_queue=self.sync_queue,
+            detector_health_provider=detector_health_provider,
+            sync_dead_letter_provider=sync_dead_letter_provider,
+        )
 
         await self.device_registry.register()
 
     def _initialize_sync_service(self) -> Optional[SyncService]:
-        raw_key = self.settings.sync.supabase_key
+        raw_key = self.settings.sync.api_key
         if raw_key is None:
-            logger.warning("sync_client_skipped: supabase_key is None")
+            logger.warning("sync_client_skipped: api_key is None")
             return None
 
-        supabase_key = (
-            raw_key.get_secret_value()
-            if hasattr(raw_key, 'get_secret_value')
-            else raw_key
-        )
+        api_key = raw_key.get_secret_value() if hasattr(raw_key, "get_secret_value") else raw_key
 
         service = SyncService(
             sync_queue=self.sync_queue,
             supabase_url=self.settings.sync.supabase_url,
-            supabase_key=supabase_key,
+            api_key=api_key,
             device_id=self.settings.device_id,
         )
         return service
@@ -492,6 +493,7 @@ class EdgePulseAgent:
                 if features is not None and hasattr(self, "normalizer"):
                     try:
                         import numpy as np
+
                         feat_array = np.asarray(features, dtype=float)
                         if feat_array.ndim == 1:
                             feat_array = feat_array.reshape(1, -1)
@@ -507,7 +509,9 @@ class EdgePulseAgent:
             )
 
             await self.alert_handler.handle(
-                detection, features, severity_label,
+                detection,
+                features,
+                severity_label,
                 explainer=self.explainer_service if self.explainer_service.is_available else None,
             )
 
@@ -528,10 +532,9 @@ class EdgePulseAgent:
 
                     if features is not None:
                         import numpy as np
+
                         feat_arr = np.asarray(features, dtype=float).flatten()
-                        feature_dict = {
-                            f"feature_{i}": float(v) for i, v in enumerate(feat_arr)
-                        }
+                        feature_dict = {f"feature_{i}": float(v) for i, v in enumerate(feat_arr)}
                         fv_payload = {
                             "model_id": f"iforest-{self.device_id[:8]}",
                             "features": feature_dict,
@@ -545,9 +548,10 @@ class EdgePulseAgent:
 
         async def handle_sync_completed(event: Event):
             data = event.data
-            logger.info("sync_completed", items=data.get('count', 0))
+            logger.info("sync_completed", items=data.get("count", 0))
             self.metrics.increment_counter(StandardMetrics.SYNC_ATTEMPTS_TOTAL)
             self.metrics.set_gauge(StandardMetrics.SYNC_SUCCESS_RATE, 1.0)
+
         async def handle_telemetry(event: Event):
             pass
 
@@ -565,10 +569,8 @@ class EdgePulseAgent:
         await asyncio.sleep(5)
         while self._running:
             try:
-                pipeline_healthy = self._pipeline is not None and self._pipeline._running
-                api_healthy = (
-                    not self.settings.should_enable_api() or self.api_server.is_healthy()
-                )
+                pipeline_healthy = self._pipeline is not None and self._pipeline.running
+                api_healthy = not self.settings.api.enabled or self.api_server.is_healthy()
                 if not pipeline_healthy or not api_healthy:
                     logger.warning(
                         "component_health_issue",
@@ -586,15 +588,14 @@ class EdgePulseAgent:
         while self._running:
             try:
                 import psutil
+
                 self.metrics.set_gauge(StandardMetrics.CPU_USAGE, psutil.cpu_percent())
                 self.metrics.set_gauge(
                     StandardMetrics.MEMORY_USAGE, psutil.virtual_memory().percent
                 )
                 if self.sync_queue:
                     stats = self.sync_queue.get_stats()
-                    self.metrics.set_gauge(
-                        StandardMetrics.SYNC_QUEUE_SIZE, stats['queue_size']
-                    )
+                    self.metrics.set_gauge(StandardMetrics.SYNC_QUEUE_SIZE, stats["queue_size"])
                 await asyncio.sleep(self.settings.metrics.collection_interval)
             except asyncio.CancelledError:
                 break
@@ -608,7 +609,8 @@ class EdgePulseAgent:
                 await asyncio.sleep(86400)
                 if self._running:
                     cleanup_results = await self.database.cleanup_old_data(
-                        retention_days=self.settings.get_data_retention_days()
+                        retention_days=self.settings.privacy.data_retention_days,
+                        alert_retention_days=self.settings.privacy.alert_retention_days,
                     )
                     logger.info("data_cleanup_completed", results=cleanup_results)
             except asyncio.CancelledError:
@@ -621,7 +623,7 @@ class EdgePulseAgent:
         while self._running:
             try:
                 client = self.sync_service.client if self.sync_service else None
-                if client and hasattr(client, 'sync_health_snapshots'):
+                if client and hasattr(client, "sync_health_snapshots"):
                     snapshot = await self._collect_health_snapshot()
                     if snapshot:
                         success = await client.sync_health_snapshots([snapshot])
@@ -639,13 +641,14 @@ class EdgePulseAgent:
     async def _collect_health_snapshot(self) -> Optional[Dict[str, Any]]:
         try:
             import psutil
+
             boot_time = datetime.fromtimestamp(psutil.boot_time())
             uptime_seconds = (datetime.utcnow() - boot_time).total_seconds()
             uptime_percentage = min(100.0, (uptime_seconds / 86400) * 100)
 
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
 
             network_status = True
             try:
@@ -656,10 +659,10 @@ class EdgePulseAgent:
             error_count = 0
             warning_count = 0
             for collector in self._collectors:
-                if hasattr(collector, '_error_count'):
-                    error_count += getattr(collector, '_error_count', 0)
-                if hasattr(collector, '_warning_count'):
-                    warning_count += getattr(collector, '_warning_count', 0)
+                if hasattr(collector, "_error_count"):
+                    error_count += getattr(collector, "_error_count", 0)
+                if hasattr(collector, "_warning_count"):
+                    warning_count += getattr(collector, "_warning_count", 0)
 
             alert_count = 0
             try:
@@ -690,9 +693,9 @@ class EdgePulseAgent:
     async def _save_state(self) -> None:
         try:
             for detector in self._detectors:
-                if hasattr(detector, 'save_model'):
+                if hasattr(detector, "save_model"):
                     await asyncio.to_thread(detector.save_model)
-            if hasattr(self, 'normalizer') and self.normalizer.is_fitted:
+            if hasattr(self, "normalizer") and self.normalizer.is_fitted:
                 await asyncio.to_thread(self.normalizer.save_baseline)
             logger.info("agent_state_saved", device_id=self.device_id)
         except Exception as e:
@@ -700,6 +703,7 @@ class EdgePulseAgent:
 
     def get_status(self) -> Dict[str, Any]:
         from edgepulse.api.api_server import _get_detector_health
+
         explainer_info: Dict[str, Any] = {"available": self.explainer_service.is_available}
         if self.explainer_service.manager is not None:
             explainer_info = {
@@ -711,10 +715,10 @@ class EdgePulseAgent:
             "device_id": self.device_id,
             "running": self._running,
             "environment": self.settings.environment,
-            "api_enabled": self.settings.should_enable_api(),
+            "api_enabled": self.settings.api.enabled,
             "sync_enabled": self.settings.should_enable_sync(),
-            "ml_enabled": self.settings.should_enable_ml(),
-            "pipeline_running": self._pipeline is not None and self._pipeline._running,
+            "ml_enabled": self.settings.enable_ml_features,
+            "pipeline_running": self._pipeline is not None and self._pipeline.running,
             "warmup_cycles_remaining": self._warmup_cycles_remaining,
             "explainer": explainer_info,
             "api_server_info": self.api_server.get_server_info() if self.api_server else None,

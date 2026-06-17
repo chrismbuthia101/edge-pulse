@@ -47,7 +47,7 @@ serve(async (req: Request) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseSecretKey = Deno.env.get('SUPABASE_SECRET_KEY')!
+    const supabaseSecretKey = Deno.env.get('SB_SECRET_KEY')!
     const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
     const tokenHash = await hashToken(enrollmentData.enrollment_token)

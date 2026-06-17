@@ -1,19 +1,13 @@
-
-
 import sys
 
 LINUX_AVAILABLE = sys.platform.startswith("linux")
 
 if LINUX_AVAILABLE:
-    try:
-        from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
-        from edgepulse.platform.linux.linux_service.installer import ServiceInstaller
-    except ImportError:
-        EdgePulseLinuxService = None  # type: ignore
-        ServiceInstaller = None  # type: ignore
+    from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
+    from edgepulse.platform.linux.linux_service.installer import ServiceInstaller
 else:
-    EdgePulseLinuxService = None  # type: ignore
-    ServiceInstaller = None  # type: ignore
+    EdgePulseLinuxService = None
+    ServiceInstaller = None
 
 __all__ = [
     "EdgePulseLinuxService",

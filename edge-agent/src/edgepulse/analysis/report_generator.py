@@ -31,16 +31,18 @@ class ReportGenerator:
     ) -> Dict:
         anomaly_score = anomaly_data.get("anomaly_score", anomaly_data.get("score", 0.0))
         anomaly_label = anomaly_data.get("label", 0)
-        
+
         severity = self.assign_severity(anomaly_score)
-        
+
         top_features = explanation.get("top_features", [])
         explanation_text = explanation.get("explanation_text", "No explanation available")
-        
+
         anomaly_type = self._determine_anomaly_type(top_features, context)
-        
-        recommended_actions = self._generate_recommended_actions(severity, anomaly_type, top_features)
-        
+
+        recommended_actions = self._generate_recommended_actions(
+            severity, anomaly_type, top_features
+        )
+
         report = {
             "alert_id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat(),
@@ -61,7 +63,7 @@ class ReportGenerator:
                 "related_events": [],
             },
         }
-        
+
         return report
 
     def generate_anomaly_report(
@@ -77,34 +79,36 @@ class ReportGenerator:
         top_features: list,
         context: Optional[Dict],
     ) -> str:
-        
+
         feature_names = [f.get("feature", "") for f in top_features]
-        
+
         if any("network" in name.lower() for name in feature_names):
-            if any("unusual" in name.lower() or "entropy" in name.lower() for name in feature_names):
+            if any(
+                "unusual" in name.lower() or "entropy" in name.lower() for name in feature_names
+            ):
                 return "network_anomaly"
             return "network_behavior_deviation"
-        
+
         if any("process" in name.lower() for name in feature_names):
             if any("rare" in name.lower() or "spawn" in name.lower() for name in feature_names):
                 return "process_anomaly"
             return "process_behavior_deviation"
-        
+
         if any("cpu" in name.lower() for name in feature_names):
             if any("spike" in name.lower() or "max" in name.lower() for name in feature_names):
                 return "cpu_spike"
             return "cpu_behavior_deviation"
-        
+
         if any("memory" in name.lower() for name in feature_names):
             if any("spike" in name.lower() or "growth" in name.lower() for name in feature_names):
                 return "memory_anomaly"
             return "memory_behavior_deviation"
-        
+
         if any("disk" in name.lower() for name in feature_names):
             if any("burst" in name.lower() or "spike" in name.lower() for name in feature_names):
                 return "disk_io_anomaly"
             return "disk_behavior_deviation"
-        
+
         return "behavioral_deviation"
 
     def _generate_recommended_actions(
@@ -113,9 +117,9 @@ class ReportGenerator:
         anomaly_type: str,
         top_features: list,
     ) -> list:
-       
+
         actions = []
-        
+
         if severity == SeverityLevel.CRITICAL:
             actions.append("Immediate investigation required")
             actions.append("Consider isolating the device from network")
@@ -130,23 +134,23 @@ class ReportGenerator:
         else:
             actions.append("Log for future analysis")
             actions.append("Monitor if pattern persists")
-        
+
         if "network" in anomaly_type:
             actions.append("Review network connections and firewall rules")
             actions.append("Check for unauthorized network access")
-        
+
         if "process" in anomaly_type:
             actions.append("Review running processes")
             actions.append("Check process tree for suspicious parent processes")
-        
+
         if "cpu" in anomaly_type or "memory" in anomaly_type:
             actions.append("Review system resource usage")
             actions.append("Check for resource-intensive processes")
-        
+
         if "disk" in anomaly_type:
             actions.append("Review disk I/O patterns")
             actions.append("Check for unusual file access")
-        
+
         return actions
 
     def format_as_text(self, report: Dict) -> str:
@@ -163,22 +167,25 @@ class ReportGenerator:
         lines.append("")
         lines.append("EXPLANATION:")
         lines.append("-" * 60)
-        lines.append(report['explanation']['summary'])
+        lines.append(report["explanation"]["summary"])
         lines.append("")
         lines.append("TOP CONTRIBUTING FACTORS:")
         lines.append("-" * 60)
-        for factor in report['explanation']['contributing_factors']:
-            lines.append(f"  - {factor['feature']}: {factor['contribution']:.4f} ({factor['direction']})")
+        for factor in report["explanation"]["contributing_factors"]:
+            lines.append(
+                f"  - {factor['feature']}: {factor['contribution']:.4f} ({factor['direction']})"
+            )
         lines.append("")
         lines.append("RECOMMENDED ACTIONS:")
         lines.append("-" * 60)
-        for action in report['recommended_actions']:
+        for action in report["recommended_actions"]:
             lines.append(f"  - {action}")
         lines.append("")
         lines.append("=" * 60)
-        
+
         return "\n".join(lines)
 
     def format_as_json(self, report: Dict) -> str:
         import json
+
         return json.dumps(report, indent=2)

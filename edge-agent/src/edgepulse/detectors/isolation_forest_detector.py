@@ -1,30 +1,19 @@
-
 import os
-from edgepulse.utils.log_handler import get_logger
-import joblib
-import time
-import hashlib
-from typing import Tuple, Optional, Any, Dict, List
 from pathlib import Path
+from typing import Any, Dict, Optional
+
+import joblib
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-from edgepulse.utils.error_handler import ModelError
-from edgepulse.utils.path_manager import PathManager
 from edgepulse.detectors.base import BaseDetector
+from edgepulse.utils.error_handler import ModelError
+from edgepulse.utils.log_handler import get_logger
+from edgepulse.utils.path_manager import PathManager
 
 logger = get_logger(__name__)
 
-_BOOTSTRAP_WARNING = """
-╔══════════════════════════════════════════════════════════════════╗
-║  EdgePulse — NO MODEL FILE FOUND                                ║
-║                                                                  ║
-║  Anomaly detection is DISABLED until a model is bootstrapped.   ║
-║                                                                  ║
-║  Run:  python bootstrap_model.py                                 ║
-║  Then restart the agent.                                         ║
-╚══════════════════════════════════════════════════════════════════╝
-"""
+_BOOTSTRAP_WARNING = "Anomaly detection is DISABLED — model file not found.\n"
 
 
 class IsolationForestDetector(BaseDetector):
@@ -40,55 +29,46 @@ class IsolationForestDetector(BaseDetector):
         path_manager: Optional[PathManager] = None,
         model_version: str = "1.0",
     ):
+        super().__init__(f"isolation_forest_{device_id or 'default'}", model_version)
         self.n_estimators = n_estimators
         self.contamination = contamination
         self.max_samples = max_samples
         self.random_state = random_state
-        self.model_version = model_version
         self.path_manager = path_manager or PathManager()
 
-        if model_path:
-            self.model_path = Path(model_path)
-        else:
-            self.model_path = self.path_manager.get_model_path(
-                "isolation_forest", device_id
+        self.model_path = (
+            Path(model_path)
+            if model_path
+            else self.path_manager.get_model_path(
+                "isolation_forest",
+                device_id,
             )
+        )
 
         self.model: Optional[IsolationForest] = None
         self.is_trained = False
         self.training_samples = 0
-        self.model_hash: Optional[str] = None
-        self.training_timestamp: Optional[str] = None
-
-        # Human-readable status exposed to /health endpoint
         self.status_detail: str = "not_loaded"
 
-
-    def load_model(self, path: Optional[Path] = None) -> bool:
-        load_path = Path(path) if path else self.model_path
+    def load_model(self, file_path: Optional[str] = None) -> bool:
+        load_path = Path(file_path) if file_path else self.model_path
 
         candidate_paths = [load_path]
 
-        extra_candidates = [
+        extra = [
             self.path_manager.models_dir / "edgepulse_primary_isolation_forest.joblib",
         ]
         if system_path := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
-            extra_candidates.append(Path(system_path) / "models/edgepulse_primary_isolation_forest.joblib")
+            extra.append(Path(system_path) / "models/edgepulse_primary_isolation_forest.joblib")
 
-        for bootstrap_path in extra_candidates:
-            if bootstrap_path not in candidate_paths and bootstrap_path.exists():
-                candidate_paths.insert(0, bootstrap_path)
+        for p in extra:
+            if p not in candidate_paths and p.exists():
+                candidate_paths.insert(0, p)
 
-        system_paths = []
         if system_dir := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
-            system_paths.append(Path(system_dir) / "models/default-device_isolation_forest.pkl")
-        system_paths.extend([
-            Path("/opt/edgepulse/data/models/edgepulse_primary_isolation_forest.joblib"),
-        ])
-        for sys_path in system_paths:
-            if sys_path not in candidate_paths:
-                candidate_paths.append(sys_path)
-
+            candidate_paths.append(
+                Path(system_dir) / "models/default-device_isolation_forest.pkl",
+            )
         logger.debug(
             "isolation_forest_loading_model",
             candidate_paths=[str(p) for p in candidate_paths],
@@ -126,153 +106,22 @@ class IsolationForestDetector(BaseDetector):
             searched_paths=[str(p) for p in candidate_paths],
             models_dir=str(self.path_manager.models_dir),
         )
-        self._emit_bootstrap_warning(load_path)
-        self.status_detail = "missing_model_file"
-        return False
-
-    def _emit_bootstrap_warning(self, attempted_path: Path) -> None:
         print(_BOOTSTRAP_WARNING, flush=True)
         logger.warning(
             "no_model_file_found",
-            attempted_path=str(attempted_path),
-            bootstrap_command="python src/edgepulse/scripts/bootstrap_model.py",
+            attempted_path=str(load_path),
             detection_status="DISABLED",
-            action_required=(
-                "Run `python src/edgepulse/scripts/bootstrap_model.py` then restart the agent "
-                "to enable anomaly detection."
-            ),
+            action_required="Ensure a trained model file is present at the expected path.",
         )
+        self.status_detail = "missing_model_file"
+        return False
 
-    def get_health(self) -> Dict[str, Any]:
-        return {
-            "detector": "IsolationForestDetector",
-            "is_trained": self.is_trained,
-            "status": "ok" if self.is_trained else "degraded",
-            "status_detail": self.status_detail,
-            "training_samples": self.training_samples,
-            "model_path": str(self.model_path),
-            "action_required": (
-                None
-                if self.is_trained
-                else "Run `python src/edgepulse/scripts/bootstrap_model.py` and restart the agent."
-            ),
-        }
-
-
-    def train(self, training_data: Any, config: Dict[str, Any]) -> None:
-        features = (
-            training_data
-            if isinstance(training_data, np.ndarray)
-            else np.array(training_data)
-        )
-
-        if features.ndim == 1:
-            features = features.reshape(1, -1)
-
-        if features.shape[0] < 1:
-            raise ModelError("Cannot train with empty feature array")
-
-        try:
-            logger.info("isolation_forest_training_start", n_samples=len(features))
-
-            self.model = IsolationForest(
-                n_estimators=self.n_estimators,
-                contamination=self.contamination,
-                max_samples=self.max_samples,
-                random_state=self.random_state,
-                n_jobs=-1,
-            )
-
-            self.model.fit(features)
-            self.is_trained = True
-            self.training_samples = len(features)
-            self.status_detail = "trained_in_memory"
-            logger.info("isolation_forest_training_complete", n_samples=len(features))
-
-        except Exception as e:
-            logger.error("isolation_forest_training_error", error=str(e))
-            raise ModelError(f"Failed to train Isolation Forest: {e}") from e
-
-
-    def _detect_internal(self, features: Any) -> float:
-        if not self.is_trained or self.model is None:
-            return 0.0
-
-        features_array = (
-            features if isinstance(features, np.ndarray) else np.array(features)
-        )
-        if features_array.ndim == 1:
-            features_array = features_array.reshape(1, -1)
-
-        try:
-            scores = self.model.score_samples(features_array)
-            return float((1 - scores[0]) / 2)
-        except Exception as e:
-            logger.error("isolation_forest_detect_internal_error", error=str(e))
-            return 0.0
-
-    def detect(self, features: Any) -> List[Any]:
-        if not self.is_trained or self.model is None:
-            logger.debug("isolation_forest_detect_skipped_not_trained")
-            return [(0, 0.0)] * (len(features) if hasattr(features, "__len__") else 1)
-
-        features_array = (
-            features if isinstance(features, np.ndarray) else np.array(features)
-        )
-        if features_array.ndim == 1:
-            features_array = features_array.reshape(1, -1)
-
-        try:
-            start_time = time.perf_counter()
-            scores = self.model.score_samples(features_array)
-            normalized_scores = (1 - scores) / 2
-            predictions = self.model.predict(features_array)
-            labels = (predictions == -1).astype(int)
-
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            logger.debug(
-                "isolation_forest_inference",
-                latency_ms=round(latency_ms, 2),
-                n_samples=len(features_array),
-            )
-
-            return [
-                (int(labels[i]), float(normalized_scores[i]))
-                for i in range(len(labels))
-            ]
-
-        except Exception as e:
-            logger.error("isolation_forest_detect_error", error=str(e))
-            return [(0, 0.0)] * len(features_array)
-
-    def predict(self, features: np.ndarray) -> Tuple[int, float]:
-        if not self.is_trained or self.model is None:
-            return (0, 0.0)
-
-        if features.ndim == 1:
-            features = features.reshape(1, -1)
-
-        try:
-            scores = self.model.score_samples(features)
-            normalized_scores = (1 - scores) / 2
-            predictions = self.model.predict(features)
-            labels = (predictions == -1).astype(int)
-
-            if len(labels) == 1:
-                return (int(labels[0]), float(normalized_scores[0]))
-            return (int(np.mean(labels)), float(np.mean(normalized_scores)))
-
-        except Exception as e:
-            logger.error("isolation_forest_predict_error", error=str(e))
-            return (0, 0.0)
-
-
-    def save_model(self, path: Optional[Path] = None) -> bool:
+    def save_model(self, file_path: Optional[str] = None) -> bool:
         if not self.is_trained or self.model is None:
             logger.warning("isolation_forest_save_skipped_not_trained")
             return False
 
-        save_path = Path(path) if path else self.model_path
+        save_path = Path(file_path) if file_path else self.model_path
 
         try:
             save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,64 +141,37 @@ class IsolationForestDetector(BaseDetector):
             logger.error("isolation_forest_save_error", error=str(e))
             raise ModelError(f"Failed to save model: {e}") from e
 
-    def evaluate(self, test_data: Any) -> Dict[str, float]:
+    def _detect_internal(self, features: Any) -> float:
         if not self.is_trained or self.model is None:
-            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+            return 0.0
+
+        features_array = features if isinstance(features, np.ndarray) else np.array(features)
+        if features_array.ndim == 1:
+            features_array = features_array.reshape(1, -1)
 
         try:
-            if isinstance(test_data, np.ndarray):
-                if test_data.ndim == 1:
-                    test_data = test_data.reshape(1, -1)
-
-                predictions = [self.predict(sample) for sample in test_data]
-
-                if predictions:
-                    anomaly_count = sum(1 for label, _ in predictions if label == 1)
-                    avg_score = sum(score for _, score in predictions) / len(predictions)
-                    return {
-                        "anomaly_rate": anomaly_count / len(predictions),
-                        "avg_anomaly_score": avg_score,
-                        "total_samples": len(predictions),
-                    }
-
-            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
-
+            scores = self.model.score_samples(features_array)
+            raw_anomaly_score = -(scores[0] - self.model.offset_)
+            normalized = 1.0 / (1.0 + np.exp(-raw_anomaly_score))
+            return float(normalized)
         except Exception as e:
-            logger.error("isolation_forest_evaluate_error", error=str(e))
-            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0}
+            logger.error("isolation_forest_detect_internal_error", error=str(e))
+            return 0.0
 
-
-    def verify_model_integrity(self) -> bool:
-        if not self.is_trained or self.model is None:
-            return False
-
-        try:
-            model_state = {
-                "n_estimators": self.model.n_estimators,
-                "contamination": self.model.contamination,
-                "max_samples": self.model.max_samples,
-                "random_state": self.model.random_state,
-                "training_samples": self.training_samples,
-                "model_version": self.model_version,
-            }
-            current_hash = hashlib.sha256(
-                str(sorted(model_state.items())).encode()
-            ).hexdigest()
-
-            if self.model_hash is None:
-                self.model_hash = current_hash
-                logger.info("isolation_forest_integrity_hash_stored")
-                return True
-            elif current_hash != self.model_hash:
-                logger.error("isolation_forest_integrity_hash_mismatch")
-                return False
-            else:
-                logger.debug("isolation_forest_integrity_ok")
-                return True
-
-        except Exception as e:
-            logger.error("isolation_forest_integrity_error", error=str(e))
-            return False
+    def get_health(self) -> Dict[str, Any]:
+        return {
+            "detector": "IsolationForestDetector",
+            "is_trained": self.is_trained,
+            "status": "ok" if self.is_trained else "degraded",
+            "status_detail": self.status_detail,
+            "training_samples": self.training_samples,
+            "model_path": str(self.model_path),
+            "action_required": (
+                None
+                if self.is_trained
+                else "Trained model file not found — reinstall the package or place a model at the expected path."
+            ),
+        }
 
     def get_model_info(self) -> Dict[str, Any]:
         return {
@@ -357,8 +179,6 @@ class IsolationForestDetector(BaseDetector):
             "model_version": self.model_version,
             "is_trained": self.is_trained,
             "training_samples": self.training_samples,
-            "training_timestamp": self.training_timestamp,
-            "model_hash": self.model_hash,
             "status_detail": self.status_detail,
             "parameters": {
                 "n_estimators": self.n_estimators,
@@ -368,42 +188,3 @@ class IsolationForestDetector(BaseDetector):
             },
             "model_path": str(self.model_path),
         }
-
-    def detect_with_drift_check(
-        self,
-        features: Any,
-        baseline_features: Optional[np.ndarray] = None,
-    ) -> Tuple[List[Any], Dict[str, Any]]:
-        results = self.detect(features)
-        drift_info: Dict[str, Any] = {
-            "drift_detected": False,
-            "drift_score": 0.0,
-            "baseline_comparison": False,
-        }
-
-        if baseline_features is not None and self.is_trained:
-            try:
-                current_features = (
-                    features if isinstance(features, np.ndarray) else np.array(features)
-                )
-                if current_features.ndim == 1:
-                    current_features = current_features.reshape(1, -1)
-
-                baseline_scores = self.model.score_samples(baseline_features)
-                current_scores = self.model.score_samples(current_features)
-                drift_score = abs(np.mean(baseline_scores) - np.mean(current_scores))
-
-                drift_info["drift_score"] = float(drift_score)
-                drift_info["drift_detected"] = drift_score > 0.1
-                drift_info["baseline_comparison"] = True
-
-                if drift_info["drift_detected"]:
-                    logger.warning(
-                        "isolation_forest_drift_detected",
-                        drift_score=round(drift_score, 4),
-                    )
-
-            except Exception as e:
-                logger.error("isolation_forest_drift_check_error", error=str(e))
-
-        return results, drift_info

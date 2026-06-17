@@ -44,19 +44,16 @@ edge-agent/
 ├── src/
 │   ├── edgepulse/               # Installed Python package
 │   │   ├── scripts/
-│   │   │   ├── bootstrap_model.py  # One-shot ML model generator
 │   │   │   └── train_models.py     # Train on real datasets
-│   │   └── bootstrap_cli.py      # "edge-agent bootstrap" subcommand
-│   └── models/                  # Generated model files (git-ignored)
+│   └── models/                  # Pre-trained model files
 │       └── edgepulse_primary_isolation_forest.joblib
 └── packaging/
     ├── README.md                # This file
     ├── dist/                    # All build outputs land here (git-ignored)
+    ├── agent_config.json        # Shared default agent configuration
     ├── linux/
     │   ├── build_deb.sh         # Builds the .deb
     │   └── build_rpm.sh         # Builds the .rpm
-    ├── scripts/
-    │   └── bootstrap_cli.py     # Standalone copy used by packaging only
     └── windows/
         ├── build_windows.ps1    # Orchestrates PyInstaller + NSIS
         ├── nsis/
@@ -122,13 +119,7 @@ BOOTSTRAP_N_SAMPLES=2000          Synthetic training samples (default: 2000)
 BOOTSTRAP_SEED=42                 Random seed for reproducibility (default: 42)
 ```
 
-Or run directly:
-
-```bash
-python src/edgepulse/scripts/bootstrap_model.py --output-dir src/models/ --n-samples 2000
-```
-
-The CI pipeline runs this automatically before each packaging step.
+The model at `src/models/edgepulse_primary_isolation_forest.joblib` is pre-built and committed to the repository.
 
 ---
 
@@ -336,11 +327,8 @@ Waits for all four build jobs, then:
 /opt/edgepulse/
 ├── bin/
 │   └── edge-agent          # Launcher wrapper (sets PYTHONPATH)
-├── lib/
-│   └── site-packages/      # All Python packages (installed by pip --target)
-└── share/edgepulse/
-    └── scripts/
-        └── bootstrap_model.py  # Used by postinst to generate the model
+└── lib/
+    └── site-packages/      # All Python packages (installed by pip --target)
 
 /var/lib/edgepulse/
 ├── models/                 # ML model files
@@ -400,18 +388,6 @@ PYTHONPATH=/opt/edgepulse/lib/site-packages python3 -m edgepulse run
 ```
 
 ### `No model file found` warning on startup
-
-Bootstrap the model manually:
-
-```bash
-# Linux
-sudo PYTHONPATH=/opt/edgepulse/lib/site-packages \
-  python3 /opt/edgepulse/share/edgepulse/scripts/bootstrap_model.py \
-  --output-dir /var/lib/edgepulse/models/
-
-# Windows
-"C:\Program Files\EdgePulse\edge-agent.exe" bootstrap --output-dir "C:\ProgramData\EdgePulse\models"
-```
 
 ### fpm: `No such file or directory` during .deb build
 

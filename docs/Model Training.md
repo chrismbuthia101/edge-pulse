@@ -247,8 +247,8 @@ and normal. Scores above 0.60 are healthy for an unsupervised model.
 
 **Agent shows "degraded" / no model after training**  
 Check the exact filename: it must be `edgepulse_primary_isolation_forest.joblib`
-inside `edge-agent/src/models/`. The `bootstrap_model.py` and `train_models.py`
-both target this same filename when you use `--output-dir src/models`.
+inside `edge-agent/src/models/`. The `train_models.py` script targets this same
+filename when you use `--output-dir src/models`.
 
 ---
 

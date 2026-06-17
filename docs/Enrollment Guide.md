@@ -4,75 +4,56 @@ This document describes the device enrollment process for the EdgePulse Agent.
 
 ## Overview
 
-Device enrollment is the process of registering an EdgePulse agent with the EdgePulse cloud backend. This registration creates a unique device identity and generates an API key that the agent uses to authenticate with the Supabase backend.
+Device enrollment registers an EdgePulse agent with the EdgePulse cloud backend. It creates a unique device identity and generates an API key used to authenticate with the Supabase backend.
 
 ## Prerequisites
 
-- EdgePulse Agent installed (via .deb package)
-- Supabase project URL
-- Valid enrollment token (obtained from the EdgePulse admin dashboard)
+- EdgePulse Agent installed (via .deb/.rpm package or Windows installer)
+- An enrollment token (obtained from the EdgePulse admin dashboard)
 
-## Enrollment Methods
+## Enrollment
 
-### Method 1: Automatic Enrollment (Recommended)
+### Quick Start (Recommended)
 
-1. Edit the enrollment configuration file:
-
-   ```bash
-   sudo nano /etc/edgepulse/enrollment.json
-   ```
-
-2. Update the configuration with your Supabase URL, enrollment token, and anon key:
-
-   ```json
-   {
-     "supabase_url": "https://your-project.supabase.co",
-     "enrollment_token": "your-enrollment-token-here",
-     "supabase_anon_key": "your-anon-key-here"
-   }
-   ```
-
-3. Run the enrollment command:
-   ```bash
-   sudo /opt/edgepulse/venv/bin/edge-agent enroll
-   ```
-
-### Method 2: Command Line Arguments
-
-You can also enroll using command line arguments:
+If `supabase_url` and `publishable_key` were baked in at build time:
 
 ```bash
-sudo /opt/edgepulse/venv/bin/edge-agent enroll \
-  --supabase-url "https://your-project.supabase.co" \
-  --token "your-enrollment-token" \
-  --anon-key "your-anon-key"
+sudo edge-agent enroll <ENROLLMENT_TOKEN>
 ```
 
-### Method 3: Create Config File
+### Advanced: CLI flags
 
-Create `~/.edgepulse/enrollment.json` (non-root users):
+Override baked-in values:
+
+```bash
+sudo edge-agent enroll <TOKEN> \
+  --supabase-url "https://your-project.supabase.co" \
+  --publishable-key "sb_publishable_..."
+```
+
+### Automated Deployment
+
+Create `/etc/edgepulse/enrollment.json`:
 
 ```json
 {
   "supabase_url": "https://your-project.supabase.co",
   "enrollment_token": "your-enrollment-token",
-  "supabase_anon_key": "your-anon-key"
+  "publishable_key": "your-publishable-key"
 }
 ```
 
-Or use `~/.edgepulse/enroll.cfg`:
+Then run:
 
-```
-supabase_url=https://your-project.supabase.co
-enrollment_token=your-enrollment-token
-supabase_anon_key=your-anon-key
+```bash
+sudo edge-agent enroll
 ```
 
 ## Post-Enrollment
 
 After successful enrollment:
 
-1. The agent credentials are stored securely
+1. Device credentials (device ID + API key) are stored securely in the OS keyring or encrypted file
 2. The enrollment configuration file is removed
 3. The device can now sync with the backend
 
@@ -93,16 +74,11 @@ sudo systemctl status edgepulse-agent
 ### "Invalid enrollment token"
 
 - Verify the token is correct and not expired
-- Check the Supabase dashboard for valid tokens
+- Check the EdgePulse dashboard for valid tokens
 
 ### "Enrollment token expired"
 
 - Generate a new enrollment token from the admin dashboard
-
-### "Device already enrolled"
-
-- The device is already registered
-- You can check enrollment status in `/var/lib/edgepulse/` or via the CLI
 
 ### Network Errors
 
@@ -111,19 +87,15 @@ sudo systemctl status edgepulse-agent
 
 ## Unenrollment
 
-To unenroll (remove device from backend):
-
 1. Stop the agent: `sudo systemctl stop edgepulse-agent`
-2. Remove credentials: `sudo rm -rf /var/lib/edgepulse/credentials`
-3. The device can be re-enrolled with a new token if needed
+2. Delete stored credentials: `sudo rm -f ~/.edgepulse/credentials.enc`
+3. The device can be re-enrolled with a new token
 
 ## Configuration Files
 
 | Location                           | Purpose                       |
 | ---------------------------------- | ----------------------------- |
-| `/etc/edgepulse/enrollment.json`   | System-wide enrollment config |
-| `~/.edgepulse/enrollment.json`     | User-level enrollment config  |
-| `/var/lib/edgepulse/credentials/`  | Stored device credentials     |
+| `/etc/edgepulse/enrollment.json`   | Automated enrollment config   |
 | `/etc/edgepulse/agent_config.json` | Agent runtime configuration   |
 
 ## API Reference
@@ -131,6 +103,8 @@ To unenroll (remove device from backend):
 ### Enroll Device Endpoint
 
 **POST** `{supabase_url}/functions/v1/enroll-device`
+
+**Header:** `Authorization: Bearer {sb_publishable_key}`
 
 Request:
 

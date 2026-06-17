@@ -227,14 +227,20 @@ function EnrollDeviceModal({ open, onClose }: { open: boolean; onClose: () => vo
                         </div>
 
                         <div className="space-y-3">
-                            <p className="text-sm font-semibold">Step 2: Configure enrollment</p>
+                            <p className="text-sm font-semibold">Step 2: Enroll the device</p>
                             <div className="bg-muted rounded-lg p-3">
-                                <p className="text-xs text-muted-foreground mb-2">Edit /etc/edgepulse/enrollment.json:</p>
+                                <p className="text-xs text-muted-foreground mb-2">Run on the device:</p>
+                                <pre className="font-mono text-xs bg-card p-3 rounded overflow-x-auto">
+                                    {`sudo edge-agent enroll "${createdToken}"`}
+                                </pre>
+                            </div>
+                            <div className="bg-muted rounded-lg p-3 mt-2">
+                                <p className="text-xs text-muted-foreground mb-2">Or for automated deployment, create enrollment.json:</p>
                                 <pre className="font-mono text-xs bg-card p-3 rounded overflow-x-auto">
                                     {`{
   "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",
   "enrollment_token": "${createdToken}",
-  "supabase_anon_key": "YOUR_ANON_KEY",
+  "publishable_key": "YOUR_PUBLISHABLE_KEY",
   "device_hostname": null,
   "device_os": null,
   "agent_version": null,

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from edgepulse.utils.log_handler import get_logger
-from edgepulse.shared.metrics import InMemoryMetricsCollector, StandardMetrics
+from edgepulse.shared.metrics import MetricCollector, StandardMetrics
 from edgepulse.shared.schemas import AlertEvent, DetectionEvent, SeverityLevel
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class AlertHandler:
         alert_engine: AlertEngine,
         database: Database,
         sync_queue: Optional[SyncQueue],
-        metrics: InMemoryMetricsCollector,
+        metrics: MetricCollector,
         notifier: Optional[LocalNotifier] = None,
     ) -> None:
         self.device_id = device_id
@@ -57,9 +57,7 @@ class AlertHandler:
             labels={"severity": severity_label},
         )
 
-        explanation: Dict[str, Any] = await self._get_explanation(
-            features, detection, explainer
-        )
+        explanation: Dict[str, Any] = await self._get_explanation(features, detection, explainer)
 
         anomaly_data = {
             "anomaly_score": detection.get("anomaly_score", 0.0),
@@ -122,13 +120,9 @@ class AlertHandler:
             logger.error("shap_explanation_error", error=str(exc))
             return {}
 
-    def _run_alert_engine(
-        self, report: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _run_alert_engine(self, report: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
-            return self.alert_engine.process_anomaly(
-                report, report.get("explanation", {})
-            )
+            return self.alert_engine.process_anomaly(report, report.get("explanation", {}))
         except Exception as exc:
             logger.error("alert_engine_error", error=str(exc))
             return None
@@ -152,9 +146,7 @@ class AlertHandler:
                 component="alert_engine",
                 severity=sev,
                 anomaly_score=alert.get("anomaly_score", 0.0),
-                alert_type=alert.get("anomaly", {}).get(
-                    "anomaly_type", "behavioral_deviation"
-                ),
+                alert_type=alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation"),
                 detector_type=detection.get("detector", "unknown"),
                 explanation=alert.get("explanation", {}),
                 feature_importance=explanation.get("feature_importance"),
@@ -187,9 +179,7 @@ class AlertHandler:
             else:
                 severity_val = str(raw_severity).lower()
 
-            anomaly_type = alert.get("anomaly", {}).get(
-                "anomaly_type", "behavioral_deviation"
-            )
+            anomaly_type = alert.get("anomaly", {}).get("anomaly_type", "behavioral_deviation")
 
             detector = alert.get("anomaly", {}).get("detector", "unknown")
 
@@ -197,9 +187,7 @@ class AlertHandler:
                 "alert_id": alert.get("alert_id"),
                 "device_id": self.device_id,
                 "title": anomaly_type,
-                "description": alert.get("anomaly", {}).get(
-                    "description", "Anomaly detected"
-                ),
+                "description": alert.get("anomaly", {}).get("description", "Anomaly detected"),
                 "severity": severity_val,
                 "status": "PENDING",
                 "category": anomaly_type,

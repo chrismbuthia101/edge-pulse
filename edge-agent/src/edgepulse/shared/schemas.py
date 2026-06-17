@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 from enum import Enum
 import uuid
+
 
 class SeverityLevel(str, Enum):
     LOW = "low"
@@ -142,28 +143,20 @@ class FeatureVector(BaseModel):
     device_id: str = Field(..., description="Device identifier")
     timestamp: str = Field(..., description="ISO format timestamp")
     features: Dict[str, float] = Field(..., description="Feature name-value pairs")
-    feature_names: List[str] = Field(..., description="Ordered list of feature names")
     model_version: Optional[str] = Field(default=None)
     normalized: bool = Field(default=False)
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def feature_names(self) -> List[str]:
+        return list(self.features.keys())
 
     @field_validator("features")
     @classmethod
     def validate_features(cls, v: Dict[str, float]) -> Dict[str, float]:
         if not v:
             raise ValueError("Features dictionary cannot be empty")
-        return v
-
-    @field_validator("feature_names")
-    @classmethod
-    def validate_feature_names(
-        cls, v: List[str], info: Any
-    ) -> List[str]:
-        features = info.data.get("features")
-        if features is not None and len(v) != len(features):
-            raise ValueError(
-                "feature_names length must match features dictionary size"
-            )
         return v
 
 
@@ -177,39 +170,3 @@ def normalize_timestamp(timestamp: Union[str, datetime]) -> str:
         except ValueError:
             raise ValueError(f"Invalid timestamp format: {timestamp}")
     raise ValueError(f"Unsupported timestamp type: {type(timestamp)}")
-
-
-def normalize_severity(severity: Union[str, SeverityLevel]) -> SeverityLevel:
-    if isinstance(severity, SeverityLevel):
-        return severity
-    if isinstance(severity, str):
-        try:
-            return SeverityLevel(severity.lower())
-        except ValueError:
-            valid = [level.value for level in SeverityLevel]
-            raise ValueError(
-                f"Invalid severity '{severity}'. Valid levels: {valid}"
-            )
-    raise ValueError(f"Unsupported severity type: {type(severity)}")
-
-
-def validate_standard_fields(data: Dict[str, Any]) -> Dict[str, Any]:
-    if "timestamp" in data:
-        data["timestamp"] = normalize_timestamp(data["timestamp"])
-    if "severity" in data:
-        data["severity"] = normalize_severity(data["severity"])
-    return data
-
-
-def create_standard_response(
-    success: bool = True,
-    data: Optional[Dict[str, Any]] = None,
-    error: Optional[str] = None,
-    timestamp: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {
-        "success": success,
-        "timestamp": timestamp or datetime.utcnow().isoformat(),
-        "data": data,
-        "error": error,
-    }

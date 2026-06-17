@@ -13,11 +13,6 @@ logger = get_logger(__name__)
 
 
 class DeviceNormalizer:
-    """
-    Learns per-device baseline behavior and normalizes features.
-
-    Supports incremental learning with concept drift detection.
-    """
 
     def __init__(
         self,
@@ -65,13 +60,12 @@ class DeviceNormalizer:
             self.is_fitted = True
             self.sample_count = len(features)
 
-            if hasattr(self.scaler, 'mean_'):
-                self.baseline_mean = self.scaler.mean_.copy()
-            elif hasattr(self.scaler, 'center_'):
-                self.baseline_mean = self.scaler.center_.copy()
-
-            if hasattr(self.scaler, 'scale_'):
-                self.baseline_std = self.scaler.scale_.copy()
+            if isinstance(self.scaler, RobustScaler):
+                self.baseline_mean = self.scaler.center_.copy() if self.scaler.center_ is not None else None
+                self.baseline_std = self.scaler.scale_.copy() if self.scaler.scale_ is not None else None
+            elif isinstance(self.scaler, StandardScaler):
+                self.baseline_mean = self.scaler.mean_.copy() if self.scaler.mean_ is not None else None
+                self.baseline_std = self.scaler.scale_.copy() if self.scaler.scale_ is not None else None
 
             logger.info(f"Fitted normalizer with {self.sample_count} samples")
         except Exception as e:
@@ -111,26 +105,27 @@ class DeviceNormalizer:
 
             if self.baseline_mean is not None:
                 self.baseline_mean = (
-                    self.decay_factor * self.baseline_mean +
-                    (1 - self.decay_factor) * new_mean
+                    self.decay_factor * self.baseline_mean + (1 - self.decay_factor) * new_mean
                 )
             else:
                 self.baseline_mean = new_mean
 
             if self.baseline_std is not None:
                 self.baseline_std = (
-                    self.decay_factor * self.baseline_std +
-                    (1 - self.decay_factor) * new_std
+                    self.decay_factor * self.baseline_std + (1 - self.decay_factor) * new_std
                 )
             else:
                 self.baseline_std = new_std
 
-            if hasattr(self.scaler, 'mean_'):
-                self.scaler.mean_ = self.baseline_mean
-            elif hasattr(self.scaler, 'center_'):
+            if isinstance(self.scaler, RobustScaler):
+                assert self.baseline_mean is not None
+                assert self.baseline_std is not None
                 self.scaler.center_ = self.baseline_mean
-
-            if hasattr(self.scaler, 'scale_'):
+                self.scaler.scale_ = self.baseline_std
+            elif isinstance(self.scaler, StandardScaler):
+                assert self.baseline_mean is not None
+                assert self.baseline_std is not None
+                self.scaler.mean_ = self.baseline_mean
                 self.scaler.scale_ = self.baseline_std
 
             self.sample_count += len(features)
@@ -176,7 +171,7 @@ class DeviceNormalizer:
                 "use_robust_scaler": self.use_robust_scaler,
             }
 
-            with open(save_path, 'wb') as f:
+            with open(save_path, "wb") as f:
                 pickle.dump(baseline_data, f)
 
             logger.info(f"Saved baseline to {save_path}")
@@ -196,9 +191,11 @@ class DeviceNormalizer:
         system_paths = []
         if system_dir := os.environ.get("EDGE_PULSE_SYSTEM_DATA_DIR"):
             system_paths.append(Path(system_dir) / "models" / f"{device_id}_baseline.pkl")
-        system_paths.extend([
-            Path(f"/opt/edgepulse/data/models/{device_id}_baseline.pkl"),
-        ])
+        system_paths.extend(
+            [
+                Path(f"/opt/edgepulse/data/models/{device_id}_baseline.pkl"),
+            ]
+        )
         for sys_path in system_paths:
             if sys_path not in candidate_paths:
                 candidate_paths.append(sys_path)
@@ -220,7 +217,7 @@ class DeviceNormalizer:
             return False
 
         try:
-            with open(load_path, 'rb') as f:
+            with open(load_path, "rb") as f:
                 baseline_data = pickle.load(f)
 
             self.device_id = baseline_data.get("device_id", self.device_id)

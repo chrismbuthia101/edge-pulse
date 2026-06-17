@@ -27,8 +27,7 @@ class AlertEngine:
                 min_severity = SeverityLevel(min_severity.lower())
             except ValueError:
                 logger.warning(
-                    f"Unknown min_severity value '{min_severity}', "
-                    "defaulting to MEDIUM"
+                    f"Unknown min_severity value '{min_severity}', " "defaulting to MEDIUM"
                 )
                 min_severity = SeverityLevel.MEDIUM
 
@@ -44,9 +43,7 @@ class AlertEngine:
             SeverityLevel.CRITICAL: 4,
         }
 
-    def should_alert(
-        self, anomaly_score: float, severity: Union[SeverityLevel, str]
-    ) -> bool:
+    def should_alert(self, anomaly_score: float, severity: Union[SeverityLevel, str]) -> bool:
 
         if isinstance(severity, str):
             try:
@@ -55,9 +52,7 @@ class AlertEngine:
                 logger.warning(f"Unknown severity '{severity}', treating as LOW")
                 severity = SeverityLevel.LOW
 
-        if self.severity_order.get(severity, 0) < self.severity_order.get(
-            self.min_severity, 0
-        ):
+        if self.severity_order.get(severity, 0) < self.severity_order.get(self.min_severity, 0):
             return False
 
         return True
@@ -76,11 +71,7 @@ class AlertEngine:
             anomaly_score = getattr(anomaly, "anomaly_score", 0.0)
             severity = getattr(anomaly, "severity", "low")
             alert_id = getattr(anomaly, "alert_id", None)
-            anomaly = (
-                anomaly.model_dump()
-                if hasattr(anomaly, "model_dump")
-                else anomaly
-            )
+            anomaly = anomaly.model_dump() if hasattr(anomaly, "model_dump") else anomaly
 
         if not self.should_alert(anomaly_score, severity):
             return None
@@ -102,16 +93,12 @@ class AlertEngine:
             "anomaly_score": anomaly_score,
         }
 
-        self.alert_history.append(
-            {"alert": alert, "timestamp": datetime.utcnow()}
-        )
+        self.alert_history.append({"alert": alert, "timestamp": datetime.utcnow()})
 
         correlated_alerts = self.correlate_alerts(self.correlation_window)
         if correlated_alerts:
             alert["correlated_alerts"] = [
-                a.get("alert_id")
-                for a in correlated_alerts
-                if a.get("alert_id")
+                a.get("alert_id") for a in correlated_alerts if a.get("alert_id")
             ]
             alert["correlation_count"] = len(correlated_alerts)
 
@@ -123,11 +110,7 @@ class AlertEngine:
 
         cutoff_time = datetime.utcnow() - timedelta(seconds=timeframe)
 
-        return [
-            entry["alert"]
-            for entry in self.alert_history
-            if entry["timestamp"] >= cutoff_time
-        ]
+        return [entry["alert"] for entry in self.alert_history if entry["timestamp"] >= cutoff_time]
 
     def deduplicate_alerts(self, new_anomaly: Dict) -> bool:
         if not self.alert_history:
@@ -148,11 +131,7 @@ class AlertEngine:
         return False
 
     def _calculate_similarity(self, anomaly1: Dict, anomaly2: Dict) -> float:
-        type_match = (
-            1.0
-            if anomaly1.get("anomaly_type") == anomaly2.get("anomaly_type")
-            else 0.0
-        )
+        type_match = 1.0 if anomaly1.get("anomaly_type") == anomaly2.get("anomaly_type") else 0.0
 
         score1 = anomaly1.get("anomaly_score", 0.0)
         score2 = anomaly2.get("anomaly_score", 0.0)
@@ -175,11 +154,7 @@ class AlertEngine:
     def _check_rate_limit(self) -> bool:
         cutoff_time = datetime.utcnow() - timedelta(seconds=self.rate_window)
 
-        recent_count = sum(
-            1
-            for entry in self.alert_history
-            if entry["timestamp"] >= cutoff_time
-        )
+        recent_count = sum(1 for entry in self.alert_history if entry["timestamp"] >= cutoff_time)
 
         return recent_count <= self.rate_limit
 
@@ -197,20 +172,17 @@ class AlertEngine:
         recon_alerts = [
             a
             for a in recent_alerts
-            if "network"
-            in a.get("anomaly", {}).get("anomaly_type", "").lower()
+            if "network" in a.get("anomaly", {}).get("anomaly_type", "").lower()
         ]
         exploit_alerts = [
             a
             for a in recent_alerts
-            if "process"
-            in a.get("anomaly", {}).get("anomaly_type", "").lower()
+            if "process" in a.get("anomaly", {}).get("anomaly_type", "").lower()
         ]
         exfil_alerts = [
             a
             for a in recent_alerts
-            if "network"
-            in a.get("anomaly", {}).get("anomaly_type", "").lower()
+            if "network" in a.get("anomaly", {}).get("anomaly_type", "").lower()
             and "burst" in str(a.get("anomaly", {})).lower()
         ]
 
@@ -220,8 +192,7 @@ class AlertEngine:
                     "pattern_type": "recon_exploit_exfiltration",
                     "description": "Potential attack progression detected",
                     "alerts": [
-                        a.get("alert_id")
-                        for a in recon_alerts + exploit_alerts + exfil_alerts
+                        a.get("alert_id") for a in recon_alerts + exploit_alerts + exfil_alerts
                     ],
                     "confidence": 0.7,
                 }

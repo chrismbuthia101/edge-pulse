@@ -55,36 +55,38 @@ class NetworkFeatureExtractor:
 
         burst_pattern = float(len(window_1min_data) / self.window_1min)
 
-        total_packets_sent = 0.0
-        total_packets_recv = 0.0
-        total_errin = 0.0
-        total_errout = 0.0
-        total_dropin = 0.0
-        total_dropout = 0.0
-        total_bytes_sent = 0.0
-        total_bytes_recv = 0.0
+        totals = {
+            "packets_sent": 0.0, "packets_recv": 0.0,
+            "errin": 0.0, "errout": 0.0,
+            "dropin": 0.0, "dropout": 0.0,
+            "bytes_sent": 0.0, "bytes_recv": 0.0,
+        }
+        fields = {
+            "packets_sent": "network_packets_sent_delta",
+            "packets_recv": "network_packets_recv_delta",
+            "errin": "network_errin",
+            "errout": "network_errout",
+            "dropin": "network_dropin",
+            "dropout": "network_dropout",
+            "bytes_sent": "network_bytes_sent_delta",
+            "bytes_recv": "network_bytes_recv_delta",
+        }
 
         for item in window_1min_data:
-            total_packets_sent += float(item.get("network_packets_sent_delta", 0) or 0)
-            total_packets_recv += float(item.get("network_packets_recv_delta", 0) or 0)
-            total_errin += float(item.get("network_errin", 0) or 0)
-            total_errout += float(item.get("network_errout", 0) or 0)
-            total_dropin += float(item.get("network_dropin", 0) or 0)
-            total_dropout += float(item.get("network_dropout", 0) or 0)
-            total_bytes_sent += float(item.get("network_bytes_sent_delta", 0) or 0)
-            total_bytes_recv += float(item.get("network_bytes_recv_delta", 0) or 0)
+            for key, field in fields.items():
+                totals[key] += float(item.get(field, 0) or 0)
 
-        total_packets = total_packets_sent + total_packets_recv
-        total_errors = total_errin + total_errout
-        total_drops = total_dropin + total_dropout
+        total_packets = totals["packets_sent"] + totals["packets_recv"]
+        total_errors = totals["errin"] + totals["errout"]
+        total_drops = totals["dropin"] + totals["dropout"]
 
         error_rate = (total_errors / total_packets) if total_packets > 0 else 0.0
         drop_rate = (total_drops / total_packets) if total_packets > 0 else 0.0
 
-        if total_bytes_recv > 0:
-            send_recv_ratio = total_bytes_sent / total_bytes_recv
-        elif total_bytes_sent > 0:
-            send_recv_ratio = total_bytes_sent
+        if totals["bytes_recv"] > 0:
+            send_recv_ratio = totals["bytes_sent"] / totals["bytes_recv"]
+        elif totals["bytes_sent"] > 0:
+            send_recv_ratio = totals["bytes_sent"]
         else:
             send_recv_ratio = 0.0
 

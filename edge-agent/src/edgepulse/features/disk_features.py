@@ -1,9 +1,15 @@
-# Disk feature extraction.
-
 from typing import Dict, List, Any
 import numpy as np
 
 from edgepulse.features.history_utils import get_window_data, trim_history
+
+
+_EMPTY = {
+    "disk_write_burst_1min": 0.0,
+    "disk_io_spike_1min": 0.0,
+    "disk_write_read_ratio_1min": 0.0,
+}
+
 
 class DiskFeatureExtractor:
     def __init__(self, window_1min: int, retention_hours: int) -> None:
@@ -12,35 +18,30 @@ class DiskFeatureExtractor:
         self._history: List[Dict[str, Any]] = []
 
     def extract(self, metrics: List[Dict[str, Any]]) -> Dict[str, float]:
-        empty = {
-            "disk_write_burst_1min": 0.0,
-            "disk_io_spike_1min": 0.0,
-            "disk_write_read_ratio_1min": 0.0,
-        }
-
         if not metrics:
-            return empty
+            return dict(_EMPTY)
 
         self._history.extend(metrics)
         self._history = trim_history(self._history, self.retention_hours)
 
         window_1min_data = get_window_data(self._history, self.window_1min)
         if not window_1min_data:
-            return empty
+            return dict(_EMPTY)
 
         write_deltas = [
             float(m.get("disk_write_bytes_delta", 0) or 0)
             for m in window_1min_data
             if m.get("disk_write_bytes_delta") is not None
         ]
+
+        if not write_deltas:
+            return dict(_EMPTY)
+
         read_deltas = [
             float(m.get("disk_read_bytes_delta", 0) or 0)
             for m in window_1min_data
             if m.get("disk_read_bytes_delta") is not None
         ]
-
-        if not write_deltas:
-            return empty
 
         write_burst = float(np.sum(write_deltas) / self.window_1min)
 

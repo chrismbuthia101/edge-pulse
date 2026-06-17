@@ -1,18 +1,14 @@
-import hashlib
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import psutil
-from edgepulse.collectors.base import BaseCollector
 from edgepulse.utils.error_handler import PermissionError, ResourceError
 
 logger = get_logger(__name__)
 
 
-class ProcessMonitor(BaseCollector):
+class ProcessMonitor:
     def __init__(self) -> None:
-        self._process_snapshots: Dict[int, Dict[str, Any]] = {}
-        self._last_check_time = datetime.utcnow()
         self._running = False
 
     def start(self) -> None:
@@ -28,11 +24,6 @@ class ProcessMonitor(BaseCollector):
             return []
         return [self.get_process_statistics()]
 
-    def hash_command_line(self, cmdline: str) -> str:
-        if not cmdline:
-            return ""
-        return hashlib.sha256(cmdline.encode('utf-8')).hexdigest()
-
     def get_process_details(self, pid: int) -> Optional[Dict[str, Any]]:
         try:
             process = psutil.Process(pid)
@@ -40,12 +31,8 @@ class ProcessMonitor(BaseCollector):
             try:
                 cmdline_list = process.cmdline()
                 cmdline = " ".join(cmdline_list) if cmdline_list else ""
-                cmdline_hash = self.hash_command_line(cmdline)
-                cmdline_args = cmdline_list
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 cmdline = ""
-                cmdline_hash = ""
-                cmdline_args = []
 
             try:
                 parent_pid = process.ppid()
@@ -89,8 +76,6 @@ class ProcessMonitor(BaseCollector):
                 "parent_pid": parent_pid,
                 "exe_path": exe_path,
                 "cmdline": cmdline,
-                "cmdline_args": cmdline_args,
-                "cmdline_hash": cmdline_hash,  # Keep for backward compatibility
                 "cpu_percent": cpu_percent,
                 "memory_rss_bytes": memory_info.rss if memory_info else None,
                 "memory_vms_bytes": memory_info.vms if memory_info else None,
@@ -151,9 +136,12 @@ class ProcessMonitor(BaseCollector):
         username_lower = username.lower()
 
         system_patterns = [
-            "system", "local service", "network service",
-            "nt authority\\system", "nt authority\\local service",
-            "nt authority\\network service"
+            "system",
+            "local service",
+            "network service",
+            "nt authority\\system",
+            "nt authority\\local service",
+            "nt authority\\network service",
         ]
 
         unix_patterns = ["root", "daemon", "nobody", "system"]
@@ -163,25 +151,23 @@ class ProcessMonitor(BaseCollector):
 
     def get_running_processes(self) -> List[Dict[str, Any]]:
         import time
+
         start_time = time.time()
         max_collection_time = 20.0
 
         processes: List[Dict[str, Any]] = []
-        current_pids: set[int] = set()
 
         try:
-            for proc in psutil.process_iter(['pid', 'name', 'ppid', 'create_time']):
+            for proc in psutil.process_iter(["pid", "name", "ppid", "create_time"]):
                 if time.time() - start_time > max_collection_time:
                     logger.warning("Process collection approaching timeout, stopping early")
                     break
                 try:
-                    pid = proc.info['pid']
-                    current_pids.add(pid)
+                    pid = proc.info["pid"]
 
                     process_details = self.get_process_details(pid)
                     if process_details:
                         processes.append(process_details)
-                        self._process_snapshots[pid] = process_details
                 except (psutil.NoSuchProcess, PermissionError):
                     continue
                 except ResourceError as e:
@@ -194,10 +180,6 @@ class ProcessMonitor(BaseCollector):
             logger.error(f"Error iterating processes: {e}")
         except Exception as e:
             logger.error(f"Error iterating processes: {e}")
-
-        terminated_pids = set(self._process_snapshots.keys()) - current_pids
-        for pid in terminated_pids:
-            del self._process_snapshots[pid]
 
         return processes
 

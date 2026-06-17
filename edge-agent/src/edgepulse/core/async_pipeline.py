@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from edgepulse.core.events_bus import EventBus, Event, EventType, get_event_bus
+from edgepulse.detectors.base import DetectionResult
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import EdgePulseError, DetectionError
 from edgepulse.shared import create_metrics_collector, StandardMetrics, TelemetryEvent
@@ -84,6 +85,10 @@ class AsyncPipeline:
 
         logger.info("async_pipeline_initialized", device_id=device_id)
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
     async def start(self, interval: float = 60.0) -> None:
         if self._running:
             logger.warning("pipeline_already_running")
@@ -92,17 +97,19 @@ class AsyncPipeline:
         self._running = True
         self._collection_interval = interval
 
-        if not self.event_bus._running:
+        if not self.event_bus.running:
             await self.event_bus.start()
 
         self._task = asyncio.create_task(self._run_loop())
 
-        await self.event_bus.publish(Event(
-            type=EventType.SYSTEM,
-            data={"interval": interval},
-            timestamp=datetime.utcnow(),
-            source="async_pipeline",
-        ))
+        await self.event_bus.publish(
+            Event(
+                type=EventType.SYSTEM,
+                data={"interval": interval},
+                timestamp=datetime.utcnow(),
+                source="async_pipeline",
+            )
+        )
 
         logger.info("pipeline_started", interval=interval)
 
@@ -120,12 +127,14 @@ class AsyncPipeline:
                 pass
 
         if self.event_bus._running:
-            await self.event_bus.publish(Event(
-                type=EventType.SYSTEM,
-                data={},
-                timestamp=datetime.utcnow(),
-                source="async_pipeline",
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.SYSTEM,
+                    data={},
+                    timestamp=datetime.utcnow(),
+                    source="async_pipeline",
+                )
+            )
 
         logger.info("pipeline_stopped")
 
@@ -237,9 +246,7 @@ class AsyncPipeline:
             elif collector_name == "ProcessMonitor":
                 try:
                     process_list = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            self.collectors[i].get_running_processes
-                        ),
+                        asyncio.to_thread(self.collectors[i].get_running_processes),
                         timeout=_COLLECTOR_TIMEOUT_SECONDS,
                     )
                     structured_telemetry["processes"] = process_list or []
@@ -301,9 +308,7 @@ class AsyncPipeline:
                 if asyncio.iscoroutinefunction(self.extractor.extract_all_features):
                     return await self.extractor.extract_all_features(telemetry)
                 else:
-                    return await asyncio.to_thread(
-                        self.extractor.extract_all_features, telemetry
-                    )
+                    return await asyncio.to_thread(self.extractor.extract_all_features, telemetry)
             else:
                 logger.error("feature_extractor_no_method")
                 return None
@@ -332,7 +337,9 @@ class AsyncPipeline:
 
             detection: Optional[Dict[str, Any]] = None
 
-            if isinstance(result, dict):
+            if isinstance(result, DetectionResult):
+                detection = result.to_dict()
+            elif isinstance(result, dict):
                 detection = result
             elif isinstance(result, (list, tuple)):
                 if not result:
@@ -355,7 +362,7 @@ class AsyncPipeline:
                     if size == 0:
                         continue
                     try:
-                        first = result.flat[0]
+                        first = result.flat[0]  # type: ignore[union-attr]
                     except Exception:
                         first = None
                     if isinstance(first, (list, tuple)) and len(first) >= 2:
@@ -407,26 +414,28 @@ class AsyncPipeline:
             )
             raise
 
-    async def _process_detections(
-        self, detections: List[Dict[str, Any]], features: Any
-    ) -> int:
+    async def _process_detections(self, detections: List[Dict[str, Any]], features: Any) -> int:
         alerts_generated = 0
 
         for detection in detections:
-            if detection.get("label") == 1 or detection.get("anomaly_score", 0) > 0.5:
+            if detection.get("is_alert_triggered", False) or detection.get(
+                "anomaly_score", 0
+            ) >= detection.get("detection_threshold_applied", 0.5):
                 severity = detection.get("severity", "medium")
                 self.metrics.record_anomaly(severity)
 
-                await self.event_bus.publish(Event(
-                    type=EventType.DETECTION,
-                    data={
-                        "detection": detection,
-                        "features": features,
-                        "severity": severity,
-                    },
-                    timestamp=datetime.utcnow(),
-                    source="async_pipeline",
-                ))
+                await self.event_bus.publish(
+                    Event(
+                        type=EventType.DETECTION,
+                        data={
+                            "detection": detection,
+                            "features": features,
+                            "severity": severity,
+                        },
+                        timestamp=datetime.utcnow(),
+                        source="async_pipeline",
+                    )
+                )
 
                 alerts_generated += 1
 
@@ -495,12 +504,14 @@ class AsyncPipeline:
                     priority=1,
                 )
 
-            await self.event_bus.publish(Event(
-                type=EventType.TELEMETRY,
-                data={"telemetry": payload, "source": "async_pipeline"},
-                timestamp=datetime.utcnow(),
-                source="async_pipeline",
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.TELEMETRY,
+                    data={"telemetry": payload, "source": "async_pipeline"},
+                    timestamp=datetime.utcnow(),
+                    source="async_pipeline",
+                )
+            )
         except Exception as e:
             logger.error("telemetry_event_save_error", error=str(e))
 
@@ -521,13 +532,15 @@ class AsyncPipeline:
             logger.error("features_save_error", error=str(e))
 
     async def _publish_error_event(self, error_message: str, error_type: str) -> None:
-        if self.event_bus._running:
-            await self.event_bus.publish(Event(
-                type=EventType.SYSTEM,
-                data={"error": error_message, "error_type": error_type},
-                timestamp=datetime.utcnow(),
-                source="async_pipeline",
-            ))
+        if self.event_bus.running:
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.SYSTEM,
+                    data={"error": error_message, "error_type": error_type},
+                    timestamp=datetime.utcnow(),
+                    source="async_pipeline",
+                )
+            )
 
     def set_collection_interval(self, interval: float) -> None:
         self._collection_interval = max(5.0, min(3600.0, interval))

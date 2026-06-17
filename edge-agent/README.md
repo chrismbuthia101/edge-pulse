@@ -31,7 +31,7 @@ git clone <repo>
 cd edge-agent
 
 # Using make (recommended if available)
-make install                            # core deps + api-full + notifications
+make install                            # core deps + api-full
 make install-all                        # all optional extras
 make env                                # copy .env.example → .env
 
@@ -49,7 +49,7 @@ make env                                # copies .env.example → .env
 
 # Or manually
 cp .env.example .env
-# Edit .env — REQUIRED: Set SYNC__SUPABASE_URL and SYNC__SUPABASE_KEY
+# Edit .env — REQUIRED: Set SYNC__SUPABASE_URL and SYNC__API_KEY
 ```
 
 ### Bootstrap the ML model (first run only)
@@ -57,12 +57,7 @@ cp .env.example .env
 The agent needs a trained Isolation Forest before it can detect anomalies.
 
 ```bash
-# Using make (recommended if available)
 make bootstrap
-
-# Or manually
-python src/edgepulse/scripts/bootstrap_model.py
-# Writes:  models/edgepulse_primary_isolation_forest.joblib
 ```
 
 To train on real security datasets instead of synthetic data, see `src/edgepulse/scripts/train_models.py --help`.
@@ -90,7 +85,6 @@ edge-agent/
 ├── models/                     # Trained model files (git-ignored)
 ├── src/edgepulse/
 │   ├── scripts/
-│   │   └── bootstrap_model.py # One-shot model bootstrapper
 │   ├── core/
 │   │   ├── agent.py            # Main orchestrator (EdgePulseAgent)
 │   │   ├── async_pipeline.py   # Collect → Extract → Detect → Alert loop
@@ -172,7 +166,7 @@ Required settings:
 {
   "sync": {
     "supabase_url": "https://your-project.supabase.co",
-    "supabase_key": "your-api-key"
+    "api_key": "your-api-key"
   }
 }
 ```
@@ -180,7 +174,7 @@ Required settings:
 Or in `.env`:
 ```
 SYNC__SUPABASE_URL=https://your-project.supabase.co
-SYNC__SUPABASE_KEY=your-api-key
+SYNC__API_KEY=your-api-key
 ```
 
 ### View logs
@@ -251,11 +245,11 @@ poetry run edge-agent service status
 | `ml-training`   | TensorFlow, SHAP           | Training the Autoencoder                   |
 | `ml-inference`  | TFLite runtime             | Running Autoencoder on constrained devices |
 | `cloud`         | supabase-py                | Syncing alerts to Supabase                 |
-| `notifications` | notify-py                  | Desktop toast notifications                |
+
 | `windows`       | pywin32, keyring, watchdog | Windows Service + filesystem monitoring    |
 
 ```bash
-poetry install --extras "api-full cloud notifications"
+poetry install --extras "api-full cloud"
 ```
 
 ---

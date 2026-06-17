@@ -1,5 +1,3 @@
-# CPU feature extraction.
-
 from typing import Dict, List, Any
 import numpy as np
 
@@ -63,7 +61,9 @@ class CpuFeatureExtractor:
                 per_core = m.get("cpu_percent_per_core") or []
                 if per_core and len(per_core) > 1:
                     per_core_stds.append(float(np.std(per_core)))
-            features[f"cpu_core_imbalance_{label}"] = float(np.mean(per_core_stds)) if per_core_stds else 0.0
+            features[f"cpu_core_imbalance_{label}"] = (
+                float(np.mean(per_core_stds)) if per_core_stds else 0.0
+            )
 
         _process_window(get_window_data(self._history, self.window_1min), "1min")
         _process_window(get_window_data(self._history, self.window_5min), "5min")
