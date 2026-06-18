@@ -1,239 +1,48 @@
-name: Build & Release
-
+name: Release
 on:
   push:
-    branches: [main]
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-  pull_request:
-    branches: [main]
-
-env:
-  PYTHON_VERSION: "3.11"
-
+    tags: ["v*"]
 jobs:
-  # ─── Tests ──────────────────────────────────────────────────────────────────
-  test:
-    name: Test (${{ matrix.os }} / py${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, windows-2022]
-        python: ["3.9", "3.11", "3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-
-      - name: Install Poetry
-        run: pip install "poetry==1.8.2"
-
-      - name: Install core dependencies
-        working-directory: edge-agent
-        run: poetry install --extras "api-full notifications"
-
-      - name: Run tests
-        working-directory: edge-agent
-        run: poetry run pytest -x -q --tb=short
-
-      - name: Type check
-        working-directory: edge-agent
-        run: poetry run mypy src/ --ignore-missing-imports --no-error-summary
-
-  # ─── PyPI wheel ─────────────────────────────────────────────────────────────
-  build-wheel:
-    name: Build PyPI wheel
-    needs: test
-    runs-on: ubuntu-22.04
-    if: github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install build tools
-        run: pip install "poetry==1.8.2" build twine
-
-      - name: Build wheel + sdist
-        working-directory: edge-agent
-        run: poetry build
-
-      - name: Verify distribution
-        working-directory: edge-agent
-        run: twine check dist/*
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-wheel
-          path: edge-agent/dist/
-          retention-days: 7
-
-  # ─── Debian package ─────────────────────────────────────────────────────────
   build-deb:
-    name: Build .deb
-    needs: test
-    runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
-
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - run: gem install fpm --no-document
+      - run: bash packaging/linux/build_deb.sh
+      - run: sha256sum packaging/dist/*.deb > packaging/dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          name: deb-package
+          path: packaging/dist/
 
-      - name: Install fpm
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ruby ruby-dev rubygems build-essential
-          sudo gem install --no-document fpm
-
-      - name: Build .deb
-        working-directory: edge-agent
-        run: bash packaging/linux/build_deb.sh
-
-      - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-deb
-          path: edge-agent/packaging/dist/*.deb
-          retention-days: 30
-
-  # ─── RPM package ────────────────────────────────────────────────────────────
   build-rpm:
-    name: Build .rpm
-    needs: test
-    runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
-
+    runs-on: ubuntu-24.04
+    container: fedora:40
     steps:
+      - run: dnf install -y python3 ruby rpm-build && gem install fpm
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - run: bash packaging/linux/build_rpm.sh
+      - uses: actions/upload-artifact@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          name: rpm-package
+          path: packaging/dist/
 
-      - name: Install fpm and rpm tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ruby ruby-dev rubygems rpm
-          sudo gem install --no-document fpm
-
-      - name: Build .rpm
-        working-directory: edge-agent
-        run: bash packaging/linux/build_rpm.sh
-
-      - name: Upload .rpm artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-rpm
-          path: edge-agent/packaging/dist/*.rpm
-          retention-days: 30
-
-  # ─── Windows installer ──────────────────────────────────────────────────────
   build-windows:
-    name: Build Windows installer
-    needs: test
     runs-on: windows-2022
-    if: startsWith(github.ref, 'refs/tags/v')
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
-
-      - name: Install NSIS
-        run: |
-          choco install nsis --version=3.09 -y
-          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install Python dependencies
-        working-directory: edge-agent
-        run: |
-          pip install "pyinstaller>=6.0,<7.0" "poetry==1.8.2"
-          poetry install --extras "api-full notifications"
-
-      - name: Build Windows installer
-        run: |
-          .\packaging\windows\build_windows.ps1
-
-      - name: Upload Windows installer artifact
-        uses: actions/upload-artifact@v4
+      - run: pip install pyinstaller nsis
+      - run: powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
+      - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: edge-agent/packaging/dist/*.exe
-          retention-days: 30
+          path: packaging/dist/
 
-  # ─── Publish release ────────────────────────────────────────────────────────
   release:
-    name: Publish release
-    needs: [build-wheel, build-deb, build-rpm, build-windows]
-    runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-      id-token: write
-
+    needs: [build-deb, build-rpm, build-windows]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
         with:
-          path: artifacts/
-
-      - name: Display artifact structure
-        run: ls -la artifacts/**/*
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: artifacts/python-wheel/
-          skip-existing: true
-
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          if [[ -f CHANGELOG.md ]]; then
-            awk "/^## \[$VERSION\]/{found=1; next} /^## \[/{if(found) exit} found{print}" \
-              CHANGELOG.md > release_notes.md
-          fi
-          if [[ ! -s release_notes.md ]]; then
-            echo "EdgePulse Agent $VERSION" > release_notes.md
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "EdgePulse Agent v${{ steps.version.outputs.VERSION }}"
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            artifacts/linux-deb/*.deb
-            artifacts/linux-rpm/*.rpm
-            artifacts/windows-installer/*.exe
-            artifacts/python-wheel/*.whl
-            artifacts/python-wheel/*.tar.gz
+          files: "**/*.deb,**/*.rpm,**/*.exe,**/SHA256SUMS"

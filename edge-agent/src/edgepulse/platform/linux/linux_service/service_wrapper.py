@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from edgepulse.auth.credentials import load_credentials_into_env
 from edgepulse.utils.log_handler import get_logger
@@ -15,6 +15,9 @@ from edgepulse.platform._paths import (
 )
 from edgepulse.platform.linux.linux_service.service import EdgePulseLinuxService
 from edgepulse.platform.linux.linux_service.installer import ServiceInstaller, SERVICE_NAME
+
+if TYPE_CHECKING:
+    from edgepulse.agent.agent import EdgePulseAgent
 
 logger = get_logger(__name__)
 
@@ -30,7 +33,7 @@ class LinuxServiceWrapper:
             "EdgePulse anomaly detection and monitoring agent for Linux edge devices."
         )
 
-        self.agent = None
+        self.agent: Optional["EdgePulseAgent"] = None
 
         self.program_data_path = _safe_base_dir()
         self.models_path = self.program_data_path / "models"

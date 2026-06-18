@@ -11,15 +11,16 @@ if WINDOWS_AVAILABLE:
     except ImportError:
         WINDOWS_AVAILABLE = False
 
-EdgePulseWindowsService = None
-ServiceInstaller = None
-
 if WINDOWS_AVAILABLE:
     try:
         from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
         from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
     except ImportError:
-        pass
+        EdgePulseWindowsService = None
+        ServiceInstaller = None
+else:
+    EdgePulseWindowsService = None
+    ServiceInstaller = None
 
 __all__ = [
     "EdgePulseWindowsService",

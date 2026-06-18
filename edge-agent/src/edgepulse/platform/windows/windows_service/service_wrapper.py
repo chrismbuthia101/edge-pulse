@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from edgepulse.auth.credentials import load_credentials_into_env
 from edgepulse.utils.log_handler import get_logger
@@ -14,6 +14,9 @@ from edgepulse.platform.windows.windows_service.service import (
 )
 from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
 
+if TYPE_CHECKING:
+    from edgepulse.agent.agent import EdgePulseAgent
+
 logger = get_logger(__name__)
 
 
@@ -22,7 +25,7 @@ class WindowsServiceWrapper:
     def __init__(self) -> None:
         os.environ["EDGE_PULSE_DATA_DIR"] = str(_safe_program_data())
 
-        self.agent = None
+        self.agent: Optional["EdgePulseAgent"] = None
 
         self.program_data_path = _safe_program_data()
         self.models_path = self.program_data_path / "models"

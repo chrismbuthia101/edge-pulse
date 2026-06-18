@@ -1,8 +1,9 @@
 import asyncio
 import sys
 import threading
+from typing import TYPE_CHECKING
 
-if sys.platform == "win32":
+if TYPE_CHECKING or sys.platform == "win32":
     import servicemanager
     import win32event
     import win32service
