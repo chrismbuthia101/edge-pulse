@@ -141,7 +141,7 @@ if (-not $SkipNSIS) {
     }
 
     $sizeKB = [math]::Round((Get-Item $outputExe).Length / 1KB)
-    Write-OK "Installer created: $outputExe ($sizeKB KB)"
+    Write-OK "Installer created: $outputExe ($($sizeKB) KB)"
 }
 
 Write-Host ""
