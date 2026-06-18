@@ -11,6 +11,7 @@ from edgepulse.utils.error_handler import EdgePulseError, DetectionError
 from edgepulse.models import create_metrics_collector, StandardMetrics, TelemetryEvent
 from edgepulse.storage.database import Database
 from edgepulse.pipeline.protocols import AlertEngine, Collector, Detector, FeatureExtractor
+from edgepulse.utils.version import get_agent_version
 
 logger = get_logger(__name__)
 
@@ -65,9 +66,7 @@ class AsyncPipeline:
         self.sync_queue = sync_queue
 
         self.event_bus = event_bus or get_event_bus()
-        self.metrics = metrics_collector or create_metrics_collector(
-            f"pipeline_{device_id}", device_id
-        )
+        self.metrics = metrics_collector or create_metrics_collector(device_id=device_id)
 
         self._running = False
         self._task: Optional[asyncio.Task] = None
@@ -465,7 +464,7 @@ class AsyncPipeline:
                 device_id=self.device_id,
                 event_type="RESOURCE",
                 payload=payload,
-                agent_version="1.0.0",
+                agent_version=get_agent_version(),
             )
 
             if self.sync_queue:

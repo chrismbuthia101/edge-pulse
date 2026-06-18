@@ -4,7 +4,7 @@ from edgepulse.auth.enrollment import DeviceEnrollmentClient
 from edgepulse.auth.credentials import CredentialManager
 from edgepulse.auth.auth_client import EdgePulseClient, ClientConfig
 from edgepulse.sync.cloud_sync import CloudSync
-from edgepulse.utils.error_handler import ConfigurationError
+from edgepulse.utils.log_handler import ConfigurationError
 
 logger = get_logger(__name__)
 
@@ -76,7 +76,7 @@ class EnrollmentManager:
             return None
         return self.enrollment_client.get_device_credentials()
 
-    def create_sync_client(self, supabase_url: str, device_id: str, api_key: str) -> CloudSync:
+    def create_sync_client(self, supabase_url: str) -> CloudSync:
         client = EdgePulseClient(
             ClientConfig(supabase_url=supabase_url),
             credential_manager=self.credential_manager,

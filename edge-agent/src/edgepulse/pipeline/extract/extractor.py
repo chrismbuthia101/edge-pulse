@@ -104,6 +104,7 @@ class FeatureExtractor:
                 "temporal_is_weekend": float(dt.weekday() >= 5),
             }
         except (ValueError, TypeError):
+            logger.warning("Temporal feature extraction failed after timestamp validation")
             return {
                 "temporal_hour_sin": 0.0,
                 "temporal_hour_cos": 0.0,

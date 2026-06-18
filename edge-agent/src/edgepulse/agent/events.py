@@ -48,7 +48,11 @@ class EventBus:
         if event_type not in self._subscribers:
             self._subscribers[event_type] = []
         self._subscribers[event_type].append(handler)
-        logger.debug("event_subscribed", event_type=event_type.value, handler=handler.__name__)
+        logger.debug(
+            "event_subscribed",
+            event_type=event_type.value,
+            handler=getattr(handler, "__name__", handler.__class__.__name__),
+        )
 
     async def publish(self, event: Event) -> None:
         if not self._running or not self._event_queue:
@@ -129,7 +133,7 @@ class EventBus:
             logger.error(
                 "event_handler_failed",
                 event=event.type.value,
-                handler=handler.__name__,
+                handler=getattr(handler, "__name__", handler.__class__.__name__),
                 error=str(e),
             )
             if self._dead_letter_handler is not None:

@@ -153,4 +153,4 @@ class ComponentFactory:
         return ExplainerService(self.device_id)
 
     def create_metrics(self) -> Any:
-        return create_metrics_collector("agent", self.device_id)
+        return create_metrics_collector(device_id=self.device_id)

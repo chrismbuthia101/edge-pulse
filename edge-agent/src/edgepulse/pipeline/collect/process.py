@@ -1,6 +1,6 @@
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import psutil
 from edgepulse.utils.error_handler import PermissionError, ResourceError
 
@@ -45,7 +45,7 @@ class ProcessMonitor:
                 exe_path = None
 
             try:
-                create_time = datetime.fromtimestamp(process.create_time())
+                create_time = datetime.fromtimestamp(process.create_time()).astimezone(timezone.utc)
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 create_time = None
 
@@ -84,7 +84,7 @@ class ProcessMonitor:
                 "username": username,
                 "status": status,
                 "privilege_level": privilege_level,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             return process_details
         except psutil.NoSuchProcess:
@@ -149,11 +149,13 @@ class ProcessMonitor:
         all_patterns = system_patterns + unix_patterns
         return any(pattern in username_lower for pattern in all_patterns)
 
+    MAX_COLLECTION_TIME_SECONDS = 20.0
+
     def get_running_processes(self) -> List[Dict[str, Any]]:
         import time
 
         start_time = time.time()
-        max_collection_time = 20.0
+        max_collection_time = self.MAX_COLLECTION_TIME_SECONDS
 
         processes: List[Dict[str, Any]] = []
 
@@ -188,7 +190,7 @@ class ProcessMonitor:
 
         if not processes:
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_processes": 0,
                 "unique_names": 0,
                 "total_cpu_percent": 0.0,
@@ -200,7 +202,7 @@ class ProcessMonitor:
         total_memory = sum(p.get("memory_rss_bytes", 0) or 0 for p in processes)
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "total_processes": len(processes),
             "unique_names": unique_names,
             "total_cpu_percent": total_cpu,

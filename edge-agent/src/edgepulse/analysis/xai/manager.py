@@ -37,7 +37,8 @@ class ExplainableAIManager:
         self.model_id = model_id
         self._primary: Optional[BaseExplainer] = None
         self._fallback_explainer: Optional[BaseExplainer] = None
-        self._cache: Optional[_ExplanationCache] = _ExplanationCache(maxsize=cache_size)
+        self._cache_size = cache_size
+        self._cache: Optional[_ExplanationCache] = None
         self._lock = threading.Lock()
         self.is_initialized = False
 

@@ -1,10 +1,8 @@
 from edgepulse.utils.path_manager import PathManager
+from edgepulse.utils.log_handler import EdgePulseError, ConfigurationError, LoggingError
 from edgepulse.utils.error_handler import (
-    EdgePulseError,
-    ConfigurationError,
     ModelError,
     DetectionError,
-    LoggingError,
     SyncError,
     ValidationError,
     NetworkError,

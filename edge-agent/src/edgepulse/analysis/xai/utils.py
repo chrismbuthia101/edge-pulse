@@ -17,9 +17,12 @@ def utc_timestamp() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S.", t) + f"{ms:03d}Z"
 
 
+CONFIDENCE_SCALE_FACTOR = 0.4
+
+
 def calibrated_confidence(anomaly_score: float, threshold: float) -> float:
     distance = abs(anomaly_score - threshold)
-    return min(1.0, distance / 0.4)
+    return min(1.0, distance / CONFIDENCE_SCALE_FACTOR)
 
 
 def resolve_predict_fn(model: Any) -> Any:

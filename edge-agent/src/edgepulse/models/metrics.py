@@ -249,5 +249,5 @@ class StandardMetrics:
     )
 
 
-def create_metrics_collector(name: str, device_id: str = "unknown") -> MetricCollector:
+def create_metrics_collector(device_id: str = "unknown") -> MetricCollector:
     return InMemoryMetricsCollector(device_id)

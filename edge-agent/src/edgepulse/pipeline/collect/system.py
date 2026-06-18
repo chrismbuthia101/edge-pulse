@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from typing import Dict, Any, Optional, List
 from edgepulse.utils.log_handler import get_logger
@@ -17,7 +17,7 @@ class SystemMetricsCollector:
         self._last_network_io: Optional[Any] = None
         self._running = False
 
-        self.metrics = create_metrics_collector(f"system_collector_{device_id}", device_id)
+        self.metrics = create_metrics_collector(device_id=self.device_id)
 
     def start(self) -> None:
         self._running = True
@@ -34,7 +34,7 @@ class SystemMetricsCollector:
 
     def _error_response(self, metric_name: str, error: Exception) -> Dict[str, Any]:
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "device_id": self.device_id,
             "metric_name": metric_name,
             "error": str(error),
@@ -57,7 +57,7 @@ class SystemMetricsCollector:
             )
 
             cpu_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "cpu_percent_total": total_cpu,
                 "cpu_percent_per_core": per_cpu,
                 "cpu_count": cpu_count,
@@ -81,7 +81,7 @@ class SystemMetricsCollector:
             )
 
             memory_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "memory_total_bytes": memory.total,
                 "memory_available_bytes": memory.available,
                 "memory_used_bytes": memory.used,
@@ -106,7 +106,7 @@ class SystemMetricsCollector:
 
             if disk_io is None:
                 return {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "disk_read_bytes": 0,
                     "disk_write_bytes": 0,
                     "disk_read_count": 0,
@@ -142,7 +142,7 @@ class SystemMetricsCollector:
                     continue
 
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "disk_read_bytes": disk_io.read_bytes,
                 "disk_write_bytes": disk_io.write_bytes,
                 "disk_read_count": disk_io.read_count,
@@ -163,7 +163,7 @@ class SystemMetricsCollector:
 
             if network_io is None:
                 return {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "network_bytes_sent": 0,
                     "network_bytes_recv": 0,
                     "network_packets_sent": 0,
@@ -184,7 +184,7 @@ class SystemMetricsCollector:
             self._last_network_io = network_io
 
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "network_bytes_sent": network_io.bytes_sent,
                 "network_bytes_recv": network_io.bytes_recv,
                 "network_packets_sent": network_io.packets_sent,
@@ -208,7 +208,7 @@ class SystemMetricsCollector:
             uptime_seconds = time.time() - boot_time
 
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "boot_time": datetime.fromtimestamp(boot_time).isoformat(),
                 "uptime_seconds": uptime_seconds,
             }
@@ -221,7 +221,7 @@ class SystemMetricsCollector:
 
     def collect_all(self) -> Dict[str, Any]:
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "cpu": self.collect_cpu_metrics(),
             "memory": self.collect_memory_metrics(),
             "disk": self.collect_disk_metrics(),

@@ -34,14 +34,21 @@ class Database:
     @staticmethod
     def _load_schema() -> Tuple[Dict[str, str], List[str]]:
         content = _SCHEMA_FILE.read_text(encoding="utf-8")
-        content = re.sub(
-            r"(?:'[^']*')|--.*$",
-            lambda m: m.group(0) if m.group(0).startswith("'") else "",
-            content,
-            flags=re.MULTILINE,
-        )
+        content = re.sub(r"--.*$", "", content, flags=re.MULTILINE)
 
-        statements = [s.strip() for s in content.split(";") if s.strip()]
+        statements = []
+        current: List[str] = []
+        depth = 0
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            upper = line.upper()
+            depth += upper.count("BEGIN") - upper.count("END")
+            current.append(line)
+            if line.endswith(";") and depth == 0:
+                statements.append("\n".join(current))
+                current = []
 
         table_schemas: Dict[str, str] = {}
         auxiliary: List[str] = []
@@ -51,9 +58,9 @@ class Database:
             if upper.startswith("CREATE TABLE"):
                 m = re.search(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", upper)
                 if m:
-                    table_schemas[m.group(1).lower()] = stmt + ";"
+                    table_schemas[m.group(1).lower()] = stmt
             elif upper.startswith(("CREATE INDEX", "CREATE TRIGGER")):
-                auxiliary.append(stmt + ";")
+                auxiliary.append(stmt)
 
         return table_schemas, auxiliary
 

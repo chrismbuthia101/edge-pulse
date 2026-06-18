@@ -40,7 +40,7 @@ class SyncQueue:
         self._flush_requested = False
         self._was_online = True
 
-        self.metrics = create_metrics_collector(f"sync_queue_{device_id}", device_id)
+        self.metrics = create_metrics_collector(device_id=self.device_id)
 
         self.stats: Dict[str, int] = {
             "total_enqueued": 0,

@@ -1,7 +1,7 @@
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict, List, Any
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 import psutil
 from edgepulse.utils.error_handler import PermissionError, NetworkError
 
@@ -32,7 +32,7 @@ class NetworkMonitor:
             for conn in psutil.net_connections(kind="all"):
                 try:
                     conn_info: Dict[str, Any] = {
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "family": str(conn.family),
                         "type": str(conn.type),
                         "status": conn.status,
@@ -64,7 +64,7 @@ class NetworkMonitor:
 
         if not connections:
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_connections": 0,
                 "connections_by_status": {},
                 "connections_by_protocol": {},
@@ -87,7 +87,7 @@ class NetworkMonitor:
                 all_ports.add(conn["remote_port"])
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "total_connections": len(connections),
             "connections_by_status": dict(status_counter),
             "connections_by_protocol": dict(type_counter),

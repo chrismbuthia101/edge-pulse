@@ -197,7 +197,7 @@ def _handle_enroll(args: argparse.Namespace) -> int:
     enrollment_client = DeviceEnrollmentClient(credential_manager)
 
     try:
-        from edgepulse._build_vars import BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY  # type: ignore[import-unused]
+        from edgepulse._build_vars import BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY  # type: ignore[import-not-found]
 
         baked_url, baked_key = BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY
     except (ImportError, AttributeError):

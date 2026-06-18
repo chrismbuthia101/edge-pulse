@@ -1,6 +1,6 @@
 # Shared history utilities for feature extraction.
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 
 
@@ -22,7 +22,7 @@ def get_window_data(history: List[Dict[str, Any]], window_seconds: int) -> List[
     if not history:
         return []
 
-    cutoff_time = datetime.utcnow() - timedelta(seconds=window_seconds)
+    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
     result: List[Dict[str, Any]] = []
     for item in history:
         parsed_timestamp = safe_parse_timestamp(item)
@@ -32,7 +32,7 @@ def get_window_data(history: List[Dict[str, Any]], window_seconds: int) -> List[
 
 
 def trim_history(history: List[Dict[str, Any]], retention_hours: int) -> List[Dict[str, Any]]:
-    cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
     result: List[Dict[str, Any]] = []
     for item in history:
         parsed_timestamp = safe_parse_timestamp(item)
