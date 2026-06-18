@@ -74,7 +74,7 @@ python3 -m pip install --quiet \
     --no-compile \
     --no-build-isolation \
     ${CONSTRAINT:+"${CONSTRAINT}"} \
-    "${REPO_ROOT}[api-full,notifications,ml-inference]"
+    "${REPO_ROOT}"
 
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/{pip,wheel,setuptools} \
        "${STAGING_DIR}${SITE_PACKAGES}"/*.dist-info/RECORD 2>/dev/null || true

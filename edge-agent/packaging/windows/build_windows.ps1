@@ -13,15 +13,15 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step([string]$msg) {
     Write-Host ""
-    Write-Host "▶ $msg" -ForegroundColor Cyan
+    Write-Host ">> $msg" -ForegroundColor Cyan
 }
 
 function Write-OK([string]$msg) {
-    Write-Host "  ✓ $msg" -ForegroundColor Green
+    Write-Host "  [OK] $msg" -ForegroundColor Green
 }
 
 function Write-Warn([string]$msg) {
-    Write-Host "  ⚠ $msg" -ForegroundColor Yellow
+    Write-Host "  [WARN] $msg" -ForegroundColor Yellow
 }
 
 function Require-Command([string]$cmd) {
@@ -74,7 +74,7 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 Write-Step "Installing Python dependencies..."
 Push-Location $RepoRoot
 try {
-    pip install -e ".[api-full,notifications,ml-inference]" --quiet
+    pip install -e "." --quiet
     if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     pip install pyinstaller --quiet
     Write-OK "Dependencies installed"

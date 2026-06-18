@@ -84,7 +84,7 @@ else
 fi
 
 "${VENV_DIR}/bin/pip" install --quiet ${CONSTRAINT:+"${CONSTRAINT}"} \
-    "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
+    "${WHEEL_FILE}[linux]"
 
 echo "  Venv built at ${VENV_DIR}"
 
