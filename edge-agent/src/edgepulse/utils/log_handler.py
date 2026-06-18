@@ -1,7 +1,7 @@
 import logging
 import structlog
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 class EdgePulseError(Exception):
@@ -47,7 +47,7 @@ def configure_logging(
         force=True,
     )
 
-    processors = [
+    processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),

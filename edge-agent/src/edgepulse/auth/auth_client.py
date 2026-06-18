@@ -60,6 +60,7 @@ class EdgePulseClient:
         self, method: str, endpoint: str, use_functions: bool = False, **kwargs
     ) -> httpx.Response:
         await self._ensure_session()
+        assert self._session is not None
         credentials = await self._get_credentials()
         if not credentials:
             raise AuthenticationError("No device credentials available")

@@ -10,8 +10,6 @@ from edgepulse.utils.log_handler import get_logger
 logger = get_logger(__name__)
 
 _LITERT_BACKEND: str = "none"
-_CompiledModel: Optional[Any] = None
-_Interpreter: Optional[Any] = None
 
 try:
     from ai_edge_litert.interpreter import Interpreter as _Interpreter  # type: ignore[import]
@@ -19,7 +17,7 @@ try:
     _LITERT_BACKEND = "ai_edge_litert_interpreter"
     logger.debug("LiteRT: using ai_edge_litert.interpreter")
 except ImportError:
-    pass
+    _Interpreter = None
 
 try:
     from ai_edge_litert.compiled_model import CompiledModel as _CompiledModel  # type: ignore[import]
@@ -27,7 +25,7 @@ try:
     _LITERT_BACKEND = "ai_edge_litert_compiled"
     logger.debug("LiteRT: using ai_edge_litert.compiled_model (CompiledModel API)")
 except ImportError:
-    pass
+    _CompiledModel = None
 
 if _LITERT_BACKEND == "none":
     try:
@@ -66,6 +64,7 @@ class LiteRTBackend:
             )
 
         if COMPILED_MODEL_AVAILABLE:
+            assert _CompiledModel is not None
             self._compiled = _CompiledModel.from_file(self._model_path)  # type: ignore[misc]
             logger.info(
                 "LiteRTBackend: loaded %s via CompiledModel API",
@@ -99,6 +98,7 @@ class LiteRTBackend:
         backend = object.__new__(cls)
         backend._model_path = "<in-memory>"
         backend._sig_idx = 0
+        assert _CompiledModel is not None
         backend._compiled = _CompiledModel.from_buffer(model_buffer)  # type: ignore[misc]
         backend._interp = None
         backend._input_details = None

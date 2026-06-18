@@ -89,11 +89,15 @@ class DeviceEnrollmentClient:
         try:
             logger.info("enrollment_starting")
 
-            import platform
+            import importlib as _importlib
+
+            _stdlib_platform = _importlib.import_module("platform")
 
             agent_version = config.agent_version or get_agent_version()
-            hostname = config.device_hostname or platform.node()
-            operating_system = config.device_os or f"{platform.system()} {platform.release()}"
+            hostname = config.device_hostname or _stdlib_platform.node()
+            operating_system = (
+                config.device_os or f"{_stdlib_platform.system()} {_stdlib_platform.release()}"
+            )
 
             enrollment_data = {
                 "enrollment_token": config.enrollment_token,

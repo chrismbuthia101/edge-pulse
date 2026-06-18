@@ -1,12 +1,14 @@
-import platform
+import importlib
 import re
 import socket
 from typing import Optional, Tuple
 
+_stdlib_platform = importlib.import_module("platform")
+
 
 def get_hostname() -> str:
     try:
-        hostname = platform.node()
+        hostname = _stdlib_platform.node()
         if hostname and hostname != "localhost":
             return hostname
     except Exception:
@@ -49,7 +51,7 @@ def generate_device_id_from_hostname(
 
     if include_platform:
         try:
-            system = platform.system().lower()
+            system = _stdlib_platform.system().lower()
             if system:
                 device_id = f"{device_id}-{system}"
         except Exception:

@@ -1,6 +1,6 @@
+import importlib
 import json
 import os
-import platform
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +18,8 @@ try:
     HAS_KEYRING = True
 except ImportError:
     HAS_KEYRING = False
+
+_stdlib_platform = importlib.import_module("platform")
 
 logger = get_logger(__name__)
 
@@ -95,7 +97,7 @@ class EncryptedFileStore(CredentialStore):
             tmp = key_file.with_suffix(".tmp")
             tmp.write_bytes(raw)
             tmp.replace(key_file)
-            if platform.system() != "Windows":
+            if _stdlib_platform.system() != "Windows":
                 key_file.chmod(0o600)
         return base64.urlsafe_b64encode(raw)
 
@@ -120,7 +122,7 @@ class EncryptedFileStore(CredentialStore):
             tmp = self._path.with_suffix(".tmp")
             tmp.write_bytes(encrypted)
             tmp.replace(self._path)
-            if platform.system() != "Windows":
+            if _stdlib_platform.system() != "Windows":
                 self._path.chmod(0o600)
             return True
         except Exception as e:
@@ -159,7 +161,7 @@ class CredentialManager:
 
     @staticmethod
     def _create_file_store() -> EncryptedFileStore:
-        if platform.system() == "Windows":
+        if _stdlib_platform.system() == "Windows":
             from edgepulse.platform._paths import _safe_program_data
 
             data_dir = _safe_program_data()
