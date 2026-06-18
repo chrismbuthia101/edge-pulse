@@ -42,15 +42,7 @@ class SyncService:
                     device_id = creds.device_id or device_id
             except Exception as exc:
                 logger.warning("sync_credentials_load_failed", error=str(exc))
-
-            cred_manager = None
-            try:
-                cred_manager = CredentialManager()
-                creds = cred_manager.get_device_credentials()
-                if creds:
-                    device_id = creds.device_id or device_id
-            except Exception as exc:
-                logger.warning("sync_credentials_load_failed", error=str(exc))
+                cred_manager = None
 
             client = EdgePulseClient(
                 ClientConfig(

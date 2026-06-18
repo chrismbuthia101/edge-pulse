@@ -67,7 +67,10 @@ class ProcessFeatureExtractor:
             if isinstance(cpu_percent, (int, float)):
                 cpu_values.append(float(cpu_percent))
 
-            if proc.get("is_admin", False) or proc.get("user") in [
+            if proc.get("privilege_level") in [
+                "ADMIN",
+                "SYSTEM",
+            ] or proc.get("username") in [
                 "root",
                 "Administrator",
                 "SYSTEM",

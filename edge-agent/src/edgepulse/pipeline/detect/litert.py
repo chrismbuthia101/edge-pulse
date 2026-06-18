@@ -72,10 +72,13 @@ class LiteRTBackend:
                 Path(model_path).name,
             )
         else:
-            assert self._interp is not None
-            self._interp.allocate_tensors()
-            self._input_details = self._interp.get_input_details()
-            self._output_details = self._interp.get_output_details()
+            if _Interpreter is None:
+                raise RuntimeError("Interpreter API not available for LiteRT backend")
+            interpreter: Any = _Interpreter(model_path)
+            interpreter.allocate_tensors()
+            self._input_details = interpreter.get_input_details()
+            self._output_details = interpreter.get_output_details()
+            self._interp = interpreter
             logger.info(
                 "LiteRTBackend: loaded %s via Interpreter API (%s)",
                 Path(model_path).name,
@@ -190,10 +193,13 @@ class LiteRTBackend:
 
         # Dequantize INT8/INT16 output back to float32
         if out["dtype"] != np.float32:
-            quant = out.get("quantization", (0.0, 0))
-            # quantization is (scale, zero_point); scale == 0 means float model
-            scale = float(quant[0]) if quant else 0.0
-            zero_point = int(quant[1]) if quant else 0
+            quant = out.get("quantization", ())
+            if isinstance(quant, (list, tuple)) and len(quant) >= 2:
+                scale = float(quant[0])
+                zero_point = int(quant[1])
+            else:
+                scale = 0.0
+                zero_point = 0
             if scale != 0.0:
                 result = (result.astype(np.float32) - zero_point) * scale
 

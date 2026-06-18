@@ -1,7 +1,7 @@
 from edgepulse.utils.log_handler import get_logger
 from typing import Dict
 
-from edgepulse.utils.error_handler import LoggingError
+from edgepulse.utils.log_handler import LoggingError
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ class LocalNotifier:
 
         try:
             anomaly = alert.get("anomaly", {})
-            severity = alert.get("severity", "unknown").upper()
+            severity = str(alert.get("severity", "unknown")).upper()
             alert_id = alert.get("alert_id", "unknown")
             timestamp = alert.get("timestamp", "")
 

@@ -50,7 +50,7 @@ class ProcessMonitor:
                 create_time = None
 
             try:
-                cpu_percent = process.cpu_percent(interval=0.01)
+                cpu_percent = process.cpu_percent(interval=0)
                 memory_info = process.memory_info()
                 memory_percent = process.memory_percent()
             except (psutil.AccessDenied, psutil.NoSuchProcess):

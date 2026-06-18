@@ -1,6 +1,7 @@
 from typing import Optional
 
 from pydantic import BaseModel
+from edgepulse.api.schemas.sync import SyncStatusBase
 
 
 class DetectorHealth(BaseModel):
@@ -9,14 +10,8 @@ class DetectorHealth(BaseModel):
     action_required: Optional[str] = None
 
 
-class SyncStatus(BaseModel):
-    online: Optional[bool] = None
-    queue_depth: int = 0
-    total_enqueued: int = 0
-    total_processed: int = 0
-    total_failed: int = 0
-    total_retries: int = 0
-    unsynced_alerts: int = 0
+class SyncStatus(SyncStatusBase):
+    pass
 
 
 class HealthResponse(BaseModel):

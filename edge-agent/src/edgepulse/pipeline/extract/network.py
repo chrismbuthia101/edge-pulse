@@ -6,6 +6,8 @@ from edgepulse.pipeline.extract.history import get_window_data, trim_history
 
 class NetworkFeatureExtractor:
     def __init__(self, window_1min: int, retention_hours: int) -> None:
+        if window_1min <= 0:
+            raise ValueError("window_1min must be greater than zero")
         self.window_1min = window_1min
         self.retention_hours = retention_hours
         self._history: List[Dict[str, Any]] = []
@@ -49,8 +51,13 @@ class NetworkFeatureExtractor:
         port_counts: Dict[int, int] = {}
         for conn in window_1min_data:
             port = conn.get("remote_port")
-            if port:
-                port_counts[int(port)] = port_counts.get(int(port), 0) + 1
+            if port is None or port == "":
+                continue
+            try:
+                port_int = int(port)
+            except (TypeError, ValueError):
+                continue
+            port_counts[port_int] = port_counts.get(port_int, 0) + 1
         unusual_ports = sum(1 for count in port_counts.values() if count == 1)
 
         burst_pattern = float(len(window_1min_data) / self.window_1min)
@@ -90,7 +97,7 @@ class NetworkFeatureExtractor:
         if totals["bytes_recv"] > 0:
             send_recv_ratio = totals["bytes_sent"] / totals["bytes_recv"]
         elif totals["bytes_sent"] > 0:
-            send_recv_ratio = totals["bytes_sent"]
+            send_recv_ratio = totals["bytes_sent"] / 1.0
         else:
             send_recv_ratio = 0.0
 

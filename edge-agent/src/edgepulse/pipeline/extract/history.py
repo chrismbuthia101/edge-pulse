@@ -10,6 +10,8 @@ def safe_parse_timestamp(
     try:
         timestamp_str = item.get("timestamp")
         if timestamp_str:
+            if isinstance(timestamp_str, str) and timestamp_str.endswith("Z"):
+                timestamp_str = timestamp_str[:-1] + "+00:00"
             return datetime.fromisoformat(timestamp_str)
     except (ValueError, TypeError):
         return default

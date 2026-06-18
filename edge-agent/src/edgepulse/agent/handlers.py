@@ -92,7 +92,8 @@ class AnomalyEventHandler:
             return
 
         try:
-            model_id = f"iforest-{self._device_id[:8]}"
+            detector_name = str(detection.get("detector", "iforest")).lower()
+            model_id = f"{detector_name}-{self._device_id[:8]}"
             now = _utcnow_iso()
 
             anomaly_payload = {

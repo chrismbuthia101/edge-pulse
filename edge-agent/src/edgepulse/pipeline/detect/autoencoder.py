@@ -86,6 +86,13 @@ class AutoencoderDetector(BaseDetector):
             return 0.0
         try:
             recon = self._backend.run(arr)
+            if recon.shape != arr.shape:
+                logger.warning(
+                    "AutoencoderDetector output shape mismatch",
+                    expected_shape=arr.shape,
+                    actual_shape=getattr(recon, "shape", None),
+                )
+                return 0.0
             err = float(np.mean((arr - recon) ** 2))
             thr = self.reconstruction_threshold
             return float(min(1.0, err / thr)) if thr > 0 else 0.0

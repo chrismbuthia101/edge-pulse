@@ -8,7 +8,7 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 
 @router.get("/status", response_model=SyncStatusResponse)
 async def sync_status(
-    stats: dict = Depends(get_sync_status),
+    stats: SyncStatusResponse = Depends(get_sync_status),
 ):
     return stats
 

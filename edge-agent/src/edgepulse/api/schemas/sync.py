@@ -3,15 +3,18 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
-class SyncStatusResponse(BaseModel):
+class SyncStatusBase(BaseModel):
     online: Optional[bool] = None
     queue_depth: int = 0
     total_enqueued: int = 0
     total_processed: int = 0
     total_failed: int = 0
     total_retries: int = 0
-    max_retry_attempts: int = 5
     unsynced_alerts: int = 0
+
+
+class SyncStatusResponse(SyncStatusBase):
+    max_retry_attempts: int = 5
 
 
 class DeadLetterItem(BaseModel):

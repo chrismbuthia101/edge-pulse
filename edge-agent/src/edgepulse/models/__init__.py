@@ -29,7 +29,7 @@ from edgepulse.models.sync import (
     HeartbeatPayload,
 )
 
-from edgepulse.pipeline.detect.base import DetectionResult
+from edgepulse.models.detection import DetectionResult
 
 __all__ = [
     "SeverityLevel",

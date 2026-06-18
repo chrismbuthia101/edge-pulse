@@ -35,7 +35,6 @@ class AlertEngine:
         self.min_severity: SeverityLevel = min_severity
 
         self.alert_history: deque = deque(maxlen=1000)
-        self.active_alerts: List[Dict] = []
 
         self.severity_order = {
             SeverityLevel.LOW: 1,
@@ -78,7 +77,7 @@ class AlertEngine:
             logger.warning("Rate limit exceeded, suppressing alert")
             return None
 
-        if self.deduplicate_alerts(anomaly if isinstance(anomaly, dict) else {}):
+        if self.deduplicate_alerts(anomaly if isinstance(anomaly, dict) else {}, explanation):
             logger.debug("Duplicate alert suppressed")
             return None
 
@@ -92,9 +91,8 @@ class AlertEngine:
             "anomaly_score": anomaly_score,
         }
 
-        self.alert_history.append({"alert": alert, "timestamp": datetime.utcnow()})
-
         correlated_alerts = self.correlate_alerts(self.correlation_window)
+        self.alert_history.append({"alert": alert, "timestamp": datetime.utcnow()})
         if correlated_alerts:
             alert["correlated_alerts"] = [
                 a.get("alert_id") for a in correlated_alerts if a.get("alert_id")
@@ -111,7 +109,11 @@ class AlertEngine:
 
         return [entry["alert"] for entry in self.alert_history if entry["timestamp"] >= cutoff_time]
 
-    def deduplicate_alerts(self, new_anomaly: Dict) -> bool:
+    def deduplicate_alerts(self, new_anomaly: Dict, explanation: Optional[Dict] = None) -> bool:
+        if explanation is not None:
+            new_anomaly = dict(new_anomaly)
+            new_anomaly["explanation"] = explanation
+
         if not self.alert_history:
             return False
 
@@ -121,7 +123,11 @@ class AlertEngine:
             if alert_entry["timestamp"] < cutoff_time:
                 continue
 
-            existing_anomaly = alert_entry["alert"].get("anomaly", {})
+            existing_anomaly = dict(alert_entry["alert"].get("anomaly", {}))
+            existing_explanation = alert_entry["alert"].get("explanation")
+            if existing_explanation and "explanation" not in existing_anomaly:
+                existing_anomaly["explanation"] = existing_explanation
+
             similarity = self._calculate_similarity(new_anomaly, existing_anomaly)
 
             if similarity >= self.deduplication_threshold:
@@ -134,7 +140,7 @@ class AlertEngine:
 
         score1 = anomaly1.get("anomaly_score", 0.0)
         score2 = anomaly2.get("anomaly_score", 0.0)
-        score_diff = 1.0 - abs(score1 - score2)
+        score_diff = max(0.0, 1.0 - abs(score1 - score2))
 
         features1 = anomaly1.get("explanation", {}).get("contributing_factors", [])
         features2 = anomaly2.get("explanation", {}).get("contributing_factors", [])
@@ -158,4 +164,4 @@ class AlertEngine:
         return recent_count <= self.rate_limit
 
     def get_active_alerts(self) -> List[Dict]:
-        return self.active_alerts.copy()
+        return [entry["alert"] for entry in self.alert_history]

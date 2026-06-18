@@ -36,13 +36,14 @@ class SystemMetricsCollector:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "device_id": self.device_id,
+            "metric_name": metric_name,
             "error": str(error),
         }
 
     def collect_cpu_metrics(self) -> Dict[str, Any]:
         try:
-            per_cpu = psutil.cpu_percent(interval=0.1, percpu=True)
-            total_cpu = psutil.cpu_percent(interval=0.1)
+            per_cpu = psutil.cpu_percent(interval=0, percpu=True)
+            total_cpu = psutil.cpu_percent(interval=0)
             cpu_count = psutil.cpu_count()
 
             try:

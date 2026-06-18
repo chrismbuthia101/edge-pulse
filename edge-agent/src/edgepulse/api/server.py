@@ -17,7 +17,7 @@ class FastAPIServer:
         self.host = host
         self._deps = deps or APIDependencies(database=None)  # type: ignore[arg-type]
         self._running = False
-        self.app: Any = None
+        self.app: Optional[Any] = None
         self.uvicorn_server: Optional[Any] = None
         self._serve_task: Optional[asyncio.Task] = None
 

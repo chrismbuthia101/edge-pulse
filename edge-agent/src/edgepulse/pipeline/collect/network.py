@@ -47,13 +47,10 @@ class NetworkMonitor:
                 except (psutil.AccessDenied, AttributeError) as e:
                     logger.debug(f"Error processing connection: {e}")
                     continue
-                except NetworkError as e:
-                    logger.warning(f"Network error processing connection: {e}")
-                    continue
                 except Exception as e:
                     logger.warning(f"Unexpected error processing connection: {e}")
                     continue
-        except PermissionError as e:
+        except (psutil.AccessDenied, PermissionError) as e:
             logger.warning(f"Access denied when getting network connections: {e}")
         except NetworkError as e:
             logger.error(f"Network error getting active connections: {e}")

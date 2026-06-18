@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import os
 
 import psutil
 
@@ -126,7 +127,7 @@ class HealthMonitor:
 
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage("/")
+            disk = psutil.disk_usage(os.path.abspath(os.sep))
 
             network_status = True
             try:
