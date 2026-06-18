@@ -11,8 +11,7 @@ Windows `.exe` installer.
 1. [Artifact overview](#artifact-overview)
 2. [Directory layout](#directory-layout)
 3. [Prerequisites](#prerequisites)
-4. [Before you build — bootstrap the ML model](#before-you-build--bootstrap-the-ml-model)
-5. [Building each artifact](#building-each-artifact)
+4. [Building each artifact](#building-each-artifact)
    - [PyPI wheel](#pypi-wheel)
    - [Debian .deb](#debian-deb)
    - [RPM .rpm](#rpm-rpm)
@@ -43,8 +42,6 @@ edge-agent/
 ├── pyproject.toml               # Package metadata and dependencies
 ├── src/
 │   ├── edgepulse/               # Installed Python package
-│   │   ├── scripts/
-│   │   │   └── train_models.py     # Train on real datasets
 │   └── models/                  # Pre-trained model files
 │       └── edgepulse_primary_isolation_forest.joblib
 └── packaging/
@@ -73,7 +70,6 @@ git-ignored and is created automatically by each build script.
 
 - **Python 3.9–3.12** with `pip` ≥ 23
 - **Make** — standard on Linux/macOS, install via `choco install make` on Windows
-- A bootstrapped ML model in `src/models/` (see next section)
 
 ### Wheel only
 
@@ -99,27 +95,7 @@ No extra tools. Uses the standard `build` module.
 
 ---
 
-## Before you build — bootstrap the ML model
 
-Every artifact embeds or references the primary Isolation Forest model. You
-must generate it before running any build script:
-
-```bash
-# From the edge-agent/ directory
-make bootstrap
-# Writes: src/models/edgepulse_primary_isolation_forest.joblib
-#         src/models/edgepulse_primary_isolation_forest.json
-```
-
-Options (passed as environment variables):
-
-```
-BOOTSTRAP_OUTPUT_DIR=src/models/   Where to write the model (default: src/models/)
-BOOTSTRAP_N_SAMPLES=2000          Synthetic training samples (default: 2000)
-BOOTSTRAP_SEED=42                 Random seed for reproducibility (default: 42)
-```
-
-The model at `src/models/edgepulse_primary_isolation_forest.joblib` is pre-built and committed to the repository.
 
 ---
 
@@ -159,14 +135,13 @@ make deb
 **What the script does:**
 
 1. Reads the version from `pyproject.toml`.
-2. Optionally bootstraps the model if it is missing.
-3. Installs all Python packages to a staging area using
+2. Installs all Python packages to a staging area using
    `pip install --target`, which avoids the Python interpreter relocation
    problem that plagued the previous venv-copy approach.
-4. Writes a launcher wrapper at `/opt/edgepulse/bin/edge-agent` that sets
+3. Writes a launcher wrapper at `/opt/edgepulse/bin/edge-agent` that sets
    `PYTHONPATH` and calls the system `python3`.
-5. Bundles the bootstrapped model, a systemd unit, and a default config.
-6. Runs `fpm` to produce the `.deb`.
+4. Bundles the model, a systemd unit, and a default config.
+5. Runs `fpm` to produce the `.deb`.
 
 Output: `packaging/dist/edgepulse-agent_X.Y.Z_amd64.deb`
 
@@ -206,11 +181,7 @@ sudo rpm -e edgepulse-agent
 Run in PowerShell from the `edge-agent\` directory:
 
 ```powershell
-# Full build (bootstrap → PyInstaller → NSIS)
 .\packaging\windows\build_windows.ps1
-
-# Skip bootstrap if the model already exists
-.\packaging\windows\build_windows.ps1 -SkipBootstrap
 
 # Override version (e.g. for a pre-release)
 .\packaging\windows\build_windows.ps1 -Version "1.2.3-rc1"
@@ -219,12 +190,11 @@ Run in PowerShell from the `edge-agent\` directory:
 **What the script does:**
 
 1. Reads the version from `pyproject.toml` (or uses `-Version`).
-2. Bootstraps the model if not present (skips if already there).
-3. Installs Python dependencies via `pip install -e .[api-full,notifications]`.
-4. Runs `pyinstaller packaging/windows/pyinstaller/edgepulse.spec` to
+2. Installs Python dependencies via `pip install -e .[api-full,notifications]`.
+3. Runs `pyinstaller packaging/windows/pyinstaller/edgepulse.spec` to
    produce a self-contained bundle at `dist/edgepulse/`.
-5. Copies the model into the bundle.
-6. Runs `makensis /DPRODUCT_VERSION=X.Y.Z packaging/windows/nsis/installer.nsi`
+4. Copies the model into the bundle.
+5. Runs `makensis /DPRODUCT_VERSION=X.Y.Z packaging/windows/nsis/installer.nsi`
    to produce the setup executable.
 
 Output: `packaging/dist/EdgePulse-Agent-Setup-X.Y.Z.exe`
@@ -252,39 +222,7 @@ overrides the default without causing a "macro already defined" compile error.
 
 ---
 
-## CI/CD pipeline
 
-The pipeline in `.github/workflows/release.yml` has three stages:
-
-### 1. Test (all pushes and PRs)
-
-Runs on Ubuntu and Windows across Python 3.9 / 3.11 / 3.12:
-
-```
-pytest → mypy
-```
-
-### 2. Build artifacts (pushes only)
-
-| Job | Trigger | Output |
-|-----|---------|--------|
-| `build-wheel` | Any push to `main` | `python-wheel` artifact |
-| `build-deb` | Tag push `v*.*.*` | `linux-deb` artifact |
-| `build-rpm` | Tag push `v*.*.*` | `linux-rpm` artifact |
-| `build-windows` | Tag push `v*.*.*` | `windows-installer` artifact |
-
-Each packaging job first runs `make bootstrap` so
-every artifact contains a ready-to-use model.
-
-### 3. Release (tag pushes only)
-
-Waits for all four build jobs, then:
-
-1. Downloads all build artifacts.
-2. Publishes the wheel to PyPI via Trusted Publisher (OIDC — no API key needed).
-3. Extracts the changelog entry for the current version from `CHANGELOG.md`.
-4. Creates a GitHub Release with the `.deb`, `.rpm`, `.exe`, `.whl`, and
-   `.tar.gz` attached.
 
 ---
 
@@ -297,25 +235,14 @@ Waits for all four build jobs, then:
    version = "1.2.3"
    ```
 
-2. **Update `CHANGELOG.md`** with a section for the new version:
-
-   ```markdown
-   ## [1.2.3] - 2025-09-15
-   ### Added
-   - ...
-   ```
-
-3. **Commit and tag:**
+2. **Commit and tag:**
 
    ```bash
-   git add pyproject.toml CHANGELOG.md
+   git add pyproject.toml
    git commit -m "Release v1.2.3"
    git tag v1.2.3
    git push origin main --tags
    ```
-
-4. The CI pipeline picks up the tag, builds all artifacts, and creates the
-   GitHub release automatically.
 
 ---
 
@@ -420,7 +347,6 @@ removes that reference — `DatabaseManager` uses inline SQL, not a `.sql` file.
 Check the Event Viewer under **Windows Logs → Application** for errors from
 `EdgePulseAgent`. Common causes:
 
-- Model not bootstrapped: run `edge-agent bootstrap`
 - Config file missing: the installer writes a default to
   `C:\ProgramData\EdgePulse\agent_config.json`
 - Port 8080 already in use: change `API__PORT` in the config file

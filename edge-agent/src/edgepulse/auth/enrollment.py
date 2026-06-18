@@ -116,7 +116,6 @@ class DeviceEnrollmentClient:
                 resp = _EnrollmentResponse(
                     device_id=result["device_id"],
                     api_key=result["api_key"],
-                    enrollment_token=result.get("enrollment_token"),
                     expires_at=result.get("expires_at"),
                 )
                 logger.info("enrollment_success", device_id=resp.device_id)

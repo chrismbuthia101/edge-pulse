@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import sys
-from pathlib import Path
 from typing import Optional
 
 from edgepulse.auth.credentials import load_credentials_into_env
@@ -81,7 +80,7 @@ class WindowsServiceWrapper:
         return settings
 
     async def run_agent(self) -> None:
-        from edgepulse.core.agent import EdgePulseAgent
+        from edgepulse.agent.agent import EdgePulseAgent
 
         try:
             logger.info("windows_wrapper_starting_agent")

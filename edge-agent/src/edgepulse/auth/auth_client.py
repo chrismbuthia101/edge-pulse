@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from dataclasses import dataclass
 
 import httpx
@@ -111,6 +111,8 @@ class EdgePulseClient:
                     await asyncio.sleep(delay)
                     continue
                 raise
+
+        raise NetworkError("Request failed after all retries")
 
     def _calculate_retry_delay(self, attempt: int) -> float:
         delay = self.config.retry_backoff_seconds * (2**attempt)

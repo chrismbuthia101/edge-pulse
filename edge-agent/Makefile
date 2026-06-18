@@ -3,7 +3,7 @@
 # Requires: poetry (https://python-poetry.org)
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev run test lint fmt typecheck clean \
+.PHONY: help install dev run lint fmt typecheck clean \
         service-install service-start service-stop service-status service-logs \
         wheel deb rpm windows enroll
 
@@ -16,8 +16,7 @@ help:
 	@echo "  $(CYAN)EdgePulse Agent — available targets$(RESET)"
 	@echo ""
 	@echo "  Setup"
-	@echo "    make install          Install with dev dependencies and core extras"
-	@echo "    make install-all      Install all optional extras"
+	@echo "    make install          Install all dependencies (dev + platform extras)"
 	@echo "    make env              Copy .env.example → .env (skips if .env exists)"
 	@echo ""
 	@echo "  Run"
@@ -25,9 +24,8 @@ help:
 	@echo "    make run              Run agent in foreground (INFO logging)"
 	@echo ""
 	@echo "  Quality"
-	@echo "    make test             Run test suite"
-	@echo "    make lint             Run black (check) + mypy"
-	@echo "    make fmt              Auto-format with black"
+	@echo "    make lint             Run black (check) + ruff + mypy"
+	@echo "    make fmt              Auto-format with black + ruff"
 	@echo "    make typecheck        mypy only"
 	@echo ""
 	@echo "  Service (Linux systemd / Windows SCM)"
@@ -52,10 +50,9 @@ help:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
-	poetry install --extras "api-full ml-inference linux" --with dev
+	poetry install --extras "linux" --with dev
 
-install-all:
-	poetry install --extras "all"
+install-all: install
 
 env:
 	@if [ -f .env ]; then \
@@ -72,15 +69,14 @@ run:
 	EDGE_PULSE_DATA_DIR=$(CURDIR)/src/data poetry run edge-agent run
 
 # ── Quality ───────────────────────────────────────────────────────────────────
-test:
-	poetry run pytest -x -q
-
 lint:
 	poetry run black --check src/
+	poetry run ruff check src/
 	poetry run mypy src/ --ignore-missing-imports
 
 fmt:
 	poetry run black src/
+	poetry run ruff check --fix src/
 
 typecheck:
 	poetry run mypy src/ --ignore-missing-imports

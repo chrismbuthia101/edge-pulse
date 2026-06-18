@@ -17,7 +17,7 @@ class FastAPIServer:
         self.host = host
         self._deps = deps or APIDependencies(database=None)  # type: ignore[arg-type]
         self._running = False
-        self.app: Optional[Any] = None
+        self.app: Any = None
         self.uvicorn_server: Optional[Any] = None
         self._serve_task: Optional[asyncio.Task] = None
 
@@ -51,6 +51,7 @@ class FastAPIServer:
             self.uvicorn_server = uvicorn.Server(config)
 
             loop = asyncio.get_running_loop()
+
             self._serve_task = loop.create_task(self.uvicorn_server.serve(), name="fastapi_serve")
             await asyncio.sleep(0.1)
 

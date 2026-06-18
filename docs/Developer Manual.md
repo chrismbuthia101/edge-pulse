@@ -30,8 +30,6 @@ edge-agent/          Python agent (collection, detection, logging)
       detectors/     Anomaly detectors
       features/      Feature engineering
       platform/      Platform-specific code
-      scripts/       Utility scripts
-      security/      Security utilities
       shared/        Shared components
       storage/       Data persistence
       sync/          Sync mechanisms
@@ -41,7 +39,6 @@ edge-agent/          Python agent (collection, detection, logging)
   packaging/         Distribution packaging
     linux/           Debian/RPM builds
     windows/         Windows installer
-    scripts/         Build scripts
 
 client/              Next.js frontend
   app/
@@ -79,7 +76,6 @@ client/              Next.js frontend
 
 docs/                Documentation
   Enrollment Guide.md
-  Model Training.md
   Packaging Guide.md
   Developer Manual.md
 
@@ -355,7 +351,7 @@ Custom hooks in `lib/hooks/`:
 
 The Python agent runs an Isolation Forest model locally. SHAP values are computed per-inference and stored as `explanation_json` on alert records. The `ShapPanel`, `ExplainabilityPage`, and `InsightsPage` all consume this field.
 
-To train a new model: see `docs/Model Training.md`. Place the output at `edge-agent/src/models/edgepulse_primary_isolation_forest.joblib`.
+The model file lives at `edge-agent/src/models/edgepulse_primary_isolation_forest.joblib`.
 
 The `ShapChart` component (`components/charts/ShapChart.tsx`) renders a horizontal Recharts `BarChart` coloured by `contribution_type`.
 
@@ -370,11 +366,7 @@ cd edge-agent
 
 # Install dependencies
 make install          # Core dependencies
-make install-full     # With TensorFlow training support
 make install-all      # All optional extras
-
-# Bootstrap the model (required first run)
-make bootstrap
 
 # Create environment file
 cp .env.example .env
@@ -430,7 +422,7 @@ make enroll        # Enroll device with EdgePulse backend
 | RPM .rpm | `make rpm` |
 | Windows .exe | `make windows` |
 
-All builds require a bootstrapped model first: `make bootstrap`. See `docs/Packaging Guide.md` for full details.
+See `docs/Packaging Guide.md` for full details.
 
 ---
 
@@ -468,10 +460,10 @@ make lint
 | Variable | Description |
 |----------|-------------|
 | `DEVICE_ID` | Unique device identifier |
-| `API_PORT` | API server port (default: 8080) |
+| `API__PORT` | API server port (default: 8080) |
 | `COLLECTION_INTERVAL` | Data collection interval in seconds |
-| `DETECTION_THRESHOLD` | Anomaly detection sensitivity (0.0-1.0) |
-| `SYNC_ENABLED` | Enable cloud sync to Supabase |
+| `DETECTION__THRESHOLD` | Anomaly detection sensitivity (0.0-1.0) |
+| `SYNC__ENABLED` | Enable cloud sync to Supabase |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ### Client

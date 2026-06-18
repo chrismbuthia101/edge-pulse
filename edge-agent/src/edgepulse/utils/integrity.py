@@ -22,6 +22,8 @@ _DEFAULT_EXCLUDED: Set[str] = {
 
 
 def _get_excluded_fields(record_type: Optional[str]) -> Set[str]:
+    if record_type is None:
+        return _DEFAULT_EXCLUDED
     return RECORD_TYPE_EXCLUSIONS.get(record_type, _DEFAULT_EXCLUDED)
 
 

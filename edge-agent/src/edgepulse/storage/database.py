@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from edgepulse.utils.log_handler import get_logger
-from edgepulse.shared.schemas import (
+from edgepulse.models import (
     AlertEvent,
     TelemetryEvent,
     DetectionEvent,
@@ -225,7 +225,8 @@ class Database:
 
         async with self.connection() as conn:
             async with conn.execute(count_query, params) as cursor:
-                total = (await cursor.fetchone())["total"]
+                total_row = await cursor.fetchone()
+                total = total_row["total"] if total_row is not None else 0
 
             async with conn.execute(severity_query, params) as cursor:
                 rows = await cursor.fetchall()

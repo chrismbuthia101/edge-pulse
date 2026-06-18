@@ -97,10 +97,13 @@ class AgentSettings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
 
-    enable_ml_features: bool = Field(default=True)
     health_check_interval: int = Field(default=60, ge=10)
 
-    config_path: Optional[Path] = Field(default=None, exclude=True)
+    config_path: Optional[Path] = Field(
+        default=None,
+        alias="AGENT_CONFIG",
+        exclude=True,
+    )
 
     @field_validator("device_id")
     @classmethod
@@ -128,18 +131,16 @@ class AgentSettings(BaseSettings):
         except Exception as exc:
             raise ValueError(f"Cannot parse config file {path}: {exc}") from exc
 
+        merged = self.model_dump()
         for key, value in overrides.items():
-            if not hasattr(self, key):
+            if key not in merged:
                 continue
-            current_value = getattr(self, key, None)
-            if isinstance(value, dict) and isinstance(current_value, BaseModel):
-                merged = current_value.model_dump()
-                merged.update(value)
-                object.__setattr__(self, key, current_value.__class__(**merged))
+            if isinstance(value, dict) and isinstance(merged[key], dict):
+                merged[key].update(value)
             else:
-                object.__setattr__(self, key, value)
+                merged[key] = value
 
-        return self
+        return self.__class__.model_validate(merged)
 
     def should_enable_sync(self) -> bool:
         url = self.sync.supabase_url or ""

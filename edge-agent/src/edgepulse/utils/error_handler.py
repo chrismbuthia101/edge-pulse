@@ -1,4 +1,7 @@
-from edgepulse.utils.log_handler import get_logger, EdgePulseError, ConfigurationError, LoggingError
+from edgepulse.utils.log_handler import (
+    get_logger,
+    EdgePulseError,
+)
 
 logger = get_logger(__name__)
 

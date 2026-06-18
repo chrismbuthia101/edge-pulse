@@ -5,14 +5,14 @@ Edge Pulse is a lightweight edge device anomaly detection system with a Python a
 ## Structure
 
 - `edge-agent/`: Python edge agent (collection, detection, alerting, logging)
-- `frontend/`: Web UI
+- `client/`: Web UI
 - `docs/`: Architecture and design resources
 
 ## Prerequisites
 
 ### System Requirements
 
-- **Python**: 3.9 - 3.12
+- **Python**: 3.11 - 3.13
 - **Node.js**: 16.0+ (for frontend)
 - **Operating System**: Linux, macOS, or Windows
 - **Memory**: Minimum 1GB RAM (2GB+ recommended)
@@ -57,7 +57,6 @@ poetry install --extras all
 # Or install specific extras:
 poetry install --extras ml-inference  # For inference only
 poetry install --extras api-full       # For API server
-poetry install --extras cloud          # For Supabase sync
 ```
 
 #### Configure Environment
@@ -82,7 +81,7 @@ Key settings in `.env`:
 #### Install Dependencies
 
 ```bash
-cd frontend
+cd client
 npm install
 # or: yarn install
 ```
@@ -104,20 +103,17 @@ cd edge-agent
 # Using Poetry
 poetry run edge-agent
 
-# Or directly with Python
-poetry run python -m src.edgepulse_win
-
 # With verbose logging
 poetry run edge-agent --verbose
 
 # With custom config
-poetry run edge-agent --config /path/to/config.yaml
+poetry run edge-agent --config /path/to/config.json
 ```
 
 ### Option 2: Run Frontend Only
 
 ```bash
-cd frontend
+cd client
 
 # Development mode
 npm run dev
@@ -139,7 +135,7 @@ poetry run edge-agent
 #### Terminal 2 - Frontend
 
 ```bash
-cd frontend
+cd client
 npm run dev
 ```
 
@@ -165,31 +161,6 @@ Key configuration options in `edge-agent/.env`:
 | `SYNC_ENABLED`        | `false`          | Enable cloud sync                           |
 | `ALERT_ENABLED`       | `true`           | Enable alerting                             |
 
-### Advanced Configuration
-
-For advanced settings, create a YAML configuration file:
-
-```yaml
-# config.yaml
-device_id: "my-device"
-collection:
-  interval: 30
-  enable_process_monitoring: true
-  enable_network_monitoring: true
-detection:
-  threshold: 0.7
-  use_ensemble: true
-api:
-  port: 8080
-  mode: "fastapi"
-```
-
-Run with custom config:
-
-```bash
-poetry run edge-agent --config config.yaml
-```
-
 ## Usage
 
 ### Monitoring
@@ -214,7 +185,7 @@ curl http://localhost:8080/alerts
 
 ### Logs
 
-Logs are stored in `~/.local/share/edgepulse/logs/` by default.
+Logs are stored in `src/data/logs/` by default (dev) or `/var/log/edgepulse/` (system install).
 
 ## Troubleshooting
 
@@ -231,17 +202,10 @@ netstat -ano | findstr :8080  # Windows
 API_PORT=8081
 ```
 
-#### 2. Permission Denied
-
-```bash
-# Ensure proper permissions
-chmod +x edge-agent/src/edgepulse_win/__main__.py
-```
-
 #### 3. ML Models Not Loading
 
 - Ensure ML extras are installed: `poetry install --extras ml-inference`
-- Check model files in `~/.local/share/edgepulse/models/`
+- Check model files in `edge-agent/src/models/`
 
 #### 4. High Memory Usage
 
@@ -279,18 +243,16 @@ cd edge-agent
 # Install dev dependencies
 poetry install --with dev
 
-# Run tests
-poetry run pytest
-
-# Code formatting
+# Code formatting & linting
 poetry run black .
-poetry run flake8 .
+poetry run ruff check --fix src/
+poetry run mypy src/
 ```
 
 ### Frontend Development
 
 ```bash
-cd frontend
+cd client
 
 # Run tests
 npm test
@@ -303,13 +265,6 @@ npm run lint
 ```
 
 ## Production Deployment
-
-### Docker (Recommended)
-
-```bash
-# Build and run with Docker Compose
-docker-compose up -d
-```
 
 ### Systemd Service
 
@@ -326,4 +281,4 @@ sudo systemctl start edgepulse
 
 - **Documentation**: Check `docs/` directory for detailed architecture
 - **Issues**: Report bugs and feature requests via GitHub Issues
-- **Logs**: Check logs in `~/.local/share/edgepulse/logs/` for troubleshooting
+- **Logs**: Check logs in `src/data/logs/` (dev) or `/var/log/edgepulse/` (system install) for troubleshooting

@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel
+
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.integrity import compute_integrity_hash
 from edgepulse.auth.auth_client import EdgePulseClient
@@ -8,6 +10,13 @@ from edgepulse.utils.error_handler import (
     AuthenticationError,
     NetworkError,
     SyncError,
+)
+from edgepulse.models.sync import (
+    AlertSyncPayload,
+    TelemetrySyncPayload,
+    HealthSnapshotPayload,
+    AnomalyScorePayload,
+    FeatureVectorPayload,
 )
 
 logger = get_logger(__name__)
@@ -216,120 +225,102 @@ class CloudSync:
             logger.error("feature_vectors_sync_error", error=str(e))
             return False
 
-    def _prepare_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
-        explanation = alert.get("explanation_json") or alert.get("explanation") or {}
-        raw_source = alert.get("telemetry_source", "PROCESS")
-        valid_sources = {"PROCESS", "NETWORK", "FILE", "RESOURCE"}
-        prepared: Dict[str, Any] = {
-            "anomaly_score_id": alert.get("score_id") or alert.get("anomaly_score_id"),
-            "telemetry_event_id": alert.get("telemetry_event_id"),
-            "feature_vector_id": alert.get("feature_vector_id"),
-            "anomaly_score": alert.get("anomaly_score", 0.0),
-            "model_id": alert.get("model_id", "unknown"),
-            "inference_latency_ms": alert.get("inference_latency_ms", 0),
-            "telemetry_source": raw_source if raw_source in valid_sources else "PROCESS",
-            "title": alert.get("title", "Anomaly Detected"),
-            "description": alert.get("description"),
-            "severity": alert.get("severity", "medium"),
-            "category": alert.get("category", "Unknown"),
-            "alert_type": alert.get("alert_type"),
-            "detector_type": alert.get("detector_type"),
-            "confidence": alert.get("confidence", 0.0),
-            "detection_window_start": alert.get("detection_window_start"),
-            "detection_window_end": alert.get("detection_window_end"),
-            "explanation_json": explanation,
-            "status": "PENDING",
-            "read": alert.get("read") is True,
-            "net_destination_ip": alert.get("net_destination_ip"),
-            "net_destination_port": alert.get("net_destination_port"),
-            "net_protocol": alert.get("net_protocol"),
-            "net_duration_ms": alert.get("net_duration_ms"),
-            "proc_name": alert.get("proc_name"),
-            "proc_privilege_level": alert.get("proc_privilege_level"),
-            "proc_pid": alert.get("proc_pid"),
-            "created_at": alert.get("created_at"),
-        }
+    def _prepare_payload(self, dto: BaseModel, record_type: str) -> Dict[str, Any]:
+        payload = dto.model_dump()
         api_key = self._get_api_key()
         if api_key:
-            prepared["integrity_hash"] = compute_integrity_hash(
-                api_key, prepared, record_type="alert"
+            payload["integrity_hash"] = compute_integrity_hash(
+                api_key, payload, record_type=record_type
             )
-        return prepared
+        return payload
+
+    def _prepare_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
+        raw_source = alert.get("telemetry_source", "PROCESS")
+        valid_sources = {"PROCESS", "NETWORK", "FILE", "RESOURCE"}
+        dto = AlertSyncPayload(
+            anomaly_score_id=alert.get("score_id") or alert.get("anomaly_score_id"),
+            telemetry_event_id=alert.get("telemetry_event_id"),
+            feature_vector_id=alert.get("feature_vector_id"),
+            anomaly_score=alert.get("anomaly_score", 0.0),
+            model_id=alert.get("model_id", "unknown"),
+            inference_latency_ms=alert.get("inference_latency_ms", 0),
+            telemetry_source=raw_source if raw_source in valid_sources else "PROCESS",
+            title=alert.get("title", "Anomaly Detected"),
+            description=alert.get("description"),
+            severity=alert.get("severity", "medium"),
+            category=alert.get("category", "Unknown"),
+            alert_type=alert.get("alert_type"),
+            detector_type=alert.get("detector_type"),
+            confidence=alert.get("confidence", 0.0),
+            detection_window_start=alert.get("detection_window_start"),
+            detection_window_end=alert.get("detection_window_end"),
+            explanation_json=alert.get("explanation_json") or alert.get("explanation") or {},
+            read=(alert.get("read") is True),
+            net_destination_ip=alert.get("net_destination_ip"),
+            net_destination_port=alert.get("net_destination_port"),
+            net_protocol=alert.get("net_protocol"),
+            net_duration_ms=alert.get("net_duration_ms"),
+            proc_name=alert.get("proc_name"),
+            proc_privilege_level=alert.get("proc_privilege_level"),
+            proc_pid=alert.get("proc_pid"),
+            created_at=alert.get("created_at"),
+        )
+        return self._prepare_payload(dto, "alert")
 
     def _prepare_telemetry(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         raw_source = telemetry.get("event_type") or telemetry.get("source", "PROCESS")
         valid_sources = {"PROCESS", "NETWORK", "FILE", "RESOURCE"}
-        prepared: Dict[str, Any] = {
-            "collected_at": telemetry.get("timestamp") or telemetry.get("collected_at"),
-            "source": raw_source if raw_source in valid_sources else "RESOURCE",
-            "payload": telemetry.get("payload") or telemetry,
-            "connectivity_state": telemetry.get("connectivity_state", "online"),
-            "payload_hash": telemetry.get("payload_hash", ""),
-        }
-        api_key = self._get_api_key()
-        if api_key:
-            prepared["integrity_hash"] = compute_integrity_hash(
-                api_key, prepared, record_type="telemetry"
-            )
-        return prepared
+        dto = TelemetrySyncPayload(
+            collected_at=telemetry.get("timestamp") or telemetry.get("collected_at"),
+            source=raw_source if raw_source in valid_sources else "RESOURCE",
+            payload=telemetry.get("payload") or telemetry,
+            connectivity_state=telemetry.get("connectivity_state", "online"),
+            payload_hash=telemetry.get("payload_hash", ""),
+        )
+        return self._prepare_payload(dto, "telemetry")
 
     def _prepare_health_snapshot(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
-        prepared: Dict[str, Any] = {
-            "status": snapshot.get("status", "ONLINE"),
-            "cpu_usage": snapshot.get("cpu_usage") or snapshot.get("cpu_percent"),
-            "memory_usage": snapshot.get("memory_usage") or snapshot.get("memory_percent"),
-            "disk_usage": snapshot.get("disk_usage"),
-            "network_status": snapshot.get("network_status", True),
-            "alerts_last_24h": snapshot.get("alerts_last_24h", 0),
-            "uptime_percentage": snapshot.get("uptime_percentage", 100.0),
-            "response_time_ms": snapshot.get("response_time_ms", 0),
-            "error_count": snapshot.get("error_count", 0),
-            "warning_count": snapshot.get("warning_count", 0),
-            "last_restart": snapshot.get("last_restart"),
-            "created_at": snapshot.get("created_at"),
-        }
-        api_key = self._get_api_key()
-        if api_key:
-            prepared["integrity_hash"] = compute_integrity_hash(
-                api_key, prepared, record_type="health_snapshot"
-            )
-        return prepared
+        dto = HealthSnapshotPayload(
+            status=snapshot.get("status", "ONLINE"),
+            cpu_usage=snapshot.get("cpu_usage") or snapshot.get("cpu_percent"),
+            memory_usage=snapshot.get("memory_usage") or snapshot.get("memory_percent"),
+            disk_usage=snapshot.get("disk_usage"),
+            network_status=snapshot.get("network_status", True),
+            alerts_last_24h=snapshot.get("alerts_last_24h", 0),
+            uptime_percentage=snapshot.get("uptime_percentage", 100.0),
+            response_time_ms=snapshot.get("response_time_ms", 0),
+            error_count=snapshot.get("error_count", 0),
+            warning_count=snapshot.get("warning_count", 0),
+            last_restart=snapshot.get("last_restart"),
+            created_at=snapshot.get("created_at"),
+        )
+        return self._prepare_payload(dto, "health_snapshot")
 
     def _prepare_anomaly_score(self, score: Dict[str, Any]) -> Dict[str, Any]:
-        prepared: Dict[str, Any] = {
-            "feature_vector_id": score.get("feature_vector_id"),
-            "model_id": score.get("model_id", "unknown"),
-            "score": score.get("score", 0.0),
-            "label": score.get("label"),
-            "threshold_applied": score.get("threshold_applied", 0.75),
-            "above_threshold": score.get("above_threshold", False),
-            "inference_latency_ms": score.get("inference_latency_ms", 0),
-            "connectivity_state": score.get("connectivity_state", "online"),
-            "scored_at": score.get("scored_at"),
-            "created_at": score.get("created_at"),
-        }
-        api_key = self._get_api_key()
-        if api_key:
-            prepared["integrity_hash"] = compute_integrity_hash(
-                api_key, prepared, record_type="anomaly_score"
-            )
-        return prepared
+        dto = AnomalyScorePayload(
+            feature_vector_id=score.get("feature_vector_id"),
+            model_id=score.get("model_id", "unknown"),
+            score=score.get("score", 0.0),
+            label=score.get("label"),
+            threshold_applied=score.get("threshold_applied", 0.75),
+            above_threshold=score.get("above_threshold", False),
+            inference_latency_ms=score.get("inference_latency_ms", 0),
+            connectivity_state=score.get("connectivity_state", "online"),
+            scored_at=score.get("scored_at"),
+            created_at=score.get("created_at"),
+        )
+        return self._prepare_payload(dto, "anomaly_score")
 
     def _prepare_feature_vector(self, fv: Dict[str, Any]) -> Dict[str, Any]:
-        prepared: Dict[str, Any] = {
-            "event_id": fv.get("event_id"),
-            "computed_at": fv.get("computed_at"),
-            "model_id": fv.get("model_id", "unknown"),
-            "features": fv.get("features", {}),
-            "feature_version": fv.get("feature_version", "v1.0"),
-            "created_at": fv.get("created_at"),
-        }
-        api_key = self._get_api_key()
-        if api_key:
-            prepared["integrity_hash"] = compute_integrity_hash(
-                api_key, prepared, record_type="feature_vector"
-            )
-        return prepared
+        dto = FeatureVectorPayload(
+            event_id=fv.get("event_id"),
+            computed_at=fv.get("computed_at"),
+            model_id=fv.get("model_id", "unknown"),
+            features=fv.get("features", {}),
+            feature_version=fv.get("feature_version", "v1.0"),
+            created_at=fv.get("created_at"),
+        )
+        return self._prepare_payload(dto, "feature_vector")
 
     def _get_api_key(self) -> Optional[str]:
         if self._api_key:

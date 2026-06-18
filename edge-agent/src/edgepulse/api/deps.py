@@ -26,7 +26,7 @@ def get_db(request: Request) -> Database:
 def get_sync_status(request: Request) -> Dict[str, Any]:
     deps = get_deps(request)
     if deps.sync_queue is not None:
-        return deps.sync_queue.get_status()
+        return deps.sync_queue.get_stats()
     return {
         "online": None,
         "queue_depth": 0,

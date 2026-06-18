@@ -1,14 +1,11 @@
-# Explainable AI Modules
-# Generate human-readable explanations for anomaly detections.
-
-from edgepulse.analysis.explainable_ai import (
+from edgepulse.analysis.xai import (
     SHAPExplainer,
     LIMEExplainer,
     ExplainableAIManager,
     ExplanationType,
     StrictExplanationJSON,
 )
-from edgepulse.analysis.report_generator import ReportGenerator
+from edgepulse.analysis.alert_report import AlertReportBuilder
 
 __all__ = [
     "SHAPExplainer",
@@ -16,5 +13,5 @@ __all__ = [
     "ExplainableAIManager",
     "ExplanationType",
     "StrictExplanationJSON",
-    "ReportGenerator",
+    "AlertReportBuilder",
 ]

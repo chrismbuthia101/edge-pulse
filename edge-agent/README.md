@@ -1,6 +1,6 @@
 # EdgePulse Agent
 
-Edge security monitoring agent: collects system telemetry, extracts behavioral features, and detects anomalies using Isolation Forest (and optionally an Autoencoder). Alerts are generated locally and synced to a Supabase backend.
+Edge security anomaly detection agent: collects system telemetry, extracts behavioral features, and detects anomalies using Isolation Forest (and optionally an Autoencoder). Alerts are generated locally and synced to a Supabase backend.
 
 > **Note**: This project includes a `Makefile` for convenient commands. If you have `make` installed, use `make help` to see all available targets. Make commands are shown first in each section below.
 
@@ -20,14 +20,14 @@ The pipeline runs on a configurable cycle (default 60 s) inside an async event l
 
 ### Prerequisites
 
-- Python 3.9–3.12
+- Python 3.11–3.13
 - [Poetry](https://python-poetry.org/docs/#installation)
 - [Make](https://www.gnu.org/software/make/) (optional, for convenience commands)
 
 ### Install
 
 ```bash
-git clone <repo>
+git clone https://github.com/chrismbuthia101/edge-pulse
 cd edge-agent
 
 # Using make (recommended if available)
@@ -52,16 +52,6 @@ cp .env.example .env
 # Edit .env — REQUIRED: Set SYNC__SUPABASE_URL and SYNC__API_KEY
 ```
 
-### Bootstrap the ML model (first run only)
-
-The agent needs a trained Isolation Forest before it can detect anomalies.
-
-```bash
-make bootstrap
-```
-
-To train on real security datasets instead of synthetic data, see `src/edgepulse/scripts/train_models.py --help`.
-
 ### Run
 
 ```bash
@@ -74,7 +64,7 @@ poetry run edge-agent run
 poetry run edge-agent run --verbose     # debug logging
 ```
 
-The REST API is available at `http://localhost:8080` (auto-selected based on system resources).
+The REST API is available at `http://localhost:8080`.
 
 ---
 
@@ -84,7 +74,6 @@ The REST API is available at `http://localhost:8080` (auto-selected based on sys
 edge-agent/
 ├── models/                     # Trained model files (git-ignored)
 ├── src/edgepulse/
-│   ├── scripts/
 │   ├── core/
 │   │   ├── agent.py            # Main orchestrator (EdgePulseAgent)
 │   │   ├── async_pipeline.py   # Collect → Extract → Detect → Alert loop
@@ -242,14 +231,13 @@ poetry run edge-agent service status
 | Extra           | Installs                   | Use when                                   |
 | --------------- | -------------------------- | ------------------------------------------ |
 | `api-full`      | FastAPI, uvicorn           | You need the full REST/WebSocket API       |
-| `ml-training`   | TensorFlow, SHAP           | Training the Autoencoder                   |
-| `ml-inference`  | TFLite runtime             | Running Autoencoder on constrained devices |
-| `cloud`         | supabase-py                | Syncing alerts to Supabase                 |
-
-| `windows`       | pywin32, keyring, watchdog | Windows Service + filesystem monitoring    |
+| `ml-inference`  | TFLite runtime, SHAP       | Running Autoencoder on constrained devices |
+| `ml-explain`    | SHAP, LIME                 | ML explainability (SHAP + LIME)            |
+| `linux`         | keyring                    | Linux keyring integration                  |
+| `windows`       | pywin32, keyring           | Windows Service + credential storage       |
 
 ```bash
-poetry install --extras "api-full cloud"
+poetry install --extras "api-full ml-inference"
 ```
 
 ---
@@ -258,15 +246,14 @@ poetry install --extras "api-full cloud"
 
 ```bash
 # Using make (recommended if available)
-make test                               # run test suite
-make lint                               # black (check) + mypy
-make fmt                                # auto-format with black
+make lint                               # black (check) + ruff + mypy
+make fmt                                # auto-format with black + ruff
 make typecheck                          # mypy only
 make clean                              # remove cache files
 
 # Or using poetry directly
-poetry run pytest                       # Tests
 poetry run black src/                   # Format
+poetry run ruff check src/              # Lint
 poetry run mypy src/                    # Type-check
 ```
 

@@ -6,7 +6,6 @@ if sys.platform == "win32":
     import servicemanager
     import win32event
     import win32service
-    import win32serviceutil
 
 from edgepulse.utils.log_handler import get_logger
 

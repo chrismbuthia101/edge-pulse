@@ -1,5 +1,3 @@
-"""EdgePulse CLI — Edge Security Monitoring Agent entry point."""
-
 from __future__ import annotations
 
 import argparse
@@ -12,16 +10,18 @@ from typing import Callable, Optional
 
 from edgepulse.auth.credentials import CredentialManager, load_credentials_into_env
 from edgepulse.config.settings import AgentSettings
-from edgepulse.core.agent import EdgePulseAgent
+from edgepulse.agent.agent import EdgePulseAgent
 from edgepulse.platform import is_linux, is_windows, ServiceManager
-from edgepulse.utils.error_handler import ConfigurationError, EdgePulseError
+from edgepulse.utils.log_handler import ConfigurationError, EdgePulseError
 from edgepulse.utils.path_manager import PathManager
 
 CommandHandler = Callable[[argparse.Namespace], int]
 
+
 def _init_environment() -> None:
     try:
         from dotenv import load_dotenv
+
         env_path = Path(__file__).parent.parent.parent / ".env"
         load_dotenv(env_path) if env_path.exists() else load_dotenv()
     except ImportError:
@@ -32,12 +32,14 @@ def _get_service_installer() -> Optional[ServiceManager]:
     if is_windows():
         try:
             from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+
             return ServiceInstaller()
         except ImportError:
             return None
     if is_linux():
         try:
             from edgepulse.platform.linux.linux_service.installer import ServiceInstaller
+
             return ServiceInstaller()
         except ImportError:
             return None
@@ -47,6 +49,7 @@ def _get_service_installer() -> Optional[ServiceManager]:
 def _is_enrollment_available() -> bool:
     try:
         from edgepulse.auth.enrollment import DeviceEnrollmentClient  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -194,7 +197,8 @@ def _handle_enroll(args: argparse.Namespace) -> int:
     enrollment_client = DeviceEnrollmentClient(credential_manager)
 
     try:
-        from edgepulse._build_vars import BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY
+        from edgepulse._build_vars import BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY  # type: ignore[import-unused]
+
         baked_url, baked_key = BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY
     except (ImportError, AttributeError):
         baked_url, baked_key = "", ""
@@ -255,7 +259,7 @@ def _handle_enroll(args: argparse.Namespace) -> int:
         print()
         return 1
 
-    async def _do_enroll() -> Optional[object]:
+    async def _do_enroll():
         return await enrollment_client.enroll_device(config)
 
     enroll_result = asyncio.run(_do_enroll())
@@ -264,9 +268,7 @@ def _handle_enroll(args: argparse.Namespace) -> int:
         _print_enrollment_failure_help()
         return 1
 
-    if enrollment_client.complete_enrollment(
-        enroll_result, supabase_url=config.supabase_url
-    ):
+    if enrollment_client.complete_enrollment(enroll_result, supabase_url=config.supabase_url):
         print()
         print("✓ Device enrolled successfully!")
         print(f"  Device ID : {enroll_result.device_id}")
@@ -289,7 +291,7 @@ def _handle_status(args: argparse.Namespace) -> int:
     try:
         creds = CredentialManager().get_device_credentials()
         if creds and creds.device_id and creds.api_key:
-            print(f"  Enrollment  : ✓ Enrolled")
+            print("  Enrollment  : ✓ Enrolled")
             print(f"  Device ID   : {creds.device_id}")
             url = creds.supabase_url or "(stored in credentials)"
             print(f"  Backend URL : {url}")
@@ -305,7 +307,7 @@ def _handle_status(args: argparse.Namespace) -> int:
     if model_path.exists():
         print(f"  ML Model    : ✓ Present ({model_path})")
     else:
-        print(f"  ML Model    : ✗ Not found")
+        print("  ML Model    : ✗ Not found")
 
     enroll_cfg = PathManager().get_config_path().parent / "enrollment.json"
     if enroll_cfg.exists():
@@ -314,14 +316,14 @@ def _handle_status(args: argparse.Namespace) -> int:
             if "YOUR_PROJECT" in data.get(
                 "supabase_url", ""
             ) or "YOUR_ENROLLMENT_TOKEN" in data.get("enrollment_token", ""):
-                print(f"  Enroll cfg  : ⚠  Placeholder values — edit before enrolling")
+                print("  Enroll cfg  : ⚠  Placeholder values — edit before enrolling")
                 print(f"  File        : {enroll_cfg}")
             else:
                 print(f"  Enroll cfg  : ✓ Configured ({enroll_cfg})")
         except Exception:
             print(f"  Enroll cfg  : ✓ Present ({enroll_cfg})")
     else:
-        print(f"  Enroll cfg  : — Not present")
+        print("  Enroll cfg  : — Not present")
         print("  Run: sudo edge-agent enroll <TOKEN>")
 
     print()

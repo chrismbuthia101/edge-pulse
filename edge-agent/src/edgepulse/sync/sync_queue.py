@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from edgepulse.shared import AlertEvent, create_metrics_collector, StandardMetrics
+from edgepulse.models import AlertEvent, create_metrics_collector, StandardMetrics
 from edgepulse.storage.database import Database
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import SyncError, log_sync_operation
@@ -393,24 +393,20 @@ class SyncQueue:
     def get_stats(self) -> Dict[str, Any]:
         if self.queue is not None:
             self.stats["queue_size"] = self.queue.qsize()
-        return self.stats.copy()
+        return {
+            "online": self._was_online,
+            "queue_depth": self.stats["queue_size"],
+            "total_enqueued": self.stats["total_enqueued"],
+            "total_processed": self.stats["total_processed"],
+            "total_failed": self.stats["total_failed"],
+            "total_retries": self.stats["total_retries"],
+            "max_retry_attempts": self.max_retry_attempts,
+            "unsynced_alerts": self.stats["queue_size"],
+        }
 
     def request_flush(self) -> None:
         self._flush_requested = True
         logger.info("sync_flush_requested", device_id=self.device_id)
-
-    def get_status(self) -> Dict[str, Any]:
-        stats = self.get_stats()
-        return {
-            "online": self._was_online,
-            "queue_depth": stats.get("queue_size", 0),
-            "total_enqueued": stats.get("total_enqueued", 0),
-            "total_processed": stats.get("total_processed", 0),
-            "total_failed": stats.get("total_failed", 0),
-            "total_retries": stats.get("total_retries", 0),
-            "max_retry_attempts": self.max_retry_attempts,
-            "unsynced_alerts": stats.get("queue_size", 0),
-        }
 
     async def get_dead_letter_items(self) -> Dict[str, Any]:
         items = await self.db.get_dead_letter_items()
