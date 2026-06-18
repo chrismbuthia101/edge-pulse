@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from edgepulse.models import AlertEvent, create_metrics_collector, StandardMetrics
+from edgepulse.models import create_metrics_collector, StandardMetrics
 from edgepulse.storage.database import Database
 from edgepulse.utils.log_handler import get_logger
 from edgepulse.utils.error_handler import SyncError, log_sync_operation
@@ -83,11 +83,14 @@ class SyncQueue:
         self._running = False
 
         if self._worker_task:
-            self._worker_task.cancel()
             try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait_for(self._worker_task, timeout=5.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._worker_task.cancel()
+                try:
+                    await self._worker_task
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
 
         if self.queue is not None:
             await self._persist_queue()
@@ -242,20 +245,7 @@ class SyncQueue:
         return 1
 
     async def _sync_alerts(self, sync_client: CloudSync, items: List[Dict[str, Any]]) -> None:
-        alert_data: List[Dict[str, Any]] = []
-
-        for item in items:
-            raw = item.get("data", {})
-            try:
-                AlertEvent(**raw)
-                alert_data.append(raw)
-            except Exception as e:
-                logger.warning(
-                    "alert_schema_validation_failed",
-                    item_id=raw.get("alert_id"),
-                    error=str(e),
-                )
-                alert_data.append(raw)
+        alert_data = [item.get("data", {}) for item in items if item.get("data")]
 
         if not alert_data:
             logger.warning("no_valid_alerts_to_sync", device_id=self.device_id)
@@ -314,6 +304,7 @@ class SyncQueue:
                 raise RuntimeError("Sync queue not initialized")
 
             persisted = await self.db.get_sync_queue_items(limit=self.max_size)
+            persisted.sort(key=lambda r: (-r.get("priority", 0), r["created_at"]))
 
             for row in persisted:
                 item: Dict[str, Any] = {

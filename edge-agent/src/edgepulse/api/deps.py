@@ -13,6 +13,7 @@ class APIDependencies:
     sync_queue: Optional[SyncQueue] = None
     detector_health_provider: Optional[Callable[[], Dict[str, Any]]] = None
     sync_dead_letter_provider: Optional[Callable[[], Any]] = None
+    auth_token: Optional[str] = None
 
 
 def get_deps(request: Request) -> APIDependencies:

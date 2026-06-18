@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help install dev run lint fmt typecheck clean \
         service-install service-start service-stop service-status service-logs \
-        wheel deb rpm windows enroll
+        wheel deb rpm windows enroll audit version-bump checksums
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 CYAN  := \033[0;36m
@@ -28,6 +28,9 @@ help:
 	@echo "    make fmt              Auto-format with black + ruff"
 	@echo "    make typecheck        mypy only"
 	@echo ""
+	@echo "  Security"
+	@echo "    make audit            Run pip-audit on dependencies"
+	@echo ""
 	@echo "  Service (Linux systemd / Windows SCM)"
 	@echo "    make service-install  Install as a system service"
 	@echo "    make service-start    Start the service"
@@ -43,6 +46,10 @@ help:
 	@echo "    make deb              Build Debian .deb"
 	@echo "    make rpm              Build RPM .rpm"
 	@echo "    make windows          Build Windows installer"
+	@echo ""
+	@echo "  Release"
+	@echo "    make version-bump     Bump version, commit, and tag"
+	@echo "    make checksums        Generate SHA256SUMS for packaging/dist"
 	@echo ""
 	@echo "  Misc"
 	@echo "    make clean            Remove __pycache__, .mypy_cache, .pytest_cache"
@@ -127,6 +134,21 @@ windows:
 	@echo "$(CYAN)Building Windows installer…$(RESET)"
 	powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
 	@echo "$(CYAN)Windows installer written to packaging/dist/$(RESET)"
+
+# ── Release ──────────────────────────────────────────────────────────────────
+audit:
+	pip install pip-audit -q
+	pip-audit --requirement <(poetry export --without-hashes)
+
+version-bump:
+	@read -p "New version (current: $$(poetry version -s)): " v; \
+	poetry version $$v && git add pyproject.toml && \
+	git commit -m "chore: bump version to $$v" && git tag v$$v
+	@echo "$(CYAN)Tagged v$$v — push with: git push && git push --tags$(RESET)"
+
+checksums:
+	sha256sum packaging/dist/* > packaging/dist/SHA256SUMS
+	@echo "$(CYAN)SHA256SUMS written$(RESET)"
 
 # ── Enrollment ───────────────────────────────────────────────────────────────
 enroll:

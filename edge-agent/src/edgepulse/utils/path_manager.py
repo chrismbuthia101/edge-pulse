@@ -31,9 +31,11 @@ class PathManager:
 
     @staticmethod
     def _is_system_install() -> bool:
+        if "EDGE_PULSE_SYSTEM_INSTALL" in os.environ:
+            return True
         if PathManager._is_windows():
-            return (PathManager._safe_program_data() / "EdgePulse").exists()
-        return str(Path(__file__).resolve()).startswith("/opt/edgepulse")
+            return (PathManager._safe_program_data() / "EdgePulse" / ".system-install").exists()
+        return Path("/opt/edgepulse/.system-install").exists()
 
     @staticmethod
     def _system_data_dir() -> Path:

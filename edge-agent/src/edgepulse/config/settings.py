@@ -15,6 +15,7 @@ class APIConfig(BaseModel):
     enabled: bool = Field(default=True)
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8080, ge=1, le=65535)
+    require_auth: bool = Field(default=False)
 
 
 class SyncConfig(BaseModel):

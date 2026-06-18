@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import platform
@@ -84,26 +83,21 @@ class EncryptedFileStore(CredentialStore):
 
     def __init__(self, path: Path):
         self._path = path
-        self._key = self._derive_key()
+        self._key = self._get_or_create_key(path)
 
     @staticmethod
-    def _get_machine_seed() -> str:
-        seed = platform.node() + platform.machine()
-        if platform.system() == "Windows":
-            try:
-                import winreg
-
-                with winreg.OpenKey(
-                    winreg.HKEY_LOCAL_MACHINE,
-                    r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
-                ) as key:
-                    seed += str(winreg.QueryValueEx(key, "ProductId")[0])
-            except Exception:
-                pass
-        return seed
-
-    def _derive_key(self) -> bytes:
-        return base64.urlsafe_b64encode(hashlib.sha256(self._get_machine_seed().encode()).digest())
+    def _get_or_create_key(path: Path) -> bytes:
+        key_file = path.parent / ".machine_key"
+        if key_file.exists():
+            raw = key_file.read_bytes()
+        else:
+            raw = os.urandom(32)
+            tmp = key_file.with_suffix(".tmp")
+            tmp.write_bytes(raw)
+            tmp.replace(key_file)
+            if platform.system() != "Windows":
+                key_file.chmod(0o600)
+        return base64.urlsafe_b64encode(raw)
 
     def _encrypt(self, data: str) -> bytes:
         return Fernet(self._key).encrypt(data.encode())

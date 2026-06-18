@@ -1,0 +1,33 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ./edge-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: snok/install-poetry@v1
+        with: { version: "1.8.x" }
+      - run: poetry install --extras "linux" --with dev
+      - run: poetry run black --check src/
+      - run: poetry run ruff check src/
+      - run: poetry run mypy src/ --ignore-missing-imports
+
+  security:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ./edge-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: snok/install-poetry@v1
+        with: { version: "1.8.x" }
+      - run: poetry install --extras "linux" --with dev
+      - run: pip install pip-audit -q
+      - run: pip-audit --requirement <(poetry export --without-hashes)

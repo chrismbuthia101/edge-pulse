@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.utils.version import get_agent_version
 from edgepulse.models import DeviceInfo, DeviceStatus
 
 if TYPE_CHECKING:
@@ -18,7 +19,7 @@ class DeviceRegistry:
         self,
         device_id: str,
         database: Database,
-        agent_version: str = "1.0.0",
+        agent_version: str = get_agent_version(),
     ) -> None:
         self.device_id = device_id
         self.database = database

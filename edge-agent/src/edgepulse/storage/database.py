@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.utils.version import get_agent_version
 from edgepulse.models import (
     AlertEvent,
     TelemetryEvent,
@@ -289,7 +290,7 @@ class Database:
         device_id: str,
         event_type: str,
         payload: Dict[str, Any],
-        agent_version: str = "1.0.0",
+        agent_version: str = get_agent_version(),
         payload_hash: str = "",
     ) -> int:
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)

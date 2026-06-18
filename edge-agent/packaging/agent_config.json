@@ -70,8 +70,6 @@
   },
   "metrics": {
     "enabled": true,
-    "prometheus_enabled": false,
-    "prometheus_port": 9090,
     "collection_interval": 30,
     "retention_hours": 168
   },

@@ -190,11 +190,22 @@ class EdgePulseAgent:
                     return await self.sync_queue.get_dead_letter_items()
                 return {"items": [], "total": 0}
 
+            auth_token: Optional[str] = None
+            if self.settings.api.require_auth:
+                try:
+                    from edgepulse.auth.credentials import CredentialManager
+
+                    creds = CredentialManager().get_device_credentials()
+                    auth_token = creds.api_key if creds else None
+                except Exception:
+                    logger.debug("auth_token_unavailable")
+
             self._api_deps = APIDependencies(
                 database=self.database,
                 sync_queue=self.sync_queue,
                 detector_health_provider=_detector_health,
                 sync_dead_letter_provider=_dead_letter_provider,
+                auth_token=auth_token,
             )
 
             await self.device_registry.register()

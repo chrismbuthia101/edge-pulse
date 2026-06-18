@@ -30,6 +30,14 @@ class EnrollmentConfig:
     agent_version: Optional[str] = None
     timeout_seconds: int = 30
 
+    def __repr__(self):
+        return (
+            f"EnrollmentConfig(supabase_url={self.supabase_url!r}, "
+            f"enrollment_token=<redacted>, "
+            f"publishable_key={'<set>' if self.publishable_key else None!r}, "
+            f"device_hostname={self.device_hostname!r})"
+        )
+
 
 class DeviceEnrollmentClient:
     def __init__(self, credential_manager: Optional[CredentialManager] = None):

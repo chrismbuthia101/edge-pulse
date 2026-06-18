@@ -112,8 +112,8 @@ class AlertHandler:
             return {}
         try:
             anomaly_score = detection.get("anomaly_score", 0.0)
-            result = explainer.explain_prediction(features, anomaly_score)
-            # StrictExplanationJSON → dict
+            result = explainer.explain(features, anomaly_score)
+
             if hasattr(result, "to_dict"):
                 return result.to_dict()
             return result or {}

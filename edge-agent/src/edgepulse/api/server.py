@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from edgepulse.api.deps import APIDependencies
 from edgepulse.api.routes import register_routes
 from edgepulse.utils.log_handler import get_logger
+from edgepulse.utils.version import get_agent_version
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,7 @@ class FastAPIServer:
         self.app: Optional[Any] = None
         self.uvicorn_server: Optional[Any] = None
         self._serve_task: Optional[asyncio.Task] = None
+        self._auth_middleware_added = False
 
     def is_healthy(self) -> bool:
         if not self._running or self.uvicorn_server is None:
@@ -38,9 +40,28 @@ class FastAPIServer:
 
             if deps is not None:
                 self._deps = deps
-            self.app = FastAPI(title="EdgePulse Agent API", version="1.0.0")
+            self.app = FastAPI(title="EdgePulse Agent API", version=get_agent_version())
             self.app.state.deps = self._deps
             register_routes(self.app)
+
+            if self._deps and self._deps.auth_token and not self._auth_middleware_added:
+                from fastapi import Request
+                from fastapi.responses import JSONResponse
+
+                expected = self._deps.auth_token
+
+                @self.app.middleware("http")
+                async def require_token(request: Request, call_next):
+                    if request.url.path in ("/health/live", "/metrics", "/status"):
+                        return await call_next(request)
+                    auth = request.headers.get("Authorization", "")
+                    token = auth.removeprefix("Bearer ").strip()
+                    if not token or token != expected:
+                        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+                    return await call_next(request)
+
+                self._auth_middleware_added = True
+                logger.info("api_auth_middleware_enabled")
 
             config = uvicorn.Config(
                 app=self.app,

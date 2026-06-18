@@ -26,6 +26,15 @@ SITE_PACKAGES="${INSTALL_PREFIX}/lib/site-packages"
 
 echo "Building EdgePulse Agent .rpm  version=${VERSION}  output=${OUTPUT}"
 
+# Validate required build-time credentials
+if [[ -z "${SUPABASE_URL:-}" ]]; then
+    echo "ERROR: SUPABASE_URL must be set for production RPM builds"
+    echo "       For dev builds: SUPABASE_URL=https://placeholder PUBLISHABLE_KEY=placeholder bash build_rpm.sh"
+    exit 1
+fi
+
+trap 'echo "Cleaning up staging..."; rm -rf "${STAGING_DIR}"' EXIT
+
 if ! command -v fpm &>/dev/null; then
     echo "ERROR: fpm not found. Install with: gem install fpm"
     exit 1
@@ -50,11 +59,21 @@ mkdir -p \
 
 # Install Python packages via pip --target
 echo "[2/4] Installing Python packages via pip --target..."
+
+if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
+    echo "  Using lockfile constraints from poetry.lock"
+    CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+else
+    CONSTRAINT=""
+    echo "  Warning: poetry export unavailable — skipping lockfile constraint"
+fi
+
 python3 -m pip install --quiet --upgrade pip wheel setuptools
 python3 -m pip install --quiet \
     --target "${STAGING_DIR}${SITE_PACKAGES}" \
     --no-compile \
     --no-build-isolation \
+    ${CONSTRAINT:+"${CONSTRAINT}"} \
     "${REPO_ROOT}[api-full,notifications,ml-inference]"
 
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/{pip,wheel,setuptools} \
@@ -168,6 +187,10 @@ fpm \
 
 echo "[4/4] Cleaning up..."
 rm -rf "${SCRIPTS_TMP}"
+
+# Generate SHA256 checksum
+sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
+echo "  Checksum: $(cat "${OUTPUT}.sha256")"
 
 echo ""
 echo "SUCCESS: ${OUTPUT}  ($(du -sh "${OUTPUT}" | cut -f1))"

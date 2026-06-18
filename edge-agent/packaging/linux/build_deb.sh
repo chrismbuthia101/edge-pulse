@@ -27,6 +27,9 @@ WHEEL_DIR="${REPO_ROOT}/dist"
 OUTPUT="${DIST_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 
 INSTALL_PREFIX="/opt/edgepulse"
+VENV_DIR="${STAGING_DIR}${INSTALL_PREFIX}/venv"
+
+trap 'echo "Cleaning up staging..."; rm -rf "${STAGING_DIR}"' EXIT
 SYSTEMD_DIR="/etc/systemd/system"
 CONFIG_DIR="/etc/edgepulse"
 VAR_DIR="/var/lib/edgepulse"
@@ -67,9 +70,26 @@ mkdir -p \
     "${STAGING_DIR}${VAR_DIR}/models" \
     "${DIST_DIR}"
 
-# Copy application files
-echo "[3/5] Copying application files..."
-cp "${WHEEL_FILE}" "${STAGING_DIR}${INSTALL_PREFIX}/edge_agent-${VERSION}-py3-none-any.whl"
+# Build Python venv and install the wheel + dependencies
+echo "[3/5] Building Python venv..."
+python3 -m venv "${VENV_DIR}"
+"${VENV_DIR}/bin/pip" install --quiet --upgrade pip wheel setuptools
+
+if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
+    echo "  Using lockfile constraints from poetry.lock"
+    CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+else
+    CONSTRAINT=""
+    echo "  Warning: poetry export unavailable — skipping lockfile constraint"
+fi
+
+"${VENV_DIR}/bin/pip" install --quiet ${CONSTRAINT:+"${CONSTRAINT}"} \
+    "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
+
+echo "  Venv built at ${VENV_DIR}"
+
+# Copy application files (no wheel — already installed into venv)
+echo "  Copying config and model files..."
 cp "${REPO_ROOT}/packaging/agent_config.json" "${STAGING_DIR}${CONFIG_DIR}/agent_config.json"
 cp -r "${REPO_ROOT}/src/models/." "${STAGING_DIR}${VAR_DIR}/models/"
 
@@ -126,8 +146,6 @@ cat > "${POSTINST}" <<'POSTINST_SCRIPT'
 #!/bin/bash
 set -e
 
-VENV_DIR="/opt/edgepulse/venv"
-
 for dir in /var/lib/edgepulse \
            /var/lib/edgepulse/models \
            /var/lib/edgepulse/data \
@@ -138,18 +156,8 @@ for dir in /var/lib/edgepulse \
     chmod 750 "$dir"
 done
 
-WHEEL_FILE=$(ls /opt/edgepulse/*.whl 2>/dev/null | head -1)
-if [[ -z "${WHEEL_FILE}" ]]; then
-    echo "ERROR: Could not find EdgePulse wheel file in /opt/edgepulse/" >&2
-    exit 1
-fi
-
-echo "EdgePulse: Setting up Python environment..."
-if [[ ! -d "${VENV_DIR}" ]]; then
-    python3 -m venv "${VENV_DIR}"
-fi
-"${VENV_DIR}/bin/pip" install --quiet --upgrade pip setuptools wheel
-"${VENV_DIR}/bin/pip" install --quiet "${WHEEL_FILE}[api-full,notifications,ml-inference,linux]"
+# Marker file for system install detection
+touch /opt/edgepulse/.system-install
 
 if command -v systemctl &>/dev/null && systemctl --version &>/dev/null 2>&1; then
     systemctl daemon-reload
@@ -226,6 +234,10 @@ fpm \
     .
 
 rm -f "${POSTINST}" "${PRERM}" "${POSTRM}"
+
+# Generate SHA256 checksum
+sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
+echo "  Checksum: $(cat "${OUTPUT}.sha256")"
 
 echo ""
 echo "SUCCESS: ${OUTPUT}  ($(du -sh "${OUTPUT}" | cut -f1))"

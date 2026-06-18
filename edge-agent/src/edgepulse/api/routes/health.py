@@ -1,5 +1,5 @@
 import psutil
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from edgepulse.api.deps import get_detector_health, get_sync_status
 from edgepulse.api.schemas.health import (
@@ -9,8 +9,22 @@ from edgepulse.api.schemas.health import (
     StatusResponse,
     SyncStatus,
 )
+from edgepulse.utils.version import get_agent_version
 
 router = APIRouter(tags=["health"])
+
+
+@router.get("/health/live")
+async def liveness():
+    return {"status": "ok"}
+
+
+@router.get("/health/ready")
+async def readiness(request: Request):
+    detector_data = get_detector_health(request)
+    if detector_data.get("status") != "ok":
+        raise HTTPException(status_code=503, detail=detector_data)
+    return {"status": "ok", "detector": detector_data}
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -38,4 +52,4 @@ async def metrics():
 
 @router.get("/status", response_model=StatusResponse)
 async def status():
-    return StatusResponse(status="running", server="fastapi", version="1.0.0")
+    return StatusResponse(status="running", server="fastapi", version=get_agent_version())
