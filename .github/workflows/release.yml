@@ -29,7 +29,7 @@ jobs:
         working-directory: ./edge-agent
     steps:
       - uses: actions/checkout@v4
-      - run: gem install fpm --no-document
+      - run: sudo gem install fpm --no-document
       - run: pip install --upgrade pip build poetry
       - run: bash packaging/linux/build_deb.sh
       - run: sha256sum packaging/dist/*.deb > packaging/dist/SHA256SUMS
@@ -46,7 +46,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       PUBLISHABLE_KEY: ${{ secrets.PUBLISHABLE_KEY }}
     steps:
-      - run: dnf install -y python3 ruby rpm-build && gem install fpm
+      - run: dnf install -y python3 python3-pip ruby rpm-build && gem install fpm
       - uses: actions/checkout@v4
       - run: pip install --upgrade pip build poetry
       - run: bash edge-agent/packaging/linux/build_rpm.sh
@@ -63,7 +63,8 @@ jobs:
         working-directory: ./edge-agent
     steps:
       - uses: actions/checkout@v4
-      - run: pip install pyinstaller nsis
+      - run: choco install nsis --no-progress
+      - run: pip install pyinstaller
       - run: powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
       - uses: actions/upload-artifact@v4
         with:
