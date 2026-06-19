@@ -26,13 +26,6 @@ SITE_PACKAGES="${INSTALL_PREFIX}/lib/site-packages"
 
 echo "Building EdgePulse Agent .rpm  version=${VERSION}  output=${OUTPUT}"
 
-# Validate required build-time credentials
-if [[ -z "${SUPABASE_URL:-}" ]]; then
-    echo "ERROR: SUPABASE_URL must be set for production RPM builds"
-    echo "       For dev builds: SUPABASE_URL=https://placeholder PUBLISHABLE_KEY=placeholder bash build_rpm.sh"
-    exit 1
-fi
-
 trap 'echo "Cleaning up staging..."; rm -rf "${STAGING_DIR}"' EXIT
 
 if ! command -v fpm &>/dev/null; then
@@ -79,14 +72,11 @@ python3 -m pip install --quiet \
 rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/{pip,wheel,setuptools} \
        "${STAGING_DIR}${SITE_PACKAGES}"/*.dist-info/RECORD 2>/dev/null || true
 
-# Write _build_vars.py with baked-in Supabase configuration
+# Write _build_vars.py with Supabase URL
 _EDGEPULSE_PKG="${STAGING_DIR}${SITE_PACKAGES}/edgepulse"
 mkdir -p "${_EDGEPULSE_PKG}"
-cat > "${_EDGEPULSE_PKG}/_build_vars.py" <<BUILD_VARS
-# Auto-generated at package build time -- do not edit
-BUILD_SUPABASE_URL: str = "${SUPABASE_URL:-}"
-BUILD_PUBLISHABLE_KEY: str = "${PUBLISHABLE_KEY:-}"
-BUILD_VARS
+python3 "${REPO_ROOT}/packaging/scripts/seal_config.py" \
+    --output "${_EDGEPULSE_PKG}/_build_vars.py"
 
 # Entry-point launcher
 cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'

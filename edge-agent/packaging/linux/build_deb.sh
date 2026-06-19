@@ -93,6 +93,12 @@ echo "  Copying config and model files..."
 cp "${REPO_ROOT}/packaging/agent_config.json" "${STAGING_DIR}${CONFIG_DIR}/agent_config.json"
 cp -r "${REPO_ROOT}/src/models/." "${STAGING_DIR}${VAR_DIR}/models/"
 
+# Write _build_vars.py with encrypted Supabase URL
+_EDGEPULSE_PKG=$(find "${VENV_DIR}/lib" -type d -name site-packages | head -1)/edgepulse
+mkdir -p "${_EDGEPULSE_PKG}"
+python3 "${REPO_ROOT}/packaging/scripts/seal_config.py" \
+    --output "${_EDGEPULSE_PKG}/_build_vars.py"
+
 # Entry-point launcher
 cat > "${STAGING_DIR}${INSTALL_PREFIX}/bin/edge-agent" <<'WRAPPER'
 #!/bin/bash

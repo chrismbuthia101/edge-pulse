@@ -15,7 +15,6 @@
 !define PRODUCT_UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_DIR_REGKEY  "Software\${PRODUCT_PUBLISHER}\${PRODUCT_NAME}"
 !define INSTALL_DIR         "$PROGRAMFILES64\EdgePulse"
-!define DATA_DIR            "$COMMONAPPDATA\EdgePulse"
 !define SERVICE_NAME        "EdgePulseAgent"
 !define SERVICE_DISPLAY     "EdgePulse Monitoring Agent"
 !define EXE_NAME            "edge-agent.exe"
@@ -74,17 +73,20 @@ Section "EdgePulse Agent" SecMain
     ExecWait 'sc stop "${SERVICE_NAME}"' $0
     Sleep 2000
 
+    ReadEnvStr $R0 "ALLUSERSPROFILE"
+    StrCpy $R0 "$R0\EdgePulse"
+
     SetOutPath "$INSTDIR"
     File /r "${BUNDLE_DIR}\*.*"
 
-    CreateDirectory "${DATA_DIR}"
-    CreateDirectory "${DATA_DIR}\models"
-    CreateDirectory "${DATA_DIR}\data"
-    CreateDirectory "${DATA_DIR}\logs"
+    CreateDirectory "$R0"
+    CreateDirectory "$R0\models"
+    CreateDirectory "$R0\data"
+    CreateDirectory "$R0\logs"
 
-    ${IfNot} ${FileExists} "${DATA_DIR}\agent_config.json"
+    ${IfNot} ${FileExists} "$R0\agent_config.json"
         ${If} ${FileExists} "$INSTDIR\agent_config.json"
-            CopyFiles /SILENT "$INSTDIR\agent_config.json" "${DATA_DIR}\agent_config.json"
+            CopyFiles /SILENT "$INSTDIR\agent_config.json" "$R0\agent_config.json"
         ${EndIf}
     ${EndIf}
 
@@ -96,10 +98,11 @@ Section "EdgePulse Agent" SecMain
 
     ExecWait 'sc start "${SERVICE_NAME}"' $0
 
-    ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
-    ${IfNot} "$0" contains "$INSTDIR"
+    ReadRegStr $1 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
+    ${StrStr} $2 $1 $INSTDIR
+    ${If} $2 == ""
         WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" \
-            "Path" "$0;$INSTDIR"
+            "Path" "$1;$INSTDIR"
         SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
     ${EndIf}
 
@@ -146,10 +149,12 @@ Section "Uninstall"
     DeleteRegKey HKLM "${PRODUCT_UNINST_KEY}"
     DeleteRegKey HKLM "${PRODUCT_DIR_REGKEY}"
 
+    ReadEnvStr $R0 "ALLUSERSPROFILE"
+    StrCpy $R0 "$R0\EdgePulse"
     MessageBox MB_YESNO|MB_ICONQUESTION \
         "Do you also want to remove all EdgePulse data (logs, config, models)?$\r$\n$\r$\nChoose No to keep your configuration and logs." \
         IDNO skip_data_removal
-        RMDir /r "${DATA_DIR}"
+        RMDir /r "$R0"
     skip_data_removal:
 SectionEnd
 

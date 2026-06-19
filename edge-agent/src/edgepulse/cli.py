@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Callable, Optional
@@ -23,7 +24,11 @@ def _init_environment() -> None:
         from dotenv import load_dotenv
 
         env_path = Path(__file__).parent.parent.parent / ".env"
-        load_dotenv(env_path) if env_path.exists() else load_dotenv()
+        if env_path.exists():
+            load_dotenv(env_path)
+            os.chmod(env_path, 0o600)
+        else:
+            load_dotenv()
     except ImportError:
         pass
 
@@ -112,17 +117,7 @@ def _build_enroll_parser(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--supabase-url",
         type=str,
-        help="Override baked-in Supabase URL (advanced)",
-    )
-    p.add_argument(
-        "--publishable-key",
-        type=str,
-        help="Override baked-in Supabase publishable key (advanced)",
-    )
-    p.add_argument(
-        "--config",
-        type=str,
-        help="Path to enrollment.json config file (advanced, for automated deployment)",
+        help=argparse.SUPPRESS,
     )
 
 
@@ -192,43 +187,25 @@ def _handle_run(args: argparse.Namespace) -> int:
 
 def _handle_enroll(args: argparse.Namespace) -> int:
     from edgepulse.auth.enrollment import DeviceEnrollmentClient, EnrollmentConfig
+    from edgepulse.config.sealed_config import get_supabase_url, set_supabase_url_override
 
     credential_manager = CredentialManager()
     enrollment_client = DeviceEnrollmentClient(credential_manager)
 
-    try:
-        from edgepulse._build_vars import BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY  # type: ignore[import-not-found]
+    supabase_url = get_supabase_url()
 
-        baked_url, baked_key = BUILD_SUPABASE_URL, BUILD_PUBLISHABLE_KEY
-    except (ImportError, AttributeError):
-        baked_url, baked_key = "", ""
+    if args.supabase_url:
+        supabase_url = args.supabase_url
+        set_supabase_url_override(supabase_url)
 
     config: Optional[EnrollmentConfig] = None
 
-    if args.config:
-        try:
-            data = json.loads(Path(args.config).read_text())
-            config = EnrollmentConfig(
-                supabase_url=data.get("supabase_url", baked_url),
-                enrollment_token=data["enrollment_token"],
-                publishable_key=data.get(
-                    "publishable_key", data.get("supabase_anon_key", baked_key)
-                ),
-                device_hostname=data.get("device_hostname"),
-                device_os=data.get("device_os"),
-                agent_version=data.get("agent_version"),
-                timeout_seconds=data.get("timeout_seconds", 30),
-            )
-        except Exception as e:
-            print(f"Error reading config file {args.config}: {e}")
-
-    config = config or enrollment_client.read_enrollment_config()
+    config = enrollment_client.read_enrollment_config()
 
     if config is None and args.token:
         config = EnrollmentConfig(
-            supabase_url=args.supabase_url or baked_url,
+            supabase_url=supabase_url,
             enrollment_token=args.token,
-            publishable_key=args.publishable_key or baked_key,
         )
 
     if not config:
@@ -294,7 +271,12 @@ def _handle_status(args: argparse.Namespace) -> int:
             print("  Enrollment  : ✓ Enrolled")
             print(f"  Device ID   : {creds.device_id}")
             url = creds.supabase_url or "(stored in credentials)"
-            print(f"  Backend URL : {url}")
+            if url and url.startswith("http"):
+                parsed = url.split("/")
+                masked = "//".join(parsed[:2]) + "/***"
+                print(f"  Backend URL : {masked}")
+            else:
+                print(f"  Backend URL : {url}")
         else:
             print("  Enrollment  : ✗ Not enrolled")
             cli_path = PathManager().base_dir / "venv" / "bin" / "edge-agent"

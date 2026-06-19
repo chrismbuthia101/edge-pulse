@@ -83,6 +83,12 @@ try {
 }
 
 if (-not $SkipPyInstaller) {
+    Write-Step "Generating encrypted build config..."
+    $buildVars = Join-Path $SrcRoot "edgepulse\_build_vars.py"
+    & python (Join-Path $RepoRoot "packaging\scripts\seal_config.py") --output $buildVars
+    if ($LASTEXITCODE -ne 0) { throw "seal_config.py failed — is SUPABASE_URL set?" }
+    Write-OK "Encrypted build config generated"
+
     Write-Step "Running PyInstaller..."
     Push-Location $RepoRoot
     try {
@@ -117,6 +123,12 @@ if (-not $SkipPyInstaller) {
         Write-Step "Copying default config into bundle..."
         Copy-Item $sourceConfig $bundleConfig -Force
         Write-OK "Default config copied to bundle"
+    }
+
+    # Clean up generated build vars from source tree
+    if (Test-Path $buildVars) {
+        Remove-Item $buildVars -Force
+        Write-OK "Cleaned up generated _build_vars.py"
     }
 }
 

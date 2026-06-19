@@ -50,6 +50,9 @@ Thumbs.db
 .env.local
 .env.production
 
+# Generated build vars
+_build_vars.py
+
 # Temporary files
 *.tmp
 *.temp

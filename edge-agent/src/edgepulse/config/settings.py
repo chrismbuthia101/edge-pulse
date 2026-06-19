@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,7 +30,6 @@ class CollectionConfig(BaseModel):
     interval: int = Field(default=60, ge=5, le=3600)
     window_1min: int = Field(default=60, ge=10)
     window_5min: int = Field(default=300, ge=60)
-    window_15min: int = Field(default=900, ge=300)
     enable_process_monitoring: bool = Field(default=True)
     enable_network_monitoring: bool = Field(default=True)
 
@@ -45,10 +44,6 @@ class DetectionConfig(BaseModel):
     use_ensemble: bool = Field(default=True)
     isolation_forest_n_estimators: int = Field(default=100, ge=10, le=1000)
     isolation_forest_contamination: str = Field(default="auto")
-    autoencoder_encoding_dim: int = Field(default=8, ge=2, le=64)
-    autoencoder_hidden_layers: List[int] = Field(default=[64, 32, 16])
-    autoencoder_learning_rate: float = Field(default=0.001, ge=0.0001, le=0.1)
-    autoencoder_use_tflite: bool = Field(default=False)
 
 
 class PrivacyConfig(BaseModel):

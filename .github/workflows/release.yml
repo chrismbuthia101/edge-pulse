@@ -44,7 +44,6 @@ jobs:
     container: fedora:40
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      PUBLISHABLE_KEY: ${{ secrets.PUBLISHABLE_KEY }}
     steps:
       - run: dnf install -y python3 python3-pip ruby rpm-build && gem install fpm
       - uses: actions/checkout@v4

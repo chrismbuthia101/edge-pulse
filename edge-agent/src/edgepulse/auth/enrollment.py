@@ -24,19 +24,10 @@ class _EnrollmentResponse:
 class EnrollmentConfig:
     supabase_url: str
     enrollment_token: str
-    publishable_key: Optional[str] = None
     device_hostname: Optional[str] = None
     device_os: Optional[str] = None
     agent_version: Optional[str] = None
     timeout_seconds: int = 30
-
-    def __repr__(self):
-        return (
-            f"EnrollmentConfig(supabase_url={self.supabase_url!r}, "
-            f"enrollment_token=<redacted>, "
-            f"publishable_key={'<set>' if self.publishable_key else None!r}, "
-            f"device_hostname={self.device_hostname!r})"
-        )
 
 
 class DeviceEnrollmentClient:
@@ -61,7 +52,6 @@ class DeviceEnrollmentClient:
             cfg = EnrollmentConfig(
                 supabase_url=data["supabase_url"],
                 enrollment_token=data["enrollment_token"],
-                publishable_key=data.get("publishable_key"),
                 device_hostname=data.get("device_hostname"),
                 device_os=data.get("device_os"),
                 agent_version=data.get("agent_version"),
@@ -111,10 +101,8 @@ class DeviceEnrollmentClient:
             headers = {
                 "Content-Type": "application/json",
                 "User-Agent": f"EdgePulseAgent/{agent_version}",
+                "Authorization": f"Bearer {config.enrollment_token}",
             }
-
-            if config.publishable_key:
-                headers["Authorization"] = f"Bearer {config.publishable_key}"
 
             async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
                 response = await client.post(
@@ -171,7 +159,7 @@ class DeviceEnrollmentClient:
 
             self.delete_enrollment_config()
 
-            self._update_agent_config_device_id(response.device_id, supabase_url)
+            self._update_agent_config_device_id(response.device_id)
 
             logger.info("enrollment_complete", device_id=response.device_id)
             return True
@@ -180,9 +168,7 @@ class DeviceEnrollmentClient:
             logger.error("enrollment_complete_error", error=str(e))
             return False
 
-    def _update_agent_config_device_id(
-        self, device_id: str, supabase_url: Optional[str] = None
-    ) -> bool:
+    def _update_agent_config_device_id(self, device_id: str) -> bool:
         try:
             from edgepulse.utils.path_manager import PathManager
 
@@ -195,11 +181,6 @@ class DeviceEnrollmentClient:
                 config = json.load(f)
 
             config["device_id"] = device_id
-
-            if supabase_url:
-                if "sync" not in config:
-                    config["sync"] = {}
-                config["sync"]["supabase_url"] = supabase_url
 
             with open(config_path, "w") as f:
                 json.dump(config, f, indent=2)

@@ -1,4 +1,4 @@
-// EdgePulse Enrollment Function v3.0.0
+// EdgePulse Enrollment Function v3.1.0
 import { serve } from 'std/http/server.ts'
 import { crypto } from 'std/crypto/mod.ts'
 import { createClient } from '@supabase/supabase-js'
@@ -43,6 +43,15 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Enrollment token required' }),
         { status: 400, headers: corsHeaders }
+      )
+    }
+
+    const authHeader = req.headers.get('authorization')
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    if (!bearerToken || bearerToken !== enrollmentData.enrollment_token) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid authorization' }),
+        { status: 401, headers: corsHeaders }
       )
     }
 

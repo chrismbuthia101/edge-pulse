@@ -15,7 +15,7 @@ Device enrollment registers an EdgePulse agent with the EdgePulse cloud backend.
 
 ### Quick Start (Recommended)
 
-If `supabase_url` and `publishable_key` were baked in at build time:
+If `supabase_url` was baked in at build time:
 
 ```bash
 sudo edge-agent enroll <ENROLLMENT_TOKEN>
@@ -23,12 +23,10 @@ sudo edge-agent enroll <ENROLLMENT_TOKEN>
 
 ### Advanced: CLI flags
 
-Override baked-in values:
+Override baked-in values (hidden flag, for debugging):
 
 ```bash
-sudo edge-agent enroll <TOKEN> \
-  --supabase-url "https://your-project.supabase.co" \
-  --publishable-key "sb_publishable_..."
+sudo edge-agent enroll <TOKEN> --supabase-url "https://your-project.supabase.co"
 ```
 
 ### Automated Deployment
@@ -38,8 +36,7 @@ Create `/etc/edgepulse/enrollment.json`:
 ```json
 {
   "supabase_url": "https://your-project.supabase.co",
-  "enrollment_token": "your-enrollment-token",
-  "publishable_key": "your-publishable-key"
+  "enrollment_token": "your-enrollment-token"
 }
 ```
 
@@ -104,7 +101,7 @@ sudo systemctl status edgepulse-agent
 
 **POST** `{supabase_url}/functions/v1/enroll-device`
 
-**Header:** `Authorization: Bearer {sb_publishable_key}`
+**Header:** `Authorization: Bearer {enrollment_token}`
 
 Request:
 
