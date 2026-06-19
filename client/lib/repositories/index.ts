@@ -46,6 +46,7 @@ export type {
   SyncQueueQueryOptions,
   SyncQueueSubscriptionCallbacks
 } from '@/lib/repositories/sync-queue-repository';
+export type { DeviceSyncQueueSummary } from '@/lib/supabase/types';
 
 export { DeviceRepository } from '@/lib/repositories/device-repository';
 export type {
@@ -58,6 +59,10 @@ export type {
 export { HealthRepository } from '@/lib/repositories/health-repository';
 
 export { LogsRepository } from '@/lib/repositories/logs-repository';
+export type { AuditLogQueryOptions } from '@/lib/repositories/logs-repository';
+
+export { AuditLogRepository } from '@/lib/repositories/audit-log-repository';
+export type { AuditLogCreateInput } from '@/lib/repositories/audit-log-repository';
 
 export { ReportRepository } from '@/lib/repositories/report-repository';
 export type {
@@ -85,7 +90,7 @@ export { ForensicRepository } from '@/lib/repositories/forensic-repository';
 export type { ExportQuery } from '@/lib/repositories/forensic-repository';
 
 export { RetentionRepository } from '@/lib/repositories/retention-repository';
-export type { RetentionSetting, StorageUsage } from '@/lib/repositories/retention-repository';
+export type { StorageUsage } from '@/lib/repositories/retention-repository';
 
 export { ResilienceRepository } from '@/lib/repositories/resilience-repository';
 export type {
@@ -94,3 +99,11 @@ export type {
   OfflineEfficiencyMetrics,
   ResilienceQueryOptions
 } from '@/lib/repositories/resilience-repository';
+
+export { NotificationRepository } from '@/lib/repositories/notification-repository';
+export type {
+  NotificationQueryOptions,
+  NotificationSubscriptionCallbacks
+} from '@/lib/repositories/notification-repository';
+
+export { OrganizationRepository } from '@/lib/repositories/organization-repository';

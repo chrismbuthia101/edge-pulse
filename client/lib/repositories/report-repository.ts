@@ -12,10 +12,9 @@ export interface ReportMetrics {
   alertsBySeverity: Record<string, number>;
   alertsByDevice: Record<string, number>;
   recentAlerts: Array<{
-    alert_id: string;
+    id: string;
     severity: string;
     device_id: string;
-    device_name: string;
     created_at: string;
     explanation_json: unknown;
   }>;
@@ -26,9 +25,9 @@ export interface ReportQueryOptions extends QueryOptions {
   endDate?: string;
 }
 
-export class ReportRepository extends BaseRepository<unknown> {
+export class ReportRepository extends BaseRepository {
   constructor() {
-    super('alert_records');
+    super('alerts');
   }
 
   async getReportMetrics(options: ReportQueryOptions = {}): Promise<ReportMetrics> {
@@ -38,11 +37,10 @@ export class ReportRepository extends BaseRepository<unknown> {
       cacheKey,
       async () => {
         let query = this.supabase
-          .from('alert_records')
+          .from('alerts')
           .select('*')
           .order('created_at', { ascending: false });
 
-        // Only add date filters if they are provided
         if (options.startDate) {
           query = query.gte('created_at', options.startDate);
         }
@@ -51,11 +49,10 @@ export class ReportRepository extends BaseRepository<unknown> {
         }
 
         const { data: alerts, error: alertsError } = await query;
-
         if (alertsError) throw alertsError;
 
         const { data: devices, error: devicesError } = await this.supabase
-          .from('device_registry')
+          .from('devices')
           .select('*');
 
         if (devicesError) throw devicesError;
@@ -64,26 +61,25 @@ export class ReportRepository extends BaseRepository<unknown> {
         const devicesList = devices || [];
 
         const totalAlerts = alertsList.length;
-        const criticalAlerts = alertsList.filter(a => a.severity === 'critical').length;
-        const activeDevices = devicesList.filter(d => d.is_active).length;
+        const criticalAlerts = alertsList.filter((a: { severity: string }) => a.severity === 'critical').length;
+        const activeDevices = devicesList.filter((d: { is_active: boolean }) => d.is_active).length;
         const totalDevices = devicesList.length;
 
-        const alertsBySeverity = alertsList.reduce((acc: Record<string, number>, alert) => {
+        const alertsBySeverity = alertsList.reduce((acc: Record<string, number>, alert: { severity: string }) => {
           const severity = alert.severity || 'unknown';
           acc[severity] = (acc[severity] || 0) + 1;
           return acc;
         }, {});
 
-        const alertsByDevice = alertsList.reduce((acc: Record<string, number>, alert) => {
+        const alertsByDevice = alertsList.reduce((acc: Record<string, number>, alert: { device_id: string }) => {
           const deviceId = alert.device_id || 'unknown';
           acc[deviceId] = (acc[deviceId] || 0) + 1;
           return acc;
         }, {});
 
-        const recentAlerts = alertsList.slice(0, 10).map(alert => ({
-          alert_id: alert.alert_id,
+        const recentAlerts = alertsList.slice(0, 10).map((alert: { id: string; severity: string; device_id: string; created_at: string; explanation_json: unknown }) => ({
+          id: alert.id,
           severity: alert.severity || 'unknown',
-          device_name: alert.device_name || 'unknown',
           device_id: alert.device_id || 'unknown',
           created_at: alert.created_at,
           explanation_json: alert.explanation_json,
@@ -94,13 +90,13 @@ export class ReportRepository extends BaseRepository<unknown> {
           criticalAlerts,
           activeDevices,
           totalDevices,
-          avgResponseTime: 0, // TODO: Calculate actual response time
+          avgResponseTime: 0,
           alertsBySeverity,
           alertsByDevice,
           recentAlerts,
         };
       },
-      60 * 1000 // 1 minute cache
+      60 * 1000
     );
   }
 

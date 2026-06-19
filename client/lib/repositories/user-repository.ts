@@ -2,67 +2,39 @@ import {
   BaseRepository,
   type QueryOptions,
 } from '@/lib/repositories/base-repository';
-import {
-  parseSearchQuery,
-} from '@/lib/repositories/query-utils';
-
-export interface AnalystUser {
-  user_id: string;
-  full_name: string;
-  role: "ANALYST" | "ADMINISTRATOR";
-  department: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  email?: string;
-  approval_status?: "PENDING" | "APPROVED" | "REJECTED";
-  approved_by?: string;
-  approved_at?: string;
-  rejection_reason?: string;
-}
+import type { UserRow } from '@/lib/supabase/types/database';
+import type { UserRole, AccountStatus } from '@/lib/supabase/types/shared';
 
 export interface UserQueryOptions extends QueryOptions {
-  role?: "ANALYST" | "ADMINISTRATOR";
-  isActive?: boolean;
-  department?: string;
+  role?: UserRole | UserRole[];
+  accountStatus?: AccountStatus | AccountStatus[];
+  organizationId?: string;
   search?: string;
-  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
 }
 
 export interface UserSubscriptionCallbacks {
-  onInsert?: (user: AnalystUser) => void;
-  onUpdate?: (user: AnalystUser) => void;
-  onDelete?: (user: AnalystUser) => void;
+  onInsert?: (user: UserRow) => void;
+  onUpdate?: (user: UserRow) => void;
+  onDelete?: (user: UserRow) => void;
   onError?: (error: unknown) => void;
 }
 
-export class UserRepository extends BaseRepository<AnalystUser> {
+export type AnalystUser = UserRow;
+
+export class UserRepository extends BaseRepository<UserRow> {
   constructor() {
-    super('analyst_users');
+    super('users');
   }
 
   private buildUserQuery(options: UserQueryOptions = {}) {
     const standardFilters: Record<string, unknown> = {};
 
     if (options.role) standardFilters.role = options.role;
-    if (options.isActive !== undefined) standardFilters.is_active = options.isActive;
-    if (options.department) standardFilters.department = options.department;
-    if (options.approvalStatus) standardFilters.approval_status = options.approvalStatus;
+    if (options.accountStatus) standardFilters.account_status = options.accountStatus;
+    if (options.organizationId) standardFilters.organization_id = options.organizationId;
 
     let query = this.buildQuery({
-      select: options.select ?? `
-        user_id,
-        full_name,
-        role,
-        department,
-        is_active,
-        approval_status,
-        approved_by,
-        approved_at,
-        rejection_reason,
-        created_at,
-        updated_at
-      `.trim(),
+      select: options.select ?? '*',
       filters: standardFilters,
       orderBy: options.orderBy,
       limit: options.limit,
@@ -70,22 +42,16 @@ export class UserRepository extends BaseRepository<AnalystUser> {
     });
 
     if (options.search) {
-      const searchFilters = parseSearchQuery(options.search, ['full_name', 'department']);
-
-      const searchConditions = searchFilters.map(filter => {
-        if (filter.operator === 'ilike') {
-          return `${filter.field}.ilike.%${filter.value}%`;
-        }
-        return `${filter.field}.${filter.operator}.${filter.value}`;
-      }).join(',');
-
-      query = query.or(searchConditions);
+      const s = options.search.replace(/[%_]/g, '\\$&');
+      query = query.or(
+        `full_name.ilike.%${s}%`
+      );
     }
 
     return query;
   }
 
-  async findUsers(options: UserQueryOptions = {}): Promise<AnalystUser[]> {
+  async findUsers(options: UserQueryOptions = {}): Promise<UserRow[]> {
     const cacheKey = options.cacheKey ?? `users_${JSON.stringify(options)}`;
 
     return this.cachedQuery(
@@ -93,43 +59,31 @@ export class UserRepository extends BaseRepository<AnalystUser> {
       async () => {
         const { data, error } = await this.buildUserQuery(options);
         if (error) throw this.handleError(error);
-        return (data ?? []) as unknown as AnalystUser[];
+        return (data ?? []) as unknown as UserRow[];
       },
       options.cacheTTL
     );
   }
 
-  async getUserById(id: string): Promise<AnalystUser | null> {
+  async getUserById(id: string): Promise<UserRow | null> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.getClient()
         .from(this.tableName)
-        .select(`
-          user_id,
-          full_name,
-          role,
-          department,
-          is_active,
-          approval_status,
-          approved_by,
-          approved_at,
-          rejection_reason,
-          created_at,
-          updated_at
-        `)
-        .eq('user_id', id)
+        .select('*')
+        .eq('id', id)
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') return null;
         throw this.handleError(error);
       }
-      return data as unknown as AnalystUser;
+      return data as unknown as UserRow;
     } catch (error) {
       throw this.handleError(error);
     }
   }
 
-  async getUsersByRole(role: "ANALYST" | "ADMINISTRATOR"): Promise<AnalystUser[]> {
+  async getUsersByRole(role: UserRole): Promise<UserRow[]> {
     return this.findUsers({
       role,
       orderBy: { column: 'created_at', ascending: false },
@@ -137,167 +91,34 @@ export class UserRepository extends BaseRepository<AnalystUser> {
     });
   }
 
-  async getActiveUsers(): Promise<AnalystUser[]> {
-    return this.findUsers({
-      isActive: true,
+  async getActiveUsers(organizationId?: string): Promise<UserRow[]> {
+    const options: UserQueryOptions = {
+      accountStatus: 'ACTIVE',
       orderBy: { column: 'created_at', ascending: false },
       cacheTTL: 60 * 1000,
+    };
+    if (organizationId) options.organizationId = organizationId;
+    return this.findUsers(options);
+  }
+
+  async getOrgUsers(organizationId: string): Promise<UserRow[]> {
+    return this.findUsers({
+      organizationId,
+      orderBy: { column: 'full_name', ascending: true },
+      cacheTTL: 2 * 60 * 1000,
     });
   }
 
-  async searchUsers(query: string, options: UserQueryOptions = {}): Promise<AnalystUser[]> {
+  async searchUsers(query: string, options: UserQueryOptions = {}): Promise<UserRow[]> {
     return this.findUsers({ ...options, search: query });
   }
 
-  async updateUserStatus(id: string, isActive: boolean): Promise<AnalystUser> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq('user_id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+  async updateUserStatus(id: string, accountStatus: AccountStatus): Promise<UserRow> {
+    return this.update(id, { account_status: accountStatus } as Partial<UserRow>);
   }
 
-  async createUser(userData: Omit<AnalystUser, 'user_id' | 'created_at' | 'updated_at'>): Promise<AnalystUser> {
-    const now = new Date().toISOString();
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .insert({ ...userData, created_at: now, updated_at: now })
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    try {
-      const { error } = await this.supabase
-        .from(this.tableName)
-        .delete()
-        .eq('user_id', id);
-      if (error) throw error;
-      this.invalidateCache();
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async getPendingUsers(): Promise<AnalystUser[]> {
-    return this.findUsers({
-      approvalStatus: 'PENDING',
-      isActive: true,
-      orderBy: { column: 'created_at', ascending: false },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async approveUser(
-    userId: string,
-    role: 'ANALYST' | 'ADMINISTRATOR',
-    approvedBy: string
-  ): Promise<AnalystUser> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          role,
-          approval_status: 'APPROVED',
-          approved_by: approvedBy,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rejection_reason: null,
-        })
-        .eq('user_id', userId)
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async rejectUser(
-    userId: string,
-    rejectionReason: string,
-    rejectedBy: string
-  ): Promise<AnalystUser> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          approval_status: 'REJECTED',
-          approved_by: rejectedBy,
-          approved_at: new Date().toISOString(),
-          rejection_reason: rejectionReason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async getUsersByApprovalStatus(status: 'PENDING' | 'APPROVED' | 'REJECTED'): Promise<AnalystUser[]> {
-    return this.findUsers({
-      approvalStatus: status,
-      orderBy: { column: 'created_at', ascending: false },
-      cacheTTL: 60 * 1000,
-    });
-  }
-
-  async getApprovedUsers(): Promise<AnalystUser[]> {
-    return this.getUsersByApprovalStatus('APPROVED');
-  }
-
-  async getRejectedUsers(): Promise<AnalystUser[]> {
-    return this.getUsersByApprovalStatus('REJECTED');
-  }
-
-  async reapproveUser(
-    userId: string,
-    role: 'ANALYST' | 'ADMINISTRATOR',
-    approvedBy: string
-  ): Promise<AnalystUser> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .update({
-          role,
-          approval_status: 'APPROVED',
-          approved_by: approvedBy,
-          approved_at: new Date().toISOString(),
-          is_active: true,
-          updated_at: new Date().toISOString(),
-          rejection_reason: null,
-        })
-        .eq('user_id', userId)
-        .select()
-        .single();
-      if (error) throw error;
-      this.invalidateCache();
-      return data as unknown as AnalystUser;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+  async updateUserRole(id: string, role: UserRole): Promise<UserRow> {
+    return this.update(id, { role } as Partial<UserRow>);
   }
 
   subscribeToUsers(
@@ -308,7 +129,7 @@ export class UserRepository extends BaseRepository<AnalystUser> {
 
     this.subscribe(channelName, filters, (payload: unknown) => {
       try {
-        const p = payload as { eventType: string; new?: AnalystUser; old?: AnalystUser };
+        const p = payload as { eventType: string; new?: UserRow; old?: UserRow };
         switch (p.eventType) {
           case 'INSERT': callbacks.onInsert?.(p.new!); break;
           case 'UPDATE': callbacks.onUpdate?.(p.new!); break;

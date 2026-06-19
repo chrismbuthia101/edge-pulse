@@ -1,30 +1,21 @@
 import { BaseRepository } from '@/lib/repositories/base-repository';
-import type { DeviceHealth, SystemHealth } from '@/lib/supabase/types';
-import type { Database } from '@/lib/supabase/types/database';
+import type { DeviceHealthSnapshot, SystemHealth } from '@/lib/supabase/types';
+import type { DeviceHealthRow } from '@/lib/supabase/types/database';
 
-type DeviceHealthSnapshot = Database['public']['Tables']['device_health_snapshots']['Row'];
-
-interface DeviceRegistryJoin {
-  name?: string;
-  os?: string;
-  agent_version?: string;
-  is_active?: boolean;
-  last_seen?: string;
-}
-
-export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
+export class HealthRepository extends BaseRepository<DeviceHealthRow> {
   constructor() {
-    super('device_health_snapshots');
+    super('device_health');
+    this.schema = 'telemetry';
   }
 
-  async getDeviceHealth(options?: { limit?: number }): Promise<DeviceHealth[]> {
+  async getDeviceHealth(options?: { limit?: number; organizationId?: string }): Promise<DeviceHealthSnapshot[]> {
     const limit = options?.limit || 100;
 
-    const { data, error } = await this.supabase
+    let query = this.getClient()
       .from(this.tableName)
       .select(`
         *,
-        device_registry:device_id (
+        devices:device_id (
           name,
           os,
           agent_version,
@@ -35,11 +26,17 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
       .order('created_at', { ascending: false })
       .limit(limit);
 
+    if (options?.organizationId) {
+      query = query.eq('organization_id', options.organizationId);
+    }
+
+    const { data, error } = await query;
+
     if (error) throw this.handleError(error);
 
     const seenDevices = new Set<string>();
     const uniqueRows = (data || []).filter((row: unknown) => {
-      const snapshot = row as DeviceHealthSnapshot;
+      const snapshot = row as DeviceHealthRow;
       if (seenDevices.has(snapshot.device_id)) {
         return false;
       }
@@ -48,16 +45,16 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
     });
 
     return uniqueRows.map(row => this.transformDeviceHealth(
-      row as DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
+      row as DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
     ));
   }
 
-  async getDeviceById(deviceId: string): Promise<DeviceHealth | null> {
-    const { data, error } = await this.supabase
+  async getDeviceById(deviceId: string): Promise<DeviceHealthSnapshot | null> {
+    const { data, error } = await this.getClient()
       .from(this.tableName)
       .select(`
         *,
-        device_registry:device_id (
+        devices:device_id (
           name,
           os,
           agent_version,
@@ -76,44 +73,45 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
     }
 
     return this.transformDeviceHealth(
-      data as DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
+      data as DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
     );
   }
 
-  async getLatestHealthSnapshot(deviceId: string): Promise<DeviceHealth | null> {
+  async getLatestHealthSnapshot(deviceId: string): Promise<DeviceHealthSnapshot | null> {
     return this.getDeviceById(deviceId);
   }
 
   private transformDeviceHealth(
-    snapshot: DeviceHealthSnapshot & { device_registry?: DeviceRegistryJoin | null }
-  ): DeviceHealth {
-    const reg = snapshot.device_registry;
+    snapshot: DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
+  ): DeviceHealthSnapshot {
+    const dev = snapshot.devices;
     return {
+      id: snapshot.id,
       device_id: snapshot.device_id,
-      hostname: reg?.name || 'Unknown',
-      operating_system: reg?.os || 'Unknown',
-      agent_version: reg?.agent_version || 'Unknown',
-      last_seen_utc: reg?.last_seen || snapshot.created_at,
-      is_active: reg?.is_active ?? false,
-      status: snapshot.status as 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR',
-      cpu_usage: Number(snapshot.cpu_usage) || 0,
-      memory_usage: Number(snapshot.memory_usage) || 0,
-      disk_usage: Number(snapshot.disk_usage) || 0,
-      network_status: snapshot.network_status ?? false,
-      alerts_last_24h: snapshot.alerts_last_24h || 0,
-      uptime_percentage: Number(snapshot.uptime_percentage) || 0,
-      response_time_ms: snapshot.response_time_ms || 0,
-      error_count: snapshot.error_count || 0,
-      warning_count: snapshot.warning_count || 0,
-      last_restart: snapshot.last_restart || null,
+      status: snapshot.status,
+      cpu_usage: Number(snapshot.cpu_usage) || null,
+      memory_usage: Number(snapshot.memory_usage) || null,
+      disk_usage: Number(snapshot.disk_usage) || null,
+      network_status: snapshot.network_status,
+      alerts_last_24h: snapshot.alerts_last_24h,
+      uptime_percentage: Number(snapshot.uptime_percentage) || null,
+      response_time_ms: snapshot.response_time_ms,
+      error_count: snapshot.error_count,
+      warning_count: snapshot.warning_count,
+      last_restart: snapshot.last_restart,
+      organization_id: snapshot.organization_id,
+      created_at: snapshot.created_at,
+      integrity_hash: snapshot.integrity_hash,
     };
   }
 
-  async getSystemHealth(): Promise<SystemHealth> {
+  async getSystemHealth(organizationId?: string): Promise<SystemHealth> {
+    const cacheKey = `system_health_${organizationId || 'all'}`;
+
     return this.cachedQuery(
-      'system_health',
+      cacheKey,
       async () => {
-        const deviceHealth = await this.getDeviceHealth({ limit: 1000 });
+        const deviceHealth = await this.getDeviceHealth({ limit: 1000, organizationId });
 
         if (deviceHealth.length === 0) {
           return {
@@ -140,9 +138,9 @@ export class HealthRepository extends BaseRepository<DeviceHealthSnapshot> {
         const warningCount = deviceHealth.filter(d => d.status === 'WARNING').length;
         const errorCount = deviceHealth.filter(d => d.status === 'ERROR').length;
 
-        const totalCpu = deviceHealth.reduce((sum, d) => sum + d.cpu_usage, 0);
-        const totalMemory = deviceHealth.reduce((sum, d) => sum + d.memory_usage, 0);
-        const totalDisk = deviceHealth.reduce((sum, d) => sum + d.disk_usage, 0);
+        const totalCpu = deviceHealth.reduce((sum, d) => sum + (d.cpu_usage ?? 0), 0);
+        const totalMemory = deviceHealth.reduce((sum, d) => sum + (d.memory_usage ?? 0), 0);
+        const totalDisk = deviceHealth.reduce((sum, d) => sum + (d.disk_usage ?? 0), 0);
         const totalAlerts = deviceHealth.reduce((sum, d) => sum + d.alerts_last_24h, 0);
 
         const n = deviceHealth.length;

@@ -51,8 +51,14 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
   protected supabase: AnySupabaseClient = createClient();
   protected cache = new Map<string, CacheEntry>();
   protected subscriptions = new Map<string, RealtimeChannel>();
+  protected schema: string = 'public';
 
   constructor(protected tableName: string) { }
+
+  protected getClient(): SupabaseClient<any> {
+    if (this.schema === 'public') return this.supabase;
+    return this.supabase.schema(this.schema) as unknown as SupabaseClient<any>;
+  }
 
   // ─── Caching ────────────────────────────────────────────────────────────────
 
@@ -90,7 +96,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
   // ─── Query builder ──────────────────────────────────────────────────────────
 
   protected buildQuery(options: QueryOptions = {}) {
-    let query = this.supabase
+    let query = this.getClient()
       .from(this.tableName)
       .select(options.select ?? "*");
 
@@ -218,7 +224,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
 
   async create(data: Partial<T>): Promise<T> {
     try {
-      const { data: result, error } = await this.supabase
+      const { data: result, error } = await this.getClient()
         .from(this.tableName)
         .insert(data)
         .select()
@@ -234,7 +240,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
 
   async update(id: string, data: Partial<T>): Promise<T> {
     try {
-      const { data: result, error } = await this.supabase
+      const { data: result, error } = await this.getClient()
         .from(this.tableName)
         .update(data)
         .eq("id", id)
@@ -254,7 +260,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
     data: Partial<T>
   ): Promise<T[]> {
     try {
-      let query = this.supabase.from(this.tableName).update(data);
+      let query = this.getClient().from(this.tableName).update(data);
 
       for (const [key, value] of Object.entries(filters)) {
         query = Array.isArray(value)
@@ -273,7 +279,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
 
   async delete(id: string): Promise<void> {
     try {
-      const { error } = await this.supabase
+      const { error } = await this.getClient()
         .from(this.tableName)
         .delete()
         .eq("id", id);
@@ -320,7 +326,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
         "postgres_changes",
         {
           event: "*",
-          schema: "public",
+          schema: this.schema,
           table: this.tableName,
           filter: this.buildFilterString(filters),
         },

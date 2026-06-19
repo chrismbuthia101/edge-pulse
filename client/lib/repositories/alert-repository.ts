@@ -14,10 +14,10 @@ import type {
 const ACTIVE_STATUSES: AlertStatus[] = ['PENDING', 'ACKNOWLEDGED', 'INVESTIGATED'];
 
 const DEFAULT_ALERT_SELECT = `
-  alert_id,
+  id,
   device_id,
-  device_name,
-  telemetry_event_id,
+  parent_alert_id,
+  event_id,
   feature_vector_id,
   anomaly_score_id,
   title,
@@ -28,12 +28,12 @@ const DEFAULT_ALERT_SELECT = `
   confidence,
   anomaly_score,
   model_id,
-  collection_agent_version,
   inference_latency_ms,
   telemetry_source,
+  alert_type,
+  detector_type,
   detection_window_start,
   detection_window_end,
-  detection_window_minutes,
   net_destination_ip,
   net_destination_port,
   net_protocol,
@@ -41,6 +41,11 @@ const DEFAULT_ALERT_SELECT = `
   proc_name,
   proc_privilege_level,
   proc_pid,
+  source_ip,
+  mitre_technique_id,
+  tags,
+  organization_id,
+  integrity_hash,
   created_at,
   updated_at,
   acknowledged_at,
@@ -54,7 +59,7 @@ const DEFAULT_ALERT_SELECT = `
 `.trim();
 
 const METRICS_SELECT =
-  'alert_id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
+  'id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
 
 export interface AlertQueryOptions extends QueryOptions {
   deviceId?: string;
@@ -94,7 +99,7 @@ export interface AlertSubscriptionCallbacks {
 
 export class AlertRepository extends BaseRepository<Alert> {
   constructor() {
-    super('alert_records');
+    super('alerts');
   }
 
   private buildAlertQuery(options: AlertQueryOptions) {
@@ -122,18 +127,11 @@ export class AlertRepository extends BaseRepository<Alert> {
     if (options.search) {
       const s = options.search.replace(/[%_]/g, '\\$&');
       query = query.or(
-        `title.ilike.%${s}%,description.ilike.%${s}%,device_name.ilike.%${s}%,category.ilike.%${s}%`
+        `title.ilike.%${s}%,description.ilike.%${s}%,category.ilike.%${s}%`
       );
     }
 
     return query;
-  }
-
-  private normaliseAlerts(rows: unknown[]): Alert[] {
-    return (rows as Record<string, unknown>[]).map((row) => ({
-      ...row,
-      id: row['alert_id'] as string,
-    })) as unknown as Alert[];
   }
 
   async findAlerts(options: AlertQueryOptions = {}): Promise<Alert[]> {
@@ -144,7 +142,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       async () => {
         const { data, error } = await this.buildAlertQuery(options);
         if (error) throw this.handleError(error);
-        return this.normaliseAlerts(data ?? []);
+        return (data ?? []) as unknown as Alert[];
       },
       options.cacheTTL
     );
@@ -166,27 +164,14 @@ export class AlertRepository extends BaseRepository<Alert> {
       return this.findAlertsWithSearchPaginated(options);
     }
 
-    const offset = (page - 1) * limit;
-
-    const { count, error: countError } = await this.supabase
-      .from(this.tableName)
-      .select('*', { count: 'exact', head: true });
-    if (countError) throw this.handleError(countError);
-
-    const { data, error } = await this.buildAlertQuery({ ...queryOptions, limit, offset });
-    if (error) throw this.handleError(error);
-
-    const totalPages = Math.ceil((count ?? 0) / limit);
-
-    return {
-      data: this.normaliseAlerts(data ?? []),
-      count: count ?? 0,
+    return this.findPaginated({
       page,
       limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
-    };
+      select: queryOptions.select ?? DEFAULT_ALERT_SELECT,
+      filters,
+      orderBy: queryOptions.orderBy,
+      cacheTTL: queryOptions.cacheTTL
+    });
   }
 
   private async findAlertsWithSearchPaginated(
@@ -209,7 +194,7 @@ export class AlertRepository extends BaseRepository<Alert> {
     const totalPages = Math.ceil((count ?? 0) / limit);
 
     return {
-      data: this.normaliseAlerts(data ?? []),
+      data: (data ?? []) as unknown as Alert[],
       count: count ?? 0,
       page,
       limit,
@@ -285,12 +270,12 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update(updates)
-        .eq('alert_id', id)
+        .eq('id', id)
         .select(DEFAULT_ALERT_SELECT)
         .single();
       if (error) throw error;
       this.invalidateCache();
-      return this.normaliseAlerts([data])[0];
+      return data as unknown as Alert;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -301,12 +286,12 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update({ read: true })
-        .eq('alert_id', id)
+        .eq('id', id)
         .select(DEFAULT_ALERT_SELECT)
         .single();
       if (error) throw error;
       this.invalidateCache();
-      return this.normaliseAlerts([data])[0];
+      return data as unknown as Alert;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -317,7 +302,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { error } = await this.supabase
         .from(this.tableName)
         .update({ read: true })
-        .in('alert_id', ids);
+        .in('id', ids);
       if (error) throw error;
       this.invalidateCache();
     } catch (error) {
@@ -331,11 +316,11 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update(updates)
-        .in('alert_id', ids)
+        .in('id', ids)
         .select(DEFAULT_ALERT_SELECT);
       if (error) throw error;
       this.invalidateCache();
-      return this.normaliseAlerts(data ?? []);
+      return (data ?? []) as unknown as Alert[];
     } catch (error) {
       throw this.handleError(error);
     }
@@ -371,7 +356,7 @@ export class AlertRepository extends BaseRepository<Alert> {
             case 'medium': metrics.medium++; break;
             case 'low': metrics.low++; break;
           }
-          const score = anomalyScore(a);
+          const score = a.anomaly_score ?? a.confidence ?? null;
           if (score !== null) { scoreSum += score; scoreCount++; }
           if ((a.inference_latency_ms ?? 0) > 0) { latencySum += a.inference_latency_ms; latencyCount++; }
           if (a.status === 'CLOSED' && (a.severity === 'critical' || a.severity === 'high')) metrics.anomaliesResolved++;
@@ -391,7 +376,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .select(DEFAULT_ALERT_SELECT)
-        .eq('alert_id', id)
+        .eq('id', id)
         .single();
 
       if (error) {
@@ -399,7 +384,7 @@ export class AlertRepository extends BaseRepository<Alert> {
         throw this.handleError(error);
       }
 
-      return this.normaliseAlerts([data])[0];
+      return data as unknown as Alert;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -454,12 +439,10 @@ export class AlertRepository extends BaseRepository<Alert> {
     this.subscribe(channelName, filters, (payload) => {
       try {
         const p = payload as RealtimeAlertPayload;
-        const normNew = p.new ? this.normaliseAlerts([p.new])[0] : p.new;
-        const normOld = p.old ? this.normaliseAlerts([p.old])[0] : (p.old as Alert);
         switch (p.eventType) {
-          case 'INSERT': callbacks.onInsert?.(normNew); break;
-          case 'UPDATE': callbacks.onUpdate?.(normNew); break;
-          case 'DELETE': callbacks.onDelete?.(normOld); break;
+          case 'INSERT': callbacks.onInsert?.(p.new); break;
+          case 'UPDATE': callbacks.onUpdate?.(p.new); break;
+          case 'DELETE': callbacks.onDelete?.(p.old as Alert); break;
         }
       } catch (error) {
         callbacks.onError?.(error);
@@ -471,14 +454,6 @@ export class AlertRepository extends BaseRepository<Alert> {
   unsubscribeFromAlerts(channelName: string): void {
     this.unsubscribe(channelName);
   }
-}
-
-// ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-function anomalyScore(alert: Alert): number | null {
-  if (alert.anomaly_score != null) return alert.anomaly_score;
-  if (alert.confidence != null) return alert.confidence;
-  return null;
 }
 
 function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Alert> {

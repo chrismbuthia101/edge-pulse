@@ -1,17 +1,7 @@
 import {
   BaseRepository,
 } from '@/lib/repositories/base-repository';
-
-export interface RetentionSetting {
-  id: string;
-  organization_id: string;
-  device_id: string | null;
-  retention_days: number;
-  data_types: string[];
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import type { RetentionSetting } from '@/lib/supabase/types/database';
 
 export interface StorageUsage {
   telemetry: number;
@@ -21,26 +11,31 @@ export interface StorageUsage {
   total: number;
 }
 
-export class RetentionRepository extends BaseRepository {
+export class RetentionRepository extends BaseRepository<RetentionSetting> {
   constructor() {
     super('retention_settings');
   }
 
-  async getRetentionSettings(deviceId: string | null): Promise<RetentionSetting | null> {
+  async getRetentionSettings(deviceId: string | null, organizationId?: string): Promise<RetentionSetting | null> {
     const query = deviceId
       ? { device_id: deviceId }
       : { device_id: null };
-    const result = await this.findOne(query);
+
+    const options: Record<string, unknown> = { ...query };
+    if (organizationId) options.organization_id = organizationId;
+
+    const result = await this.findOne(options);
     return result as RetentionSetting | null;
   }
 
-  async upsertRetentionSetting(deviceId: string | null, retentionDays: number): Promise<void> {
+  async upsertRetentionSetting(deviceId: string | null, retentionDays: number, organizationId: string): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from('retention_settings')
+      const { error } = await this.getClient()
+        .from(this.tableName)
         .upsert({
           device_id: deviceId,
           retention_days: retentionDays,
+          organization_id: organizationId,
           updated_at: new Date().toISOString(),
         });
 
@@ -51,14 +46,16 @@ export class RetentionRepository extends BaseRepository {
     }
   }
 
-  async purgeOldTelemetryData(deviceId: string | null, cutoffDate: string): Promise<void> {
+  async purgeOldTelemetryData(deviceId: string | null, cutoffDate: string, organizationId?: string): Promise<void> {
     try {
       const query = this.supabase
+        .schema('telemetry')
         .from('events')
         .delete()
         .lt('collected_at', cutoffDate);
 
       if (deviceId) query.eq('device_id', deviceId);
+      if (organizationId) query.eq('organization_id', organizationId);
 
       const { error } = await query;
       if (error) throw error;
@@ -68,15 +65,20 @@ export class RetentionRepository extends BaseRepository {
     }
   }
 
-  async calculateStorageUsage(deviceId: string | null): Promise<StorageUsage> {
+  async calculateStorageUsage(deviceId: string | null, organizationId?: string): Promise<StorageUsage> {
     try {
-      const baseFilter = (q: any) => deviceId ? q.eq('device_id', deviceId) : q;
+      const baseFilter = (q: any) => {
+        let query = q;
+        if (deviceId) query = query.eq('device_id', deviceId);
+        if (organizationId) query = query.eq('organization_id', organizationId);
+        return query;
+      };
 
       const [telemetryResult, alertsResult, featuresResult, healthResult] = await Promise.all([
-        baseFilter(this.supabase.from('events').select('id').eq('device_id', deviceId!)),
-        baseFilter(this.supabase.from('alerts').select('id').eq('device_id', deviceId!)),
-        baseFilter(this.supabase.from('feature_vectors').select('id').eq('device_id', deviceId!)),
-        baseFilter(this.supabase.from('device_health').select('id').eq('device_id', deviceId!)),
+        baseFilter(this.supabase.schema('telemetry').from('events').select('id')),
+        baseFilter(this.getClient().from('alerts').select('id')),
+        baseFilter(this.supabase.schema('telemetry').from('feature_vectors').select('id')),
+        baseFilter(this.supabase.schema('telemetry').from('device_health').select('id')),
       ]);
 
       const telemetrySize = (telemetryResult.data?.length || 0) * 0.001;

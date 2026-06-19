@@ -1,15 +1,15 @@
 import { BaseRepository } from '@/lib/repositories/base-repository';
+import type { UserRow } from '@/lib/supabase/types/database';
 
 export interface AuthUser {
   id: string;
   email: string;
   user_metadata: Record<string, unknown>;
   app_metadata: Record<string, unknown>;
-  approval_status?: string;
   role?: string;
+  account_status?: string;
   is_active?: boolean;
   full_name?: string;
-  department?: string;
 }
 
 export interface AuthResponse {
@@ -19,7 +19,7 @@ export interface AuthResponse {
 
 export class AuthRepository extends BaseRepository {
   constructor() {
-    super('auth');
+    super('users');
   }
 
   async signOut(): Promise<{ error: Error | null }> {
@@ -58,9 +58,9 @@ export class AuthRepository extends BaseRepository {
   async getUserRole(userId: string): Promise<{ role: string | null; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
-        .from('analyst_users')
+        .from('users')
         .select('role')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .maybeSingle();
 
       if (error) throw error;
@@ -93,49 +93,40 @@ export class AuthRepository extends BaseRepository {
     try {
       const { data: { user: authUser }, error: authError } = await this.supabase.auth.getUser();
       if (authError) throw authError;
+
+      const { data: profile, error: profileError } = await this.supabase
+        .from('users')
+        .select('full_name, role, account_status')
+        .eq('id', userId)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') throw profileError;
+
       if (!authUser || authUser.id !== userId) {
-        const { data: profile, error: profileError } = await this.supabase
-          .from('analyst_users')
-          .select('full_name, role, is_active, approval_status, department')
-          .eq('user_id', userId)
-          .single();
-
-        if (profileError && profileError.code !== 'PGRST116') throw profileError;
-
         return {
           user: {
             id: userId,
             email: '',
             user_metadata: {},
             app_metadata: {},
-            approval_status: profile?.approval_status,
             role: profile?.role,
-            is_active: profile?.is_active,
+            account_status: profile?.account_status,
+            is_active: profile?.account_status === 'ACTIVE',
             full_name: profile?.full_name,
-            department: profile?.department,
           },
           error: null,
         };
       }
-
-      const { data: profile, error: profileError } = await this.supabase
-        .from('analyst_users')
-        .select('full_name, role, is_active, approval_status, department')
-        .eq('user_id', userId)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') throw profileError;
 
       const combinedUser: AuthUser = {
         id: authUser.id,
         email: authUser.email || '',
         user_metadata: authUser.user_metadata || {},
         app_metadata: authUser.app_metadata || {},
-        approval_status: profile?.approval_status,
         role: profile?.role,
-        is_active: profile?.is_active,
+        account_status: profile?.account_status,
+        is_active: profile?.account_status === 'ACTIVE',
         full_name: profile?.full_name,
-        department: profile?.department,
       };
 
       return { user: combinedUser, error: null };
@@ -150,46 +141,19 @@ export class AuthRepository extends BaseRepository {
   async isUserApproved(userId: string): Promise<{ approved: boolean; error: Error | null }> {
     try {
       const { data, error } = await this.supabase
-        .from('analyst_users')
-        .select('approval_status, is_active')
-        .eq('user_id', userId)
+        .from('users')
+        .select('account_status')
+        .eq('id', userId)
         .single();
 
       if (error) throw error;
 
-      const approved = data?.approval_status === 'APPROVED' && data?.is_active === true;
+      const approved = data?.account_status === 'ACTIVE';
       return { approved, error: null };
     } catch (error) {
       return {
         approved: false,
         error: error instanceof Error ? error : new Error('Failed to check approval status'),
-      };
-    }
-  }
-
-  async getPendingUsers(): Promise<{ users: AuthUser[]; error: Error | null }> {
-    try {
-      const { data, error } = await this.supabase
-        .from('pending_users')
-        .select('user_id, full_name, department, created_at, approval_status, role, is_active');
-
-      if (error) throw error;
-
-      const users: AuthUser[] = (data || []).map(user => ({
-        id: user.user_id,
-        email: '',
-        user_metadata: {},
-        app_metadata: {},
-        approval_status: 'PENDING',
-        full_name: user.full_name,
-        department: user.department,
-      }));
-
-      return { users, error: null };
-    } catch (error) {
-      return {
-        users: [],
-        error: error instanceof Error ? error : new Error('Failed to fetch pending users'),
       };
     }
   }

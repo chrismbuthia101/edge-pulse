@@ -51,50 +51,9 @@ export interface ResilienceQueryOptions extends QueryOptions {
   timeRange?: '5m' | '1h' | '24h' | '7d';
 }
 
-interface DeviceRegistryRecord {
-  id: string;
-  name: string;
-  status: string;
-  last_seen: string;
-  sync_queue_depth: number;
-  cpu_percent: number;
-  ram_percent: number;
-  actively_reporting: boolean;
-}
-
-interface HealthSnapshotRecord {
-  device_id: string;
-  uptime_percentage: number;
-  response_time_ms: number;
-  created_at: string;
-  status: string;
-}
-
-interface SyncHistoryRecord {
-  device_id: string;
-  status: string;
-  queued_at: string;
-  synced_at: string | null;
-  attempts: number;
-  last_error: string | null;
-}
-
-interface OfflinePeriod {
-  start: string;
-  end: string;
-}
-
-interface DeviceHealthSnapshot {
-  device_id: string;
-  status: string;
-  uptime_percentage: number;
-  response_time_ms: number;
-  created_at: string;
-}
-
 export class ResilienceRepository extends BaseRepository {
   constructor() {
-    super('device_registry');
+    super('devices');
   }
 
   private getTimeRangeFilter(timeRange?: string): { start: string; end: string } {
@@ -131,7 +90,7 @@ export class ResilienceRepository extends BaseRepository {
       cacheKey,
       async () => {
         const { data: devices, error: devicesError } = await this.supabase
-          .from('device_registry')
+          .from('devices')
           .select('id, name, status, last_seen, sync_queue_depth, cpu_percent, ram_percent, actively_reporting')
           .eq('is_active', true)
           .order('last_seen', { ascending: false });
@@ -139,14 +98,16 @@ export class ResilienceRepository extends BaseRepository {
         if (devicesError) throw this.handleError(devicesError);
 
         const { data: syncQueueData, error: syncError } = await this.supabase
+          .schema('internal')
           .from('sync_queue')
-          .select('device_id, status, queued_at, attempts')
+          .select('device_id, status, created_at, attempts')
           .in('status', ['PENDING', 'FAILED']);
 
         if (syncError) throw this.handleError(syncError);
 
         const { data: healthSnapshots, error: healthError } = await this.supabase
-          .from('device_health_snapshots')
+          .schema('telemetry')
+          .from('device_health')
           .select('device_id, uptime_percentage, response_time_ms, created_at')
           .order('created_at', { ascending: false })
           .limit(1000);
@@ -174,7 +135,7 @@ export class ResilienceRepository extends BaseRepository {
         }
 
         const now = new Date();
-        const metrics: ConnectionMetrics[] = (devices ?? []).map((device: DeviceRegistryRecord) => {
+        const metrics: ConnectionMetrics[] = (devices ?? []).map((device: { id: string; name: string; status: string; last_seen: string; sync_queue_depth: number; actively_reporting: boolean }) => {
           const syncInfo = syncQueueByDevice.get(device.id) ?? { pending: 0, failed: 0, attempts: 0 };
           const healthInfo = healthByDevice.get(device.id) ?? { uptime: 95, latency: 50 };
 
@@ -218,7 +179,7 @@ export class ResilienceRepository extends BaseRepository {
 
         return metrics;
       },
-      30 * 1000 // 30 seconds cache
+      30 * 1000
     );
   }
 
@@ -239,9 +200,10 @@ export class ResilienceRepository extends BaseRepository {
         const avgLatency = connectionMetrics.reduce((sum, d) => sum + d.latency_ms, 0) / connectionMetrics.length || 0;
 
         const { data: syncStats, error: syncError } = await this.supabase
+          .schema('internal')
           .from('sync_queue')
           .select('status')
-          .gte('queued_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
         if (syncError) throw this.handleError(syncError);
 
@@ -261,7 +223,7 @@ export class ResilienceRepository extends BaseRepository {
           network_health_score: Math.round((online / connectionMetrics.length) * 100) || 0,
         };
       },
-      60 * 1000 // 1 minute cache
+      60 * 1000
     );
   }
 
@@ -274,23 +236,25 @@ export class ResilienceRepository extends BaseRepository {
         const { start, end } = this.getTimeRangeFilter(timeRange);
 
         const { data: devices, error: devicesError } = await this.supabase
-          .from('device_registry')
+          .from('devices')
           .select('id, name, status, last_seen')
           .eq('is_active', true);
 
         if (devicesError) throw this.handleError(devicesError);
 
         const { data: syncHistory, error: syncError } = await this.supabase
+          .schema('internal')
           .from('sync_queue')
-          .select('device_id, status, queued_at, synced_at, attempts, last_error')
-          .gte('queued_at', start)
-          .lte('queued_at', end)
-          .order('queued_at', { ascending: false });
+          .select('device_id, status, created_at, synced_at, attempts, last_error')
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .order('created_at', { ascending: false });
 
         if (syncError) throw this.handleError(syncError);
 
         const { data: healthHistory, error: healthError } = await this.supabase
-          .from('device_health_snapshots')
+          .schema('telemetry')
+          .from('device_health')
           .select('device_id, status, uptime_percentage, response_time_ms, created_at')
           .gte('created_at', start)
           .lte('created_at', end)
@@ -301,30 +265,30 @@ export class ResilienceRepository extends BaseRepository {
         const metrics: OfflineEfficiencyMetrics[] = [];
 
         for (const device of devices ?? []) {
-          const deviceSyncHistory = syncHistory?.filter((s: SyncHistoryRecord) => s.device_id === device.id) || [];
-          const deviceHealthHistory = healthHistory?.filter((h: HealthSnapshotRecord) => h.device_id === device.id) || [];
+          const deviceSyncHistory = syncHistory?.filter((s: { device_id: string }) => s.device_id === device.id) || [];
+          const deviceHealthHistory = healthHistory?.filter((h: { device_id: string }) => h.device_id === device.id) || [];
 
           const offlinePeriods = deviceHealthHistory
-            .filter((h: HealthSnapshotRecord) => h.status === 'OFFLINE' || h.status === 'ERROR')
-            .map((h: HealthSnapshotRecord): OfflinePeriod => ({
+            .filter((h: { status: string }) => h.status === 'OFFLINE' || h.status === 'ERROR')
+            .map((h: { created_at: string }) => ({
               start: h.created_at,
               end: h.created_at,
             }));
 
-          const totalOfflineDuration = offlinePeriods.reduce((sum: number, period: OfflinePeriod) => {
-            const start = new Date(period.start);
-            const end = new Date(period.end);
-            return sum + (end.getTime() - start.getTime()) / (1000 * 60);
+          const totalOfflineDuration = offlinePeriods.reduce((sum: number, period: { start: string; end: string }) => {
+            const startT = new Date(period.start);
+            const endT = new Date(period.end);
+            return sum + (endT.getTime() - startT.getTime()) / (1000 * 60);
           }, 0);
 
-          const itemsQueued = deviceSyncHistory.filter((s: SyncHistoryRecord) => s.status === 'PENDING').length;
-          const successfulSyncs = deviceSyncHistory.filter((s: SyncHistoryRecord) => s.status === 'COMPLETED').length;
+          const itemsQueued = deviceSyncHistory.filter((s: { status: string }) => s.status === 'PENDING').length;
+          const successfulSyncs = deviceSyncHistory.filter((s: { status: string }) => s.status === 'COMPLETED').length;
           const totalSyncs = deviceSyncHistory.length;
 
           const syncSuccessRate = totalSyncs > 0 ? (successfulSyncs / totalSyncs) * 100 : 100;
 
           const avgLatency = deviceHealthHistory.length > 0
-            ? deviceHealthHistory.reduce((sum: number, h: HealthSnapshotRecord) => sum + (h.response_time_ms || 0), 0) / deviceHealthHistory.length
+            ? deviceHealthHistory.reduce((sum: number, h: { response_time_ms: number }) => sum + (h.response_time_ms || 0), 0) / deviceHealthHistory.length
             : 0;
 
           const lastOfflinePeriod = offlinePeriods[offlinePeriods.length - 1] || null;
@@ -352,15 +316,16 @@ export class ResilienceRepository extends BaseRepository {
 
         return metrics;
       },
-      60 * 1000 // 1 minute cache
+      60 * 1000
     );
   }
 
-  async getDeviceConnectionHistory(deviceId: string, timeRange: '24h' | '7d' = '24h'): Promise<DeviceHealthSnapshot[]> {
+  async getDeviceConnectionHistory(deviceId: string, timeRange: '24h' | '7d' = '24h'): Promise<{ device_id: string; status: string; uptime_percentage: number; response_time_ms: number; created_at: string }[]> {
     const { start, end } = this.getTimeRangeFilter(timeRange);
 
     const { data, error } = await this.supabase
-      .from('device_health_snapshots')
+      .schema('telemetry')
+      .from('device_health')
       .select('*')
       .eq('device_id', deviceId)
       .gte('created_at', start)

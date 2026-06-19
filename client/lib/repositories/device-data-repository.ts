@@ -15,7 +15,7 @@ export interface PurgeResult {
 
 export class DeviceDataRepository extends BaseRepository {
   constructor() {
-    super('telemetry_events');
+    super('events');
   }
 
   async purgeDeviceData(options: PurgeOptions): Promise<PurgeResult[]> {
@@ -29,8 +29,7 @@ export class DeviceDataRepository extends BaseRepository {
         const result = await this.purgeAlertData(options.deviceId, options.cutoffDate);
         results.push(result);
       } else {
-        // Purge all data for device
-        const tables = ['telemetry_events', 'alert_records', 'feature_vectors', 'tamper_evident_log'];
+        const tables = ['events', 'alerts', 'feature_vectors', 'audit_logs'];
         for (const table of tables) {
           const result = await this.purgeTableData(table, options.deviceId, options.cutoffDate);
           results.push(result);
@@ -46,7 +45,8 @@ export class DeviceDataRepository extends BaseRepository {
 
   private async purgeTelemetryData(deviceId: string, cutoffDate: string): Promise<PurgeResult> {
     const { count, error } = await this.supabase
-      .from('telemetry_events')
+      .schema('telemetry')
+      .from('events')
       .select('*', { count: 'exact', head: true })
       .eq('device_id', deviceId)
       .lt('created_at', cutoffDate);
@@ -54,7 +54,8 @@ export class DeviceDataRepository extends BaseRepository {
     if (error) throw error;
 
     const { error: deleteError } = await this.supabase
-      .from('telemetry_events')
+      .schema('telemetry')
+      .from('events')
       .delete()
       .eq('device_id', deviceId)
       .lt('created_at', cutoffDate);
@@ -62,14 +63,14 @@ export class DeviceDataRepository extends BaseRepository {
     if (deleteError) throw deleteError;
 
     return {
-      table: 'telemetry_events',
+      table: 'events',
       rowsDeleted: count ?? 0,
     };
   }
 
   private async purgeAlertData(deviceId: string, cutoffDate: string): Promise<PurgeResult> {
     const { count, error } = await this.supabase
-      .from('alert_records')
+      .from('alerts')
       .select('*', { count: 'exact', head: true })
       .eq('device_id', deviceId)
       .lt('created_at', cutoffDate);
@@ -77,7 +78,7 @@ export class DeviceDataRepository extends BaseRepository {
     if (error) throw error;
 
     const { error: deleteError } = await this.supabase
-      .from('alert_records')
+      .from('alerts')
       .delete()
       .eq('device_id', deviceId)
       .lt('created_at', cutoffDate);
@@ -85,13 +86,28 @@ export class DeviceDataRepository extends BaseRepository {
     if (deleteError) throw deleteError;
 
     return {
-      table: 'alert_records',
+      table: 'alerts',
       rowsDeleted: count ?? 0,
     };
   }
 
+  private schemaForTable(table: string): string {
+    switch (table) {
+      case 'events':
+      case 'feature_vectors':
+        return 'telemetry';
+      case 'audit_logs':
+        return 'internal';
+      default:
+        return 'public';
+    }
+  }
+
   private async purgeTableData(table: string, deviceId: string, cutoffDate?: string): Promise<PurgeResult> {
-    let query = this.supabase
+    const schema = this.schemaForTable(table);
+    const client = schema === 'public' ? this.supabase : this.supabase.schema(schema);
+
+    let query = client
       .from(table)
       .select('*', { count: 'exact', head: true })
       .eq('device_id', deviceId);
@@ -103,7 +119,7 @@ export class DeviceDataRepository extends BaseRepository {
     const { count, error } = await query;
     if (error) throw error;
 
-    let deleteQuery = this.supabase
+    let deleteQuery = client
       .from(table)
       .delete()
       .eq('device_id', deviceId);

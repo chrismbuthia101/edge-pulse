@@ -1,89 +1,58 @@
 import { BaseRepository, type QueryOptions } from '@/lib/repositories/base-repository';
-import type { EnrollmentToken } from '@/lib/supabase/types';
+import type { EnrollmentTokenRow } from '@/lib/supabase/types/database';
 
 export interface DeviceEnrollmentQueryOptions extends QueryOptions {
   includeExpired?: boolean;
-}
-
-export interface DeviceEnrollmentLegacyOptions {
-  limit?: number;
-  offset?: number;
-  orderBy?: 'created_at' | 'expires_at' | 'current_uses';
-  orderDirection?: 'asc' | 'desc';
-  includeExpired?: boolean;
+  organizationId?: string;
 }
 
 export interface CreateTokenOptions {
   name?: string;
   maxUses: number;
   expiresDays?: number;
+  organizationId: string;
 }
 
 export interface CreateTokenResult {
   token: string;
   tokenHash: string;
-  enrollmentToken: EnrollmentToken;
+  enrollmentToken: EnrollmentTokenRow;
 }
 
-export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> {
+export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentTokenRow> {
   constructor() {
-    super('device_enrollment_tokens');
+    super('enrollment_tokens');
+    this.schema = 'devices';
   }
 
-  async getTokens(options: DeviceEnrollmentQueryOptions = {}): Promise<EnrollmentToken[]> {
-    const { includeExpired = false } = options;
+  async getTokens(options: DeviceEnrollmentQueryOptions = {}): Promise<EnrollmentTokenRow[]> {
+    const { includeExpired = false, organizationId } = options;
+
+    let query = this.getClient()
+      .from(this.tableName)
+      .select('*')
+      .order(options.orderBy?.column || 'created_at', { ascending: options.orderBy?.ascending ?? false })
+      .limit(options.limit || 100);
 
     if (!includeExpired) {
-      return this.getTokensWithCustomFilter({
-        includeExpired,
-        limit: options.limit || 100,
-        offset: options.offset || 0,
-        orderBy: (options.orderBy?.column as 'created_at' | 'expires_at' | 'current_uses') || 'created_at',
-        orderDirection: options.orderBy?.ascending ? 'asc' : 'desc',
-      });
+      query = query.gt('expires_at', new Date().toISOString());
     }
 
-    return this.getTokensWithCustomFilter({
-      includeExpired: true,
-      limit: options.limit || 100,
-      offset: options.offset || 0,
-      orderBy: (options.orderBy?.column as 'created_at' | 'expires_at' | 'current_uses') || 'created_at',
-      orderDirection: options.orderBy?.ascending ? 'asc' : 'desc',
-    });
-  }
-
-  async getTokensLegacy(options: DeviceEnrollmentLegacyOptions = {}): Promise<EnrollmentToken[]> {
-    return this.getTokensWithCustomFilter(options);
-  }
-
-  private async getTokensWithCustomFilter(options: DeviceEnrollmentLegacyOptions): Promise<EnrollmentToken[]> {
-    const { includeExpired = false, limit = 100, offset = 0, orderBy, orderDirection = 'desc' } = options;
-
-    try {
-      let query = this.supabase
-        .from(this.tableName)
-        .select('*')
-        .order(orderBy || 'created_at', { ascending: orderDirection === 'asc' })
-        .range(offset, offset + limit - 1);
-
-      if (!includeExpired) {
-        query = query.gt('expires_at', new Date().toISOString());
-      }
-
-      const { data, error } = await query;
-      if (error) throw this.handleError(error);
-      return data || [];
-    } catch (err) {
-      throw this.handleError(err);
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId);
     }
+
+    const { data, error } = await query;
+    if (error) throw this.handleError(error);
+    return data || [];
   }
 
-  async getTokenById(tokenId: string): Promise<EnrollmentToken | null> {
+  async getTokenById(tokenId: string): Promise<EnrollmentTokenRow | null> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.getClient()
         .from(this.tableName)
         .select('*')
-        .eq('token_id', tokenId)
+        .eq('id', tokenId)
         .single();
 
       if (error) {
@@ -96,21 +65,22 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> 
     }
   }
 
-  async createToken(tokenHash: string, createdBy: string, options: CreateTokenOptions): Promise<EnrollmentToken> {
-    const { maxUses, expiresDays = 30 } = options;
+  async createToken(createdBy: string, options: CreateTokenOptions): Promise<EnrollmentTokenRow> {
+    const { maxUses, name, expiresDays = 30, organizationId } = options;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expiresDays);
 
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.getClient()
         .from(this.tableName)
         .insert({
-          token_hash: tokenHash,
+          name: name || null,
           created_by: createdBy,
           max_uses: maxUses,
           current_uses: 0,
           expires_at: expiresAt.toISOString(),
+          organization_id: organizationId,
         })
         .select()
         .single();
@@ -125,10 +95,10 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> 
 
   async deleteToken(tokenId: string): Promise<void> {
     try {
-      const { error } = await this.supabase
+      const { error } = await this.getClient()
         .from(this.tableName)
         .delete()
-        .eq('token_id', tokenId);
+        .eq('id', tokenId);
 
       if (error) throw this.handleError(error);
       this.invalidateCache();
@@ -137,67 +107,47 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> 
     }
   }
 
-  async updateTokenUsage(tokenId: string, deviceId: string): Promise<EnrollmentToken> {
-    const { data, error } = await this.supabase.rpc('use_enrollment_token', {
+  async updateTokenUsage(tokenId: string, deviceId: string): Promise<EnrollmentTokenRow> {
+    const { data, error } = await this.getClient().rpc('use_enrollment_token', {
       p_token_id: tokenId,
       p_device_id: deviceId,
     });
 
     if (error) throw this.handleError(error);
     if (!data) throw this.handleError(new Error('No data returned after updating token usage'));
-    return data;
+    return data as unknown as EnrollmentTokenRow;
   }
 
-  async getTokensByUser(userId: string, options: DeviceEnrollmentQueryOptions = {}): Promise<EnrollmentToken[]> {
-    try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .select('*')
-        .eq('created_by', userId)
-        .order(options.orderBy?.column || 'created_at', { ascending: options.orderBy?.ascending ?? false })
-        .limit(options.limit || 100);
+  async getTokensByUser(userId: string, options: DeviceEnrollmentQueryOptions = {}): Promise<EnrollmentTokenRow[]> {
+    let query = this.getClient()
+      .from(this.tableName)
+      .select('*')
+      .eq('created_by', userId)
+      .order(options.orderBy?.column || 'created_at', { ascending: options.orderBy?.ascending ?? false })
+      .limit(options.limit || 100);
 
-      if (error) throw this.handleError(error);
-      return data || [];
-    } catch (err) {
-      throw this.handleError(err);
+    if (options.organizationId) {
+      query = query.eq('organization_id', options.organizationId);
     }
+
+    const { data, error } = await query;
+    if (error) throw this.handleError(error);
+    return data || [];
   }
 
-  async getTokensByUserLegacy(userId: string, options: DeviceEnrollmentLegacyOptions = {}): Promise<EnrollmentToken[]> {
-    const { limit = 100, offset = 0, orderBy = 'created_at', orderDirection = 'desc' } = options;
-
+  async validateToken(tokenHash: string): Promise<EnrollmentTokenRow | null> {
     try {
-      const { data, error } = await this.supabase
-        .from(this.tableName)
-        .select('*')
-        .eq('created_by', userId)
-        .order(orderBy, { ascending: orderDirection === 'asc' })
-        .range(offset, offset + limit - 1);
-
-      if (error) throw this.handleError(error);
-      return data || [];
-    } catch (err) {
-      throw this.handleError(err);
-    }
-  }
-
-  async validateToken(tokenHash: string): Promise<EnrollmentToken | null> {
-    try {
-      // First get the token by hash, then check usage manually
-      const { data, error } = await this.supabase
+      const { data, error } = await this.getClient()
         .from(this.tableName)
         .select('*')
         .eq('token_hash', tokenHash)
         .gt('expires_at', new Date().toISOString())
-        .eq('is_used', false)
         .maybeSingle();
 
       if (error) {
         throw this.handleError(error);
       }
 
-      // Check if max uses has been reached
       if (data && data.current_uses >= data.max_uses) {
         return null;
       }
@@ -208,19 +158,27 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentToken> 
     }
   }
 
-  async getEnrollmentStats(): Promise<{
+  async getEnrollmentStats(organizationId?: string): Promise<{
     totalTokens: number;
     activeTokens: number;
     expiredTokens: number;
     usedTokens: number;
     totalEnrollments: number;
   }> {
+    const cacheKey = `enrollment_stats_${organizationId || 'all'}`;
+
     return this.cachedQuery(
-      'enrollment_stats',
+      cacheKey,
       async () => {
-        const { data: tokens, error } = await this.supabase
+        let query = this.getClient()
           .from(this.tableName)
-          .select('token_id, is_used, expires_at, current_uses');
+          .select('id, is_used, expires_at, current_uses');
+
+        if (organizationId) {
+          query = query.eq('organization_id', organizationId);
+        }
+
+        const { data: tokens, error } = await query;
 
         if (error) throw this.handleError(error);
 

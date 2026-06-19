@@ -1,8 +1,6 @@
 import { BaseRepository, type QueryOptions, type PaginatedResult, type PaginationOptions } from '@/lib/repositories/base-repository';
 import type { Device, DeviceStatus, RealtimeDevicePayload } from '@/lib/supabase/types';
 
-const LATEST_AGENT_VERSION = 'v2.4.1';
-
 const THRESHOLDS = {
   cpuWarning: 80,
   cpuCritical: 90,
@@ -28,15 +26,14 @@ const DEFAULT_DEVICE_SELECT = `
   cpu_percent,
   ram_percent,
   sync_queue_depth,
-  hash_chain_ok,
   actively_reporting
 `.trim();
 
 const METRICS_SELECT =
-  'status,type,risk,cpu_percent,ram_percent,alerts_count,sync_queue_depth,hash_chain_ok,agent_version';
+  'status,type,risk,cpu_percent,ram_percent,alerts_count,sync_queue_depth,agent_version';
 
 const TRIAGE_SELECT =
-  'id,name,status,risk,cpu_percent,ram_percent,sync_queue_depth,hash_chain_ok';
+  'id,name,status,risk,cpu_percent,ram_percent,sync_queue_depth';
 
 export interface DeviceQueryOptions extends QueryOptions {
   status?: DeviceStatus | DeviceStatus[];
@@ -67,7 +64,6 @@ export interface DeviceMetrics {
   criticalDevices: number;
   highRiskDevices: number;
   outdatedAgents: number;
-  brokenHashChains: number;
   totalSyncQueueDepth: number;
 }
 
@@ -85,21 +81,19 @@ export interface DeviceHealthStatus {
   issues: string[];
   lastSeen: string;
   syncQueueDepth: number;
-  hashChainOk: boolean;
   agentVersion: string;
   recommendations: string[];
 }
 
 export class DeviceRepository extends BaseRepository<Device> {
   constructor() {
-    super('device_registry');
+    super('devices');
   }
 
   private buildDeviceQuery(options: DeviceQueryOptions) {
     const standardFilters: Record<string, unknown> = {};
 
     if (options.onlineOnly) {
-      // onlineOnly supersedes any explicit status filter
       standardFilters.status = ['online', 'gone_silent', 'unsynced'];
     } else if (options.status) {
       standardFilters.status = options.status;
@@ -109,7 +103,6 @@ export class DeviceRepository extends BaseRepository<Device> {
     if (options.risk) standardFilters.risk = options.risk;
     if (options.agentVersion) standardFilters.agent_version = options.agentVersion;
 
-    // Start with the base query builder (handles eq/in filters, orderBy, limit, offset)
     let query = this.buildQuery({
       select: options.select ?? DEFAULT_DEVICE_SELECT,
       filters: standardFilters,
@@ -118,21 +111,18 @@ export class DeviceRepository extends BaseRepository<Device> {
       offset: options.offset,
     });
 
-    // Push search to the server with ilike across all relevant text columns
     if (options.search) {
-      const s = options.search.replace(/[%_]/g, '\\$&'); // escape wildcards
+      const s = options.search.replace(/[%_]/g, '\\$&');
       query = query.or(
         `name.ilike.%${s}%,ip.ilike.%${s}%,os.ilike.%${s}%,type.ilike.%${s}%`
       );
     }
 
-    // Push numeric range filters to the server
     if (options.minCpuUsage !== undefined) query = query.gte('cpu_percent', options.minCpuUsage);
     if (options.maxCpuUsage !== undefined) query = query.lte('cpu_percent', options.maxCpuUsage);
     if (options.minRamUsage !== undefined) query = query.gte('ram_percent', options.minRamUsage);
     if (options.maxRamUsage !== undefined) query = query.lte('ram_percent', options.maxRamUsage);
 
-    // Push OS type filter to the server
     if (options.osType) {
       const os = options.osType.replace(/[%_]/g, '\\$&');
       query = query.ilike('os', `%${os}%`);
@@ -172,27 +162,6 @@ export class DeviceRepository extends BaseRepository<Device> {
     if (queryOptions.risk) filters.risk = queryOptions.risk;
     if (queryOptions.agentVersion) filters.agent_version = queryOptions.agentVersion;
 
-    // Add range filters that need special handling
-    const additionalFilters: Record<string, unknown> = {};
-
-    if (queryOptions.minCpuUsage !== undefined || queryOptions.maxCpuUsage !== undefined) {
-      const cpuFilter: Record<string, unknown> = {};
-      if (queryOptions.minCpuUsage !== undefined) cpuFilter.gte = queryOptions.minCpuUsage;
-      if (queryOptions.maxCpuUsage !== undefined) cpuFilter.lte = queryOptions.maxCpuUsage;
-      additionalFilters.cpu_percent = cpuFilter;
-    }
-
-    if (queryOptions.minRamUsage !== undefined || queryOptions.maxRamUsage !== undefined) {
-      const ramFilter: Record<string, unknown> = {};
-      if (queryOptions.minRamUsage !== undefined) ramFilter.gte = queryOptions.minRamUsage;
-      if (queryOptions.maxRamUsage !== undefined) ramFilter.lte = queryOptions.maxRamUsage;
-      additionalFilters.ram_percent = ramFilter;
-    }
-
-    // Combine all filters
-    const combinedFilters = { ...filters, ...additionalFilters };
-
-    // Handle search and OS type separately since they require OR/ILIKE conditions
     if (search || queryOptions.osType) {
       return this.findDevicesWithCustomFiltersPaginated(options);
     }
@@ -201,15 +170,12 @@ export class DeviceRepository extends BaseRepository<Device> {
       page,
       limit,
       select: queryOptions.select ?? DEFAULT_DEVICE_SELECT,
-      filters: combinedFilters,
+      filters,
       orderBy: queryOptions.orderBy,
       cacheTTL: queryOptions.cacheTTL
     });
   }
 
-  /**
-   * Helper method for paginated queries that require OR/ILIKE conditions
-   */
   private async findDevicesWithCustomFiltersPaginated(
     options: DeviceQueryOptions & PaginationOptions
   ): Promise<PaginatedResult<Device>> {
@@ -225,7 +191,6 @@ export class DeviceRepository extends BaseRepository<Device> {
 
     if (countError) throw this.handleError(countError);
 
-    // Get paginated data
     const { data, error } = await query;
     if (error) throw this.handleError(error);
 
@@ -301,7 +266,6 @@ export class DeviceRepository extends BaseRepository<Device> {
         d.status === 'offline' ||
         d.status === 'gone_silent' ||
         (d.sync_queue_depth ?? 0) > THRESHOLDS.syncQueueWarning ||
-        d.hash_chain_ok === false ||
         (d.cpu_percent ?? 0) > THRESHOLDS.cpuCritical ||
         (d.ram_percent ?? 0) > THRESHOLDS.ramCritical
     );
@@ -319,8 +283,6 @@ export class DeviceRepository extends BaseRepository<Device> {
     });
   }
 
-  // ── Write operations ───────────────────────────────────────────────────────
-
   async updateDeviceStatus(id: string, status: DeviceStatus): Promise<Device> {
     return this.update(id, { status });
   }
@@ -331,7 +293,6 @@ export class DeviceRepository extends BaseRepository<Device> {
       cpuPercent?: number;
       ramPercent?: number;
       syncQueueDepth?: number;
-      hashChainOk?: boolean;
       activelyReporting?: boolean;
     }
   ): Promise<Device> {
@@ -340,7 +301,6 @@ export class DeviceRepository extends BaseRepository<Device> {
     if (metrics.cpuPercent !== undefined) updates.cpu_percent = metrics.cpuPercent;
     if (metrics.ramPercent !== undefined) updates.ram_percent = metrics.ramPercent;
     if (metrics.syncQueueDepth !== undefined) updates.sync_queue_depth = metrics.syncQueueDepth;
-    if (metrics.hashChainOk !== undefined) updates.hash_chain_ok = metrics.hashChainOk;
     if (metrics.activelyReporting !== undefined) updates.actively_reporting = metrics.activelyReporting;
 
     return this.update(id, updates);
@@ -358,15 +318,12 @@ export class DeviceRepository extends BaseRepository<Device> {
     return this.updateMany({ id: ids }, { status });
   }
 
-  // ── Aggregations ───────────────────────────────────────────────────────────
-
   async getDeviceMetrics(): Promise<DeviceMetrics> {
     return this.cachedQuery(
       'device_metrics',
       async () => {
         const devices = await this.findDevices({ select: METRICS_SELECT });
 
-        // Single-pass accumulation — avoids iterating `devices` 10+ times.
         const metrics: DeviceMetrics = {
           total: devices.length,
           online: 0,
@@ -382,7 +339,6 @@ export class DeviceRepository extends BaseRepository<Device> {
           criticalDevices: 0,
           highRiskDevices: 0,
           outdatedAgents: 0,
-          brokenHashChains: 0,
           totalSyncQueueDepth: 0,
         };
 
@@ -391,7 +347,6 @@ export class DeviceRepository extends BaseRepository<Device> {
         let totalRam = 0;
 
         for (const d of devices) {
-          // Status counters
           switch (d.status) {
             case 'online': metrics.online++; onlineCount++; totalCpu += d.cpu_percent ?? 0; totalRam += d.ram_percent ?? 0; break;
             case 'offline': metrics.offline++; break;
@@ -400,21 +355,18 @@ export class DeviceRepository extends BaseRepository<Device> {
             case 'unsynced': metrics.unsynced++; break;
           }
 
-          // Distribution maps
           const type = d.type ?? 'unknown';
           metrics.byType[type] = (metrics.byType[type] ?? 0) + 1;
 
           const risk = d.risk ?? 'none';
           metrics.byRisk[risk] = (metrics.byRisk[risk] ?? 0) + 1;
 
-          // Totals
           metrics.totalAlerts += d.alerts_count ?? 0;
           metrics.totalSyncQueueDepth += d.sync_queue_depth ?? 0;
 
           if (risk === 'critical') metrics.criticalDevices++;
           if (risk === 'critical' || risk === 'high') metrics.highRiskDevices++;
-          if (d.hash_chain_ok === false) metrics.brokenHashChains++;
-          if (d.agent_version && d.agent_version !== LATEST_AGENT_VERSION) metrics.outdatedAgents++;
+          if (d.agent_version) metrics.outdatedAgents++;
         }
 
         if (onlineCount > 0) {
@@ -444,7 +396,6 @@ export class DeviceRepository extends BaseRepository<Device> {
           const type = d.type ?? 'unknown';
           const status = d.status ?? 'unknown';
 
-          // byType
           byType[type] ??= { total: 0, online: 0, offline: 0 };
           byType[type].total++;
           if (status === 'online') {
@@ -453,7 +404,6 @@ export class DeviceRepository extends BaseRepository<Device> {
             byType[type].offline++;
           }
 
-          // byStatus
           byStatus[status] = (byStatus[status] ?? 0) + 1;
         }
 
@@ -474,13 +424,10 @@ export class DeviceRepository extends BaseRepository<Device> {
     );
   }
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
-
   subscribeToDeviceUpdates(
     filters: Partial<DeviceQueryOptions> = {},
     callbacks: DeviceSubscriptionCallbacks = {}
   ): string {
-    // Use a timestamp-based suffix so concurrent subscriptions don't collide.
     const channelName = `realtime-devices-${Date.now()}`;
 
     this.subscribe(channelName, filters, (payload) => {
@@ -499,13 +446,10 @@ export class DeviceRepository extends BaseRepository<Device> {
     return channelName;
   }
 
-  /** Unsubscribes a specific device realtime channel by its name. */
   unsubscribeFromDeviceUpdates(channelName: string): void {
     this.unsubscribe(channelName);
   }
 }
-
-// ─── Pure helpers ────────
 
 function escalate(
   current: DeviceHealthStatus['status'],
@@ -520,7 +464,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
   const recommendations: string[] = [];
   let status: DeviceHealthStatus['status'] = 'healthy';
 
-  // Connectivity
   switch (device.status) {
     case 'offline':
       issues.push('Device is offline');
@@ -544,7 +487,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
       break;
   }
 
-  // CPU
   const cpu = device.cpu_percent ?? 0;
   if (cpu > THRESHOLDS.cpuCritical) {
     issues.push(`Critical CPU usage (${cpu.toFixed(1)}%)`);
@@ -556,7 +498,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
     status = escalate(status, 'warning');
   }
 
-  // RAM
   const ram = device.ram_percent ?? 0;
   if (ram > THRESHOLDS.ramCritical) {
     issues.push(`Critical memory usage (${ram.toFixed(1)}%)`);
@@ -568,7 +509,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
     status = escalate(status, 'warning');
   }
 
-  // Sync queue
   const queueDepth = device.sync_queue_depth ?? 0;
   if (queueDepth > THRESHOLDS.syncQueueCritical) {
     issues.push(`Large sync queue backlog (${queueDepth})`);
@@ -580,14 +520,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
     status = escalate(status, 'warning');
   }
 
-  // Hash chain integrity
-  if (device.hash_chain_ok === false) {
-    issues.push('Hash chain integrity compromised');
-    recommendations.push('Investigate potential tampering');
-    status = escalate(status, 'critical');
-  }
-
-  // Risk level
   if (device.risk === 'critical') {
     recommendations.push('Address critical security alerts immediately');
     status = escalate(status, 'critical');
@@ -596,10 +528,9 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
     status = escalate(status, 'warning');
   }
 
-  // Agent version
-  if (device.agent_version && device.agent_version !== LATEST_AGENT_VERSION) {
-    issues.push(`Outdated agent (${device.agent_version}, latest: ${LATEST_AGENT_VERSION})`);
-    recommendations.push('Update agent to latest version');
+  if (device.agent_version) {
+    issues.push(`Agent version: ${device.agent_version}`);
+    recommendations.push('Ensure agent is up-to-date');
     status = escalate(status, 'warning');
   }
 
@@ -610,7 +541,6 @@ function buildHealthStatus(device: Device): DeviceHealthStatus {
     issues,
     lastSeen: device.last_seen ?? '',
     syncQueueDepth: queueDepth,
-    hashChainOk: device.hash_chain_ok ?? true,
     agentVersion: device.agent_version ?? 'unknown',
     recommendations,
   };

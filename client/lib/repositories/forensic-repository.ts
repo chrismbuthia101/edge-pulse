@@ -1,14 +1,14 @@
 import { BaseRepository } from './base-repository';
 import type {
   TelemetryEvent,
-  FeatureVector
+  FeatureVector,
 } from '@/lib/supabase/types/telemetry';
 import type {
-  Alert
+  Alert,
 } from '@/lib/supabase/types/alerts';
 import type {
-  TamperEvidentLog
-} from '@/lib/supabase/types/database';
+  AuditLogEntry,
+} from '@/lib/supabase/types';
 
 export interface ExportQuery {
   startDate: Date;
@@ -20,9 +20,11 @@ export class ForensicRepository extends BaseRepository {
   constructor() {
     super('');
   }
+
   async getTelemetryEvents(query: ExportQuery) {
     let dbQuery = this.supabase
-      .from('telemetry_events')
+      .schema('telemetry')
+      .from('events')
       .select('*')
       .gte('created_at', query.startDate.toISOString())
       .lte('created_at', query.endDate.toISOString());
@@ -38,7 +40,7 @@ export class ForensicRepository extends BaseRepository {
 
   async getAlertRecords(query: ExportQuery) {
     let dbQuery = this.supabase
-      .from('alert_records')
+      .from('alerts')
       .select('*')
       .gte('created_at', query.startDate.toISOString())
       .lte('created_at', query.endDate.toISOString());
@@ -52,12 +54,13 @@ export class ForensicRepository extends BaseRepository {
     return data as Alert[];
   }
 
-  async getTamperEvidentLog(query: ExportQuery) {
+  async getAuditLogs(query: ExportQuery) {
     let dbQuery = this.supabase
-      .from('tamper_evident_log')
+      .schema('internal')
+      .from('audit_logs')
       .select('*')
-      .gte('created_at', query.startDate.toISOString())
-      .lte('created_at', query.endDate.toISOString());
+      .gte('timestamp', query.startDate.toISOString())
+      .lte('timestamp', query.endDate.toISOString());
 
     if (query.deviceId) {
       dbQuery = dbQuery.eq('device_id', query.deviceId);
@@ -65,11 +68,12 @@ export class ForensicRepository extends BaseRepository {
 
     const { data, error } = await dbQuery;
     if (error) throw error;
-    return data as TamperEvidentLog[];
+    return data as AuditLogEntry[];
   }
 
   async getFeatureVectors(query: ExportQuery) {
     let dbQuery = this.supabase
+      .schema('telemetry')
       .from('feature_vectors')
       .select('*')
       .gte('created_at', query.startDate.toISOString())

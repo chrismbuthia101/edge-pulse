@@ -2,10 +2,11 @@ import {
   BaseRepository,
   type QueryOptions,
 } from '@/lib/repositories/base-repository';
+import type { DeviceAssignmentRow } from '@/lib/supabase/types';
 
 export interface DeviceAssignment {
-  assignment_id: string;
-  analyst_id: string;
+  id: string;
+  user_id: string;
   device_id: string;
   assigned_at: string;
   assigned_by: string | null;
@@ -14,37 +15,36 @@ export interface DeviceAssignment {
   device_type?: string;
   device_status?: string;
   device_ip?: string;
-  analyst_name?: string;
+  user_name?: string;
 }
 
 interface RawDeviceAssignment {
-  assignment_id: string;
-  analyst_id: string;
+  id: string;
+  user_id: string;
   device_id: string;
   assigned_at: string;
   assigned_by: string | null;
   is_active: boolean;
-  device_registry?: {
+  devices?: {
     name?: string;
     type?: string;
     status?: string;
     ip?: string;
     is_active?: boolean;
   };
-  analyst_users?: {
+  users?: {
     full_name?: string;
-    is_active?: boolean;
   };
 }
 
 export interface DeviceAssignmentCreate {
-  analyst_id: string;
+  user_id: string;
   device_id: string;
   assigned_by: string;
 }
 
 export interface DeviceAssignmentQueryOptions extends QueryOptions {
-  analystId?: string;
+  userId?: string;
   deviceId?: string;
   isActive?: boolean;
   assignedBy?: string;
@@ -59,7 +59,7 @@ export interface DeviceAssignmentSubscriptionCallbacks {
 
 export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment> {
   constructor() {
-    super('analyst_device_assignments');
+    super('device_assignments');
   }
 
   async getAssignments(options: DeviceAssignmentQueryOptions = {}): Promise<DeviceAssignment[]> {
@@ -71,26 +71,25 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
         let query = this.supabase
           .from(this.tableName)
           .select(`
-            assignment_id,
-            analyst_id,
+            id,
+            user_id,
             device_id,
             assigned_at,
             assigned_by,
             is_active,
-            device_registry:device_id (
+            devices:device_id (
               name,
               type,
               status,
               ip,
               is_active
             ),
-            analyst_users:analyst_id (
-              full_name,
-              is_active
+            users:user_id (
+              full_name
             )
           `);
 
-        if (options.analystId) query = query.eq('analyst_id', options.analystId);
+        if (options.userId) query = query.eq('user_id', options.userId);
         if (options.deviceId) query = query.eq('device_id', options.deviceId);
         if (options.isActive !== undefined) query = query.eq('is_active', options.isActive);
         if (options.assignedBy) query = query.eq('assigned_by', options.assignedBy);
@@ -105,26 +104,26 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
         if (error) throw this.handleError(error);
 
         return (data as unknown as RawDeviceAssignment[] ?? []).map((item) => ({
-          assignment_id: item.assignment_id,
-          analyst_id: item.analyst_id,
+          id: item.id,
+          user_id: item.user_id,
           device_id: item.device_id,
           assigned_at: item.assigned_at,
           assigned_by: item.assigned_by,
           is_active: item.is_active,
-          device_name: item.device_registry?.name,
-          device_type: item.device_registry?.type,
-          device_status: item.device_registry?.status,
-          device_ip: item.device_registry?.ip,
-          analyst_name: item.analyst_users?.full_name,
+          device_name: item.devices?.name,
+          device_type: item.devices?.type,
+          device_status: item.devices?.status,
+          device_ip: item.devices?.ip,
+          user_name: item.users?.full_name,
         }));
       },
       options.cacheTTL
     );
   }
 
-  async getAnalystDevices(analystId: string): Promise<DeviceAssignment[]> {
+  async getAssignmentsByUser(userId: string): Promise<DeviceAssignment[]> {
     return this.getAssignments({
-      analystId,
+      userId,
       isActive: true,
       orderBy: { column: 'assigned_at', ascending: false },
       cacheTTL: 60 * 1000,
@@ -148,27 +147,26 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
     });
   }
 
-  async assignDeviceToAnalyst(
+  async assignDeviceToUser(
     deviceId: string,
-    analystId: string,
+    userId: string,
     assignedBy: string
   ): Promise<DeviceAssignment> {
-    // Check if assignment already exists
-    const existing = await this.getAssignments({ analystId, deviceId, isActive: true });
+    const existing = await this.getAssignments({ userId, deviceId, isActive: true });
     if (existing.length > 0) {
-      throw new Error('Device is already assigned to this analyst');
+      throw new Error('Device is already assigned to this user');
     }
 
     const { data, error } = await this.supabase
       .from(this.tableName)
       .insert({
-        analyst_id: analystId,
+        user_id: userId,
         device_id: deviceId,
         assigned_by: assignedBy,
         assigned_at: new Date().toISOString(),
         is_active: true,
       })
-      .select('assignment_id, analyst_id, device_id, assigned_at, assigned_by, is_active')
+      .select('id, user_id, device_id, assigned_at, assigned_by, is_active')
       .single();
 
     if (error) throw this.handleError(error);
@@ -176,12 +174,12 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
     return data as unknown as DeviceAssignment;
   }
 
-  async removeDeviceAssignment(deviceId: string, analystId: string): Promise<void> {
+  async removeDeviceAssignment(deviceId: string, userId: string): Promise<void> {
     const { error } = await this.supabase
       .from(this.tableName)
       .update({ is_active: false })
       .eq('device_id', deviceId)
-      .eq('analyst_id', analystId)
+      .eq('user_id', userId)
       .eq('is_active', true);
 
     if (error) throw this.handleError(error);
@@ -190,12 +188,12 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
 
   async reassignDevice(
     deviceId: string,
-    fromAnalystId: string,
-    toAnalystId: string,
+    fromUserId: string,
+    toUserId: string,
     reassignedBy: string
   ): Promise<DeviceAssignment> {
-    await this.removeDeviceAssignment(deviceId, fromAnalystId);
-    return this.assignDeviceToAnalyst(deviceId, toAnalystId, reassignedBy);
+    await this.removeDeviceAssignment(deviceId, fromUserId);
+    return this.assignDeviceToUser(deviceId, toUserId, reassignedBy);
   }
 
   async getUnassignedDevices(): Promise<{
@@ -207,9 +205,8 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
     is_active: boolean;
   }[]> {
     try {
-
       const { data: allDevices, error: devError } = await this.supabase
-        .from('device_registry')
+        .from('devices')
         .select('id, name, type, status, ip, is_active')
         .eq('is_active', true);
 
@@ -230,18 +227,17 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
     }
   }
 
-  async getAnalystsForAssignment(): Promise<{
-    user_id: string;
+  async getUsersForAssignment(): Promise<{
+    id: string;
     full_name: string;
-    department: string | null;
+    role: string;
   }[]> {
     try {
       const { data, error } = await this.supabase
-        .from('analyst_users')
-        .select('user_id, full_name, department')
-        .eq('role', 'ANALYST')
-        .eq('is_active', true)
-        .eq('approval_status', 'APPROVED')
+        .from('users')
+        .select('id, full_name, role')
+        .in('role', ['ORG_ANALYST', 'ORG_ADMIN'])
+        .eq('account_status', 'ACTIVE')
         .order('full_name');
 
       if (error) throw error;
@@ -256,16 +252,16 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
       const { data, error } = await this.supabase
         .from(this.tableName)
         .select(`
-          assignment_id,
-          analyst_id,
+          id,
+          user_id,
           device_id,
           assigned_at,
           assigned_by,
           is_active,
-          device_registry:device_id (name, type, status, ip),
-          analyst_users:analyst_id (full_name)
+          devices:device_id (name, type, status, ip),
+          users:user_id (full_name)
         `)
-        .eq('assignment_id', assignmentId)
+        .eq('id', assignmentId)
         .single();
 
       if (error) {
@@ -275,17 +271,17 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
 
       const raw = data as unknown as RawDeviceAssignment;
       return {
-        assignment_id: raw.assignment_id,
-        analyst_id: raw.analyst_id,
+        id: raw.id,
+        user_id: raw.user_id,
         device_id: raw.device_id,
         assigned_at: raw.assigned_at,
         assigned_by: raw.assigned_by,
         is_active: raw.is_active,
-        device_name: raw.device_registry?.name,
-        device_type: raw.device_registry?.type,
-        device_status: raw.device_registry?.status,
-        device_ip: raw.device_registry?.ip,
-        analyst_name: raw.analyst_users?.full_name,
+        device_name: raw.devices?.name,
+        device_type: raw.devices?.type,
+        device_status: raw.devices?.status,
+        device_ip: raw.devices?.ip,
+        user_name: raw.users?.full_name,
       };
     } catch (error) {
       throw this.handleError(error);
@@ -326,7 +322,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
     totalAssignments: number;
     activeAssignments: number;
     unassignedDevices: number;
-    analystsWithAssignments: number;
+    usersWithAssignments: number;
   }> {
     try {
       const [assignments, unassignedDevices] = await Promise.all([
@@ -334,13 +330,13 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
         this.getUnassignedDevices(),
       ]);
 
-      const uniqueAnalysts = new Set(assignments.map(a => a.analyst_id)).size;
+      const uniqueUsers = new Set(assignments.map(a => a.user_id)).size;
 
       return {
         totalAssignments: assignments.length,
         activeAssignments: assignments.filter(a => a.is_active).length,
         unassignedDevices: unassignedDevices.length,
-        analystsWithAssignments: uniqueAnalysts,
+        usersWithAssignments: uniqueUsers,
       };
     } catch (error) {
       throw this.handleError(error);

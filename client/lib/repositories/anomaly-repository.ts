@@ -70,6 +70,7 @@ export interface AnomalyTrend {
 export class AnomalyRepository extends BaseRepository<AnomalyScore> {
   constructor() {
     super('anomaly_scores');
+    this.schema = 'telemetry';
   }
 
   async getAnomalyScores(options: GetAnomalyScoresOptions): Promise<AnomalyScore[]> {
