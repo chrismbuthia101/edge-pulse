@@ -1,27 +1,36 @@
-import { TelemetrySource, ConnectivityState } from '@/lib/supabase/types/shared';
+import { TelemetrySource } from '@/lib/supabase/types/shared';
+
+export type FeatureType = 'statistical' | 'temporal' | 'frequency_domain' | 'custom';
 
 export interface TelemetryEvent {
   id: string;
   device_id: string;
-  device_name?: string;
-  collected_at: string;
-  received_at: string | null;
-  source: TelemetrySource;
+  event_id: string | null;
+  feature_name: string;
+  feature_type: FeatureType;
+  value: number;
+  metadata: Record<string, unknown> | null;
+  source: string | null;
+  session_id: string | null;
   payload: Record<string, unknown>;
-  collection_agent_version: string;
-  connectivity_state: ConnectivityState;
-  payload_hash: string;
+  collected_at: string;
+  organization_id: string;
   created_at: string;
+  received_at: string;
+  integrity_hash: string | null;
 }
 
 export interface FeatureVector {
   id: string;
-  telemetry_event_id: string;
+  event_id: string | null;
   device_id: string;
   computed_at: string;
   model_id: string;
   features: Record<string, number>;
   feature_version: string;
+  organization_id: string;
+  integrity_hash: string | null;
+  created_at: string;
 }
 
 export interface AnomalyScore {
@@ -30,11 +39,13 @@ export interface AnomalyScore {
   device_id: string;
   model_id: string;
   score: number;
-  label?: string;
+  label: string | null;
   threshold_applied: number;
   above_threshold: boolean;
   inference_latency_ms: number;
-  connectivity_state: ConnectivityState;
+  connectivity_state: 'online' | 'offline';
+  organization_id: string;
+  integrity_hash: string | null;
   created_at: string;
   scored_at: string;
 }

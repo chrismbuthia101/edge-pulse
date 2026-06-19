@@ -1,28 +1,15 @@
-export interface TamperLogEntry {
-    log_id: string;
-    device_id: string;
-    log_sequence_number: number;
-    log_entry_type: string;
-    log_entry_reference_id: string;
-    entry_timestamp_utc: string;
-    entry_content_hash: string;
-    previous_entry_hash: string;
-    digital_signature: string;
-    created_at: string;
-}
-
-export interface VerificationResult {
-    is_valid: boolean;
-    entries_checked: number;
-    first_broken_sequence?: number;
-    break_reason?: string;
-    device_id: string;
-}
-
-export interface LogDevice {
-    device_id: string;
-    device_name: string;
-    log_count: number;
-    last_log_sequence: number;
-    last_entry_timestamp: string;
+export interface AuditLogEntry {
+  id: string;
+  user_id: string | null;
+  device_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  severity: 'INFO' | 'WARNING' | 'ERROR';
+  ip_address: string | null;
+  user_agent: string | null;
+  organization_id: string | null;
+  timestamp: string;
 }

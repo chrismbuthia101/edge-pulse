@@ -1,4 +1,4 @@
-import type { AlertSeverity, AlertStatus, TelemetrySource } from '@/lib/supabase/types/shared';
+import type { AlertSeverity, AlertStatus, TelemetrySource, PrivilegeLevel } from '@/lib/supabase/types/shared';
 
 export interface ShapFeature {
   feature_name: string;
@@ -33,44 +33,39 @@ export interface ShapExplanation {
 
 export interface Alert {
   id: string;
-  alert_id: string;
   device_id: string;
-  device_name: string;
-  telemetry_event_id?: string;
-  feature_vector_id?: string;
-  anomaly_score_id?: string;
-  // detection metadata
+  parent_alert_id: string | null;
+  event_id: string | null;
+  feature_vector_id: string | null;
+  anomaly_score_id: string | null;
   anomaly_score: number;
   model_id: string;
-  collection_agent_version: string;
   inference_latency_ms: number;
   telemetry_source: TelemetrySource;
-  alert_type: string;
-  detector_type: string;
-  // display
   title: string;
   description: string | null;
   severity: AlertSeverity;
   category: string;
   confidence: number;
-  // detection window
+  alert_type: string | null;
+  detector_type: string | null;
   detection_window_start: string | null;
   detection_window_end: string | null;
-  detection_window_minutes: number | null;
-  // SHAP
   explanation_json: ShapExplanation | null;
-  // network-specific
+  tags: string[] | null;
+  source_ip: string | null;
+  mitre_technique_id: string | null;
   net_destination_ip: string | null;
   net_destination_port: number | null;
   net_protocol: string | null;
   net_duration_ms: number | null;
-  // process-specific
   proc_name: string | null;
-  proc_privilege_level: 'user' | 'admin' | 'system' | null;
+  proc_privilege_level: PrivilegeLevel | null;
   proc_pid: number | null;
-  // lifecycle
   status: AlertStatus;
   read: boolean;
+  organization_id: string;
+  integrity_hash: string | null;
   created_at: string;
   updated_at: string;
   acknowledged_at: string | null;

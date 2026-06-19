@@ -1,45 +1,22 @@
 import type { Alert } from '@/lib/supabase/types/alerts';
+import type { Device } from '@/lib/supabase/types/devices';
 import type { SyncQueueEntry } from '@/lib/supabase/types/sync';
-import type { TelemetryEvent, FeatureVector } from '@/lib/supabase/types/telemetry';
-import type { UserRole, DeviceStatus, DeviceRisk, DeviceType } from '@/lib/supabase/types/shared';
+import type { TelemetryEvent, FeatureVector, AnomalyScore } from '@/lib/supabase/types/telemetry';
+import type { UserRole, AccountStatus } from '@/lib/supabase/types/shared';
+import type { AuditLogEntry } from '@/lib/supabase/types/logs';
 
-export interface PrivacySettingsRow {
+export interface UserRow {
   id: string;
-  device_id: string | null;
-  enhanced_mode: boolean;
-  settings: Record<string, boolean>;
-  data_minimization: boolean;
-  updated_by: string | null;
-  organization_id: string;
+  full_name: string;
+  role: UserRole;
+  account_status: AccountStatus;
+  organization_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface DeviceRegistry {
+export interface DeviceHealthRow {
   id: string;
-  name: string;
-  type: DeviceType;
-  os: string;
-  ip: string | null;
-  agent_version: string;
-  status: DeviceStatus;
-  risk: DeviceRisk;
-  alerts_count: number;
-  cpu_percent: number;
-  ram_percent: number;
-  sync_queue_depth: number;
-  hash_chain_ok: boolean;
-  actively_reporting: boolean;
-  enrolled_by: string | null;
-  enrolled_at: string;
-  last_seen: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DeviceHealthSnapshot {
-  snapshot_id: string;
   device_id: string;
   status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
   cpu_usage: number | null;
@@ -52,22 +29,13 @@ export interface DeviceHealthSnapshot {
   error_count: number;
   warning_count: number;
   last_restart: string | null;
+  organization_id: string;
   created_at: string;
+  integrity_hash: string | null;
 }
 
-export interface AnalystUser {
-  user_id: string;
-  full_name: string;
-  role: UserRole;
-  department: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  email?: string;
-}
-
-export interface EnrollmentToken {
-  token_id: string;
+export interface EnrollmentTokenRow {
+  id: string;
   token_hash: string;
   name: string | null;
   created_by: string;
@@ -76,16 +44,18 @@ export interface EnrollmentToken {
   current_uses: number;
   is_used: boolean;
   used_at: string | null;
-  used_by_device_id: string | null;
+  used_by_device: string | null;
+  organization_id: string;
   created_at: string;
 }
 
-export interface AgentConfig {
-  config_id: string;
+export interface DeviceConfigRow {
+  id: string;
   device_id: string | null;
   key: string;
   value: string;
   updated_by: string | null;
+  organization_id: string;
   updated_at: string;
   version: number;
 }
@@ -101,42 +71,154 @@ export interface RetentionSetting {
   updated_at: string;
 }
 
-export interface AnomalyScore {
+export interface PrivacySettingsRow {
   id: string;
-  feature_vector_id: string | null;
-  device_id: string;
-  model_id: string;
-  score: number;
-  label?: string;
-  threshold_applied: number;
-  above_threshold: boolean;
-  inference_latency_ms: number;
-  connectivity_state: 'online' | 'offline';
+  device_id: string | null;
+  enhanced_mode: boolean;
+  settings: Record<string, unknown>;
+  data_minimization: boolean;
+  updated_by: string | null;
+  organization_id: string;
   created_at: string;
-  scored_at: string;
+  updated_at: string;
+}
+
+export interface DeviceAssignmentRow {
+  id: string;
+  user_id: string;
+  device_id: string;
+  assigned_at: string;
+  assigned_by: string | null;
+  is_active: boolean;
+  organization_id: string;
+}
+
+export interface ApiKeyRow {
+  id: string;
+  device_id: string;
+  key_hash: string;
+  key_name: string;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  last_used_ip: string | null;
+  created_by: string | null;
+  organization_id: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  user_id: string;
+  organization_id: string;
+  title: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  category: string;
+  read: boolean;
+  alert_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface OrganizationRow {
+  id: string;
+  name: string;
+  slug: string;
+  domain: string | null;
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingRow {
+  id: string;
+  organization_id: string;
+  stripe_customer_id: string | null;
+  plan_tier: string;
+  billing_email: string | null;
+  billing_cycle: string | null;
+  currency: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Database {
   public: {
     Tables: {
-      analyst_users: {
-        Row: AnalystUser;
-        Insert: Omit<AnalystUser, 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<AnalystUser, 'user_id'>>;
+      users: {
+        Row: UserRow;
+        Insert: Omit<UserRow, 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<UserRow, 'id'>>;
       };
-      device_registry: {
-        Row: DeviceRegistry;
-        Insert: Omit<DeviceRegistry, 'id' | 'enrolled_at' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<DeviceRegistry, 'id' | 'enrolled_at' | 'created_at'>>;
+      devices: {
+        Row: Device;
+        Insert: Omit<Device, 'id' | 'enrolled_at' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<Device, 'id' | 'enrolled_at' | 'created_at'>>;
       };
-      alert_records: {
+      alerts: {
         Row: Alert;
-        Insert: Omit<Alert, 'id' | 'alert_id' | 'created_at' | 'updated_at' | 'read'>;
+        Insert: Omit<Alert, 'id' | 'created_at' | 'updated_at' | 'read'>;
         Update: Partial<Alert>;
       };
-      telemetry_events: {
+      retention_settings: {
+        Row: RetentionSetting;
+        Insert: Omit<RetentionSetting, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<RetentionSetting, 'id' | 'created_at'>>;
+      };
+      privacy_settings: {
+        Row: PrivacySettingsRow;
+        Insert: Omit<PrivacySettingsRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<PrivacySettingsRow, 'id'>>;
+      };
+      device_assignments: {
+        Row: DeviceAssignmentRow;
+        Insert: Omit<DeviceAssignmentRow, 'id' | 'assigned_at'>;
+        Update: Partial<Omit<DeviceAssignmentRow, 'id'>>;
+      };
+      notifications: {
+        Row: NotificationRow;
+        Insert: Omit<NotificationRow, 'id' | 'created_at'>;
+        Update: Partial<Omit<NotificationRow, 'id'>>;
+      };
+      organizations: {
+        Row: OrganizationRow;
+        Insert: Omit<OrganizationRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<OrganizationRow, 'id' | 'created_at'>>;
+      };
+      billing: {
+        Row: BillingRow;
+        Insert: Omit<BillingRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<BillingRow, 'id' | 'created_at'>>;
+      };
+    };
+  };
+  devices: {
+    Tables: {
+      api_keys: {
+        Row: ApiKeyRow;
+        Insert: Omit<ApiKeyRow, 'id' | 'created_at'>;
+        Update: Partial<Omit<ApiKeyRow, 'id'>>;
+      };
+      enrollment_tokens: {
+        Row: EnrollmentTokenRow;
+        Insert: Pick<EnrollmentTokenRow, 'token_hash' | 'name' | 'created_by' | 'expires_at' | 'max_uses' | 'organization_id'>;
+        Update: Partial<EnrollmentTokenRow>;
+      };
+      config: {
+        Row: DeviceConfigRow;
+        Insert: Omit<DeviceConfigRow, 'id' | 'updated_at' | 'version'>;
+        Update: Partial<Omit<DeviceConfigRow, 'id'>>;
+      };
+    };
+  };
+  telemetry: {
+    Tables: {
+      events: {
         Row: TelemetryEvent;
-        Insert: Omit<TelemetryEvent, 'id' | 'received_at'>;
+        Insert: Omit<TelemetryEvent, 'id' | 'received_at' | 'created_at'>;
         Update: never;
       };
       feature_vectors: {
@@ -149,41 +231,24 @@ export interface Database {
         Insert: Omit<AnomalyScore, 'id' | 'scored_at' | 'created_at'>;
         Update: never;
       };
-      tamper_evident_log: {
-        Row: TamperEvidentLog;
-        Insert: Omit<TamperEvidentLog, 'log_id' | 'created_at'>;
-        Update: Pick<TamperEvidentLog, 'verified'>;
+      device_health: {
+        Row: DeviceHealthRow;
+        Insert: Omit<DeviceHealthRow, 'id' | 'created_at'>;
+        Update: never;
       };
-      device_enrollment_tokens: {
-        Row: EnrollmentToken;
-        Insert: Pick<EnrollmentToken, 'token_hash' | 'name' | 'created_by' | 'expires_at' | 'max_uses'>;
-        Update: Pick<EnrollmentToken, 'current_uses' | 'is_used' | 'used_at' | 'used_by_device_id'>;
-      };
-
+    };
+  };
+  internal: {
+    Tables: {
       sync_queue: {
         Row: SyncQueueEntry;
-        Insert: Omit<SyncQueueEntry, 'id' | 'queued_at' | 'created_at' | 'updated_at'>;
+        Insert: Omit<SyncQueueEntry, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<SyncQueueEntry>;
       };
-      device_health_snapshots: {
-        Row: DeviceHealthSnapshot;
-        Insert: Omit<DeviceHealthSnapshot, 'snapshot_id' | 'created_at'>;
-        Update: Partial<DeviceHealthSnapshot>;
-      };
-      agent_config: {
-        Row: AgentConfig;
-        Insert: Omit<AgentConfig, 'config_id' | 'updated_at'>;
-        Update: Partial<Omit<AgentConfig, 'config_id' | 'updated_at'>>;
-      };
-      privacy_settings: {
-        Row: PrivacySettingsRow;
-        Insert: Omit<PrivacySettingsRow, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<PrivacySettingsRow, 'id'>>;
-      };
-      retention_settings: {
-        Row: RetentionSetting;
-        Insert: Omit<RetentionSetting, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<RetentionSetting, 'id' | 'created_at'>>;
+      audit_logs: {
+        Row: AuditLogEntry;
+        Insert: Omit<AuditLogEntry, 'id' | 'timestamp'>;
+        Update: never;
       };
     };
   };

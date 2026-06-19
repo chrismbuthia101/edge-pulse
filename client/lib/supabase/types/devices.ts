@@ -13,12 +13,16 @@ export interface Device {
   cpu_percent: number;
   ram_percent: number;
   sync_queue_depth: number;
-  hash_chain_ok: boolean;
   actively_reporting: boolean;
   enrolled_by: string | null;
   enrolled_at: string;
   last_seen: string;
   is_active: boolean;
+  deactivated_at: string | null;
+  deactivated_reason: string | null;
+  deactivated_by: string | null;
+  tags: string[];
+  organization_id: string;
   created_at: string;
   updated_at: string;
 }

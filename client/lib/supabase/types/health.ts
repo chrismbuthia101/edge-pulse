@@ -1,21 +1,20 @@
-export interface DeviceHealth {
+export interface DeviceHealthSnapshot {
+  id: string;
   device_id: string;
-  hostname: string;
-  operating_system: string;
-  agent_version: string;
-  last_seen_utc: string;
-  is_active: boolean;
   status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
-  cpu_usage: number;
-  memory_usage: number;
-  disk_usage: number;
+  cpu_usage: number | null;
+  memory_usage: number | null;
+  disk_usage: number | null;
   network_status: boolean;
   alerts_last_24h: number;
-  uptime_percentage: number;
-  response_time_ms: number;
+  uptime_percentage: number | null;
+  response_time_ms: number | null;
   error_count: number;
   warning_count: number;
   last_restart: string | null;
+  organization_id: string;
+  created_at: string;
+  integrity_hash: string | null;
 }
 
 export interface SystemHealth {
