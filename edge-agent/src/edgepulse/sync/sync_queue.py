@@ -62,7 +62,7 @@ class SyncQueue:
     async def initialize(self) -> None:
         if self.queue is None:
             self.queue = asyncio.Queue(maxsize=self.max_size)
-        await self.db.initialize(tables=["sync_queue"])
+        await self.db.initialize(tables=["sync_queue", "dead_letter_queue"])
         await self._load_persisted_items()
 
     async def start_worker(self, sync_client: CloudSync) -> None:

@@ -12,7 +12,10 @@ def safe_parse_timestamp(
         if timestamp_str:
             if isinstance(timestamp_str, str) and timestamp_str.endswith("Z"):
                 timestamp_str = timestamp_str[:-1] + "+00:00"
-            return datetime.fromisoformat(timestamp_str)
+            dt = datetime.fromisoformat(timestamp_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
     except (ValueError, TypeError):
         return default
     return default

@@ -49,14 +49,14 @@ if (-not $Version) {
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor White
-Write-Host "  EdgePulse Agent — Windows Build" -ForegroundColor White
+Write-Host "  EdgePulse Agent - Windows Build" -ForegroundColor White
 Write-Host "  Version : $Version" -ForegroundColor White
 Write-Host "============================================================" -ForegroundColor White
 
 Write-Step "Checking prerequisites..."
 Require-Command "python"
 Require-Command "pip"
-$pythonVer = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+$pythonVer = python -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))"
 Write-OK "Python $pythonVer"
 
 if (-not $SkipPyInstaller) { Require-Command "pyinstaller" }
@@ -74,7 +74,7 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 Write-Step "Installing Python dependencies..."
 Push-Location $RepoRoot
 try {
-    pip install -e "." --quiet
+    pip install -e ".[windows]" --quiet
     if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     pip install pyinstaller --quiet
     Write-OK "Dependencies installed"
@@ -141,7 +141,7 @@ if (-not $SkipNSIS) {
     }
 
     $sizeKB = [math]::Round((Get-Item $outputExe).Length / 1KB)
-    Write-OK "Installer created: $outputExe ($($sizeKB) KB)"
+    Write-OK "Installer created: $outputExe ($sizeKB KB)"
 }
 
 Write-Host ""

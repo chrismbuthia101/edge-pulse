@@ -63,6 +63,8 @@ jobs:
         working-directory: ./edge-agent
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
       - run: choco install nsis --no-progress
       - run: pip install pyinstaller
       - run: powershell -ExecutionPolicy Bypass -File packaging/windows/build_windows.ps1
