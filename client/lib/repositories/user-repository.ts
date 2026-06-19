@@ -121,6 +121,14 @@ export class UserRepository extends BaseRepository<UserRow> {
     return this.update(id, { role } as Partial<UserRow>);
   }
 
+  async createUser(data: Partial<UserRow>): Promise<UserRow> {
+    return this.create(data);
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    return this.delete(id);
+  }
+
   subscribeToUsers(
     filters: Partial<UserQueryOptions> = {},
     callbacks: UserSubscriptionCallbacks = {}

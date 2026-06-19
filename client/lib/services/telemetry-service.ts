@@ -20,15 +20,14 @@ interface TelemetryData {
   payload: Record<string, unknown>;
 }
 
-export class TelemetryService {
-  private supabase = createClient();
+const telemetryClient = () => createClient().schema('telemetry');
 
+export class TelemetryService {
   async getTelemetry(options: GetTelemetryOptions = {}): Promise<TelemetrySample[]> {
-    let query = this.supabase
-      .from('telemetry_events')
+    let query = telemetryClient()
+      .from('events')
       .select('collected_at, payload');
 
-    // Apply filters
     if (options.deviceId) {
       query = query.eq('device_id', options.deviceId);
     }
@@ -41,12 +40,10 @@ export class TelemetryService {
       query = query.lte('collected_at', options.endDate);
     }
 
-    // Ordering
     const orderBy = options.orderBy || 'collected_at';
     const orderDirection = options.orderDirection || 'desc';
     query = query.order(orderBy, { ascending: orderDirection === 'asc' });
 
-    // Limit
     if (options.limit) {
       query = query.limit(options.limit);
     }

@@ -1,5 +1,5 @@
 import { HealthRepository } from '@/lib/repositories';
-import type { DeviceHealth, SystemHealth } from '@/lib/supabase/types';
+import type { DeviceHealthSnapshot, SystemHealth } from '@/lib/supabase/types';
 
 export interface HealthServiceDependencies {
   repository: HealthRepository;
@@ -12,7 +12,7 @@ export class HealthService {
     this.repository = dependencies.repository;
   }
 
-  async getDeviceHealth(options?: { limit?: number }): Promise<DeviceHealth[]> {
+  async getDeviceHealth(options?: { limit?: number }): Promise<DeviceHealthSnapshot[]> {
     return this.repository.getDeviceHealth(options);
   }
 
@@ -20,17 +20,17 @@ export class HealthService {
     return this.repository.getSystemHealth();
   }
 
-  async getDeviceById(deviceId: string): Promise<DeviceHealth | null> {
+  async getDeviceById(deviceId: string): Promise<DeviceHealthSnapshot | null> {
     return this.repository.getDeviceById(deviceId);
   }
 
-  async refreshDeviceHealth(): Promise<DeviceHealth[]> {
+  async refreshDeviceHealth(): Promise<DeviceHealthSnapshot[]> {
     return this.getDeviceHealth({ limit: 100 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   subscribeToHealthUpdates(_callbacks: {
-    onDeviceHealthUpdate?: (device: DeviceHealth) => void;
+    onDeviceHealthUpdate?: (device: DeviceHealthSnapshot) => void;
     onSystemHealthUpdate?: (systemHealth: SystemHealth) => void;
     onError?: (error: Error) => void;
   }) {

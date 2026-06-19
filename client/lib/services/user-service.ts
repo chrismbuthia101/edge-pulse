@@ -1,17 +1,16 @@
 import { UserRepository, type AnalystUser } from '@/lib/repositories/user-repository';
+import type { UserRole } from '@/lib/supabase/types';
 
 export interface GetUsersOptions {
   limit?: number;
-  role?: "ANALYST" | "ADMINISTRATOR";
+  role?: UserRole | UserRole[];
   isActive?: boolean;
-  department?: string;
   search?: string;
 }
 
 export interface CreateUserOptions {
   full_name: string;
-  role: "ANALYST" | "ADMINISTRATOR";
-  department: string | null;
+  role: UserRole;
   is_active: boolean;
   email?: string;
 }
@@ -21,7 +20,7 @@ export interface UpdateUserStatusOptions {
 }
 
 export interface UpdateUserRoleOptions {
-  role: "ANALYST" | "ADMINISTRATOR";
+  role: UserRole;
 }
 
 export interface UserSubscriptionOptions {
@@ -48,7 +47,7 @@ export class UserService {
     return this.repository.getUserById(id);
   }
 
-  async getUsersByRole(role: "ANALYST" | "ADMINISTRATOR"): Promise<AnalystUser[]> {
+  async getUsersByRole(role: UserRole): Promise<AnalystUser[]> {
     return this.repository.getUsersByRole(role);
   }
 
@@ -61,14 +60,18 @@ export class UserService {
   }
 
   async createUser(userData: CreateUserOptions): Promise<AnalystUser> {
-    return this.repository.createUser(userData);
+    return this.repository.createUser({
+      full_name: userData.full_name,
+      role: userData.role,
+      account_status: userData.is_active ? 'ACTIVE' : 'PENDING',
+    });
   }
 
   async updateUserStatus(
     id: string,
     options: UpdateUserStatusOptions
   ): Promise<AnalystUser> {
-    return this.repository.updateUserStatus(id, options.isActive);
+    return this.repository.updateUserStatus(id, options.isActive ? 'ACTIVE' : 'SUSPENDED');
   }
 
   async deleteUser(id: string): Promise<void> {

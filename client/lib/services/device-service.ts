@@ -25,7 +25,6 @@ export interface UpdateDeviceMetricsParams {
   cpuPercent?: number;
   ramPercent?: number;
   syncQueueDepth?: number;
-  hashChainOk?: boolean;
   activelyReporting?: boolean;
 }
 
@@ -51,14 +50,10 @@ export interface DeviceAnalytics {
   healthStatuses: DeviceHealthStatus[];
 }
 
-// ─── Service ───────────────────────────────────────────────────────────────────
-
 export class DeviceService {
   private channelName: string | null = null;
 
   constructor(private readonly repository: DeviceRepository) { }
-
-  // ── Queries ────────────────────────────────────────────────────────────────
 
   async getDevices(options: GetDevicesOptions = {}): Promise<Device[]> {
     return this.repository.findDevices({
@@ -132,8 +127,6 @@ export class DeviceService {
     return this.repository.getDevicesByOS(osPattern);
   }
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
   async isolateDevice(id: string): Promise<Device> {
     return this.repository.isolateDevice(id);
   }
@@ -163,8 +156,6 @@ export class DeviceService {
   async deleteDevice(id: string): Promise<void> {
     return this.repository.delete(id);
   }
-
-  // ── Aggregations ───────────────────────────────────────────────────────────
 
   async getMetrics(): Promise<DeviceMetrics> {
     return this.repository.getDeviceMetrics();

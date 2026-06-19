@@ -1,96 +1,90 @@
-import { LogsRepository } from '@/lib/repositories';
-import type { TamperLogEntry, VerificationResult, LogDevice } from '@/lib/supabase/types';
+import { LogsRepository, AuditLogRepository } from '@/lib/repositories';
+import type { AuditLogEntry } from '@/lib/supabase/types';
+import type { AuditLogQueryOptions } from '@/lib/repositories/logs-repository';
+import type { AuditLogCreateInput } from '@/lib/repositories/audit-log-repository';
 
 export interface LogsServiceDependencies {
   repository: LogsRepository;
+  auditLogRepository?: AuditLogRepository;
 }
 
 export class LogsService {
   private repository: LogsRepository;
+  private auditLogRepository: AuditLogRepository;
 
   constructor(dependencies: LogsServiceDependencies) {
     this.repository = dependencies.repository;
+    this.auditLogRepository = dependencies.auditLogRepository ?? new AuditLogRepository();
   }
 
-  async getDevices(): Promise<string[]> {
-    return this.repository.getDevices();
+  async getAuditLogs(options: AuditLogQueryOptions = {}): Promise<AuditLogEntry[]> {
+    return this.repository.findAuditLogs(options);
   }
 
-  async getLogDevices(): Promise<LogDevice[]> {
-    return this.repository.getLogDevices();
+  async getAuditLogsPaginated(options: AuditLogQueryOptions & { page: number; limit: number }) {
+    return this.repository.findAuditLogsPaginated(options);
   }
 
-  async getLogs(deviceId: string, options?: { 
-    limit?: number; 
-    entryType?: string; 
-    offset?: number;
-  }): Promise<TamperLogEntry[]> {
-    return this.repository.getLogs(deviceId, options);
+  async getAuditLogsByDevice(deviceId: string, limit = 50): Promise<AuditLogEntry[]> {
+    return this.repository.getAuditLogsByDevice(deviceId, limit);
   }
 
-  async verifyChain(deviceId: string): Promise<VerificationResult> {
-    return this.repository.verifyChain(deviceId);
+  async getAuditLogsByUser(userId: string, limit = 50): Promise<AuditLogEntry[]> {
+    return this.repository.getAuditLogsByUser(userId, limit);
   }
 
-  async exportLogs(deviceId: string, options?: { entryType?: string }): Promise<TamperLogEntry[]> {
-    return this.repository.exportLogs(deviceId, options);
+  async getRecentAuditLogs(limit = 100): Promise<AuditLogEntry[]> {
+    return this.repository.getRecentAuditLogs(limit);
   }
 
-  subscribeToLogUpdates(deviceId: string, callbacks: {
-    onNewLog: (log: TamperLogEntry) => void;
-    onError?: (error: Error) => void;
-  }) {
-    return this.repository.subscribeToLogUpdates(deviceId, (log) => {
-      callbacks.onNewLog(log);
-    });
+  async createAuditLog(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
+    return this.repository.createAuditLog(entry);
   }
 
-  getLogEntryTypeLabel(entryType: string): string {
+  async writeAuditLog(entry: AuditLogCreateInput): Promise<AuditLogEntry> {
+    return this.auditLogRepository.write(entry);
+  }
+
+  async findByOrganization(organizationId: string, limit = 100): Promise<AuditLogEntry[]> {
+    return this.auditLogRepository.findByOrganization(organizationId, limit);
+  }
+
+  async findByResource(resourceType: string, resourceId: string): Promise<AuditLogEntry[]> {
+    return this.auditLogRepository.findByResource(resourceType, resourceId);
+  }
+
+  getSeverityLabel(severity: string): string {
     const labels: Record<string, string> = {
-      'TELEMETRY': 'Telemetry Data',
-      'ALERT': 'Security Alert',
-      'DETECTION': 'Anomaly Detection',
-      'SYNC': 'Data Sync',
-      'SYSTEM': 'System Event',
+      'INFO': 'Info',
+      'WARNING': 'Warning',
+      'ERROR': 'Error',
     };
-    return labels[entryType] || entryType;
+    return labels[severity] || severity;
   }
 
-  getLogEntryTypeColor(entryType: string): string {
+  getSeverityColor(severity: string): string {
     const colors: Record<string, string> = {
-      'TELEMETRY': 'text-blue-500',
-      'ALERT': 'text-red-500',
-      'DETECTION': 'text-orange-500',
-      'SYNC': 'text-green-500',
-      'SYSTEM': 'text-purple-500',
+      'INFO': 'text-blue-500',
+      'WARNING': 'text-amber-500',
+      'ERROR': 'text-red-500',
     };
-    return colors[entryType] || 'text-gray-500';
+    return colors[severity] || 'text-gray-500';
   }
 
-  getLogEntryTypeBg(entryType: string): string {
+  getSeverityBg(severity: string): string {
     const backgrounds: Record<string, string> = {
-      'TELEMETRY': 'bg-blue-500/10 border-blue-500/20',
-      'ALERT': 'bg-red-500/10 border-red-500/20',
-      'DETECTION': 'bg-orange-500/10 border-orange-500/20',
-      'SYNC': 'bg-green-500/10 border-green-500/20',
-      'SYSTEM': 'bg-purple-500/10 border-purple-500/20',
+      'INFO': 'bg-blue-500/10 border-blue-500/20',
+      'WARNING': 'bg-amber-500/10 border-amber-500/20',
+      'ERROR': 'bg-red-500/10 border-red-500/20',
     };
-    return backgrounds[entryType] || 'bg-gray-500/10 border-gray-500/20';
+    return backgrounds[severity] || 'bg-gray-500/10 border-gray-500/20';
   }
 
   formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }
 
-  formatSequenceNumber(sequence: number): string {
-    return `#${sequence.toString().padStart(6, '0')}`;
-  }
-
-  getVerificationStatusColor(isValid: boolean): string {
-    return isValid ? 'text-green-500' : 'text-red-500';
-  }
-
-  getVerificationStatusBg(isValid: boolean): string {
-    return isValid ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20';
+  formatAction(action: string): string {
+    return action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 }

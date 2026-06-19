@@ -7,15 +7,15 @@ import type {
   Alert 
 } from '@/lib/supabase/types/alerts';
 import type { 
-  TamperEvidentLog 
-} from '@/lib/supabase/types/database';
+  AuditLogEntry 
+} from '@/lib/supabase/types';
 
-export type ExportType = 'telemetry' | 'alerts' | 'hashchain' | 'features';
+export type ExportType = 'telemetry' | 'alerts' | 'audit_logs' | 'features';
 
 export interface ExportData {
   telemetry?: TelemetryEvent[];
   alerts?: Alert[];
-  hashchain?: TamperEvidentLog[];
+  audit_logs?: AuditLogEntry[];
   features?: FeatureVector[];
 }
 
@@ -45,8 +45,8 @@ export class ForensicService {
       case 'alerts':
         data = await this.repository.getAlertRecords(query);
         break;
-      case 'hashchain':
-        data = await this.repository.getTamperEvidentLog(query);
+      case 'audit_logs':
+        data = await this.repository.getAuditLogs(query);
         break;
       case 'features':
         data = await this.repository.getFeatureVectors(query);
