@@ -97,8 +97,8 @@ export default function ExplainabilityPage() {
   const filteredAlerts = useMemo(() => {
     if (isAdmin) return alerts;
 
-    return alerts.filter(alert => {
-      const assignedDeviceIds = devices.map(device => device.id);
+    return alerts.filter((alert) => {
+      const assignedDeviceIds = devices.map((device) => device.id);
       return assignedDeviceIds.includes(alert.device_id);
     });
   }, [alerts, devices, isAdmin]);
@@ -109,48 +109,50 @@ export default function ExplainabilityPage() {
     return devices;
   }, [devices, isAdmin]);
 
-  const explanationMethods: ExplanationMethod[] = useMemo(() => [
-    {
-      id: "shap",
-      name: "SHAP",
-      description: "Shapley Additive Explanations - Game theory approach",
-      icon: BarChart3,
-      available: true,
-      processingTime: 45,
-      accuracy: 92,
-    },
-    {
-      id: "lime",
-      name: "LIME",
-      description: "Local Interpretable Model-agnostic Explanations",
-      icon: PieChart,
-      available: true,
-      processingTime: 38,
-      accuracy: 88,
-    },
-    {
-      id: "integrated_gradients",
-      name: "Integrated Gradients",
-      description: "Path integral approach for attribution",
-      icon: TrendingUp,
-      available: false,
-      processingTime: 52,
-      accuracy: 90,
-    },
-    {
-      id: "attention",
-      name: "Attention Visualization",
-      description: "Neural network attention weights",
-      icon: Target,
-      available: false,
-      processingTime: 25,
-      accuracy: 85,
-    },
-  ], []);
+  const explanationMethods: ExplanationMethod[] = useMemo(
+    () => [
+      {
+        id: "shap",
+        name: "SHAP",
+        description: "Shapley Additive Explanations - Game theory approach",
+        icon: BarChart3,
+        available: true,
+        processingTime: 45,
+        accuracy: 92,
+      },
+      {
+        id: "lime",
+        name: "LIME",
+        description: "Local Interpretable Model-agnostic Explanations",
+        icon: PieChart,
+        available: true,
+        processingTime: 38,
+        accuracy: 88,
+      },
+      {
+        id: "integrated_gradients",
+        name: "Integrated Gradients",
+        description: "Path integral approach for attribution",
+        icon: TrendingUp,
+        available: false,
+        processingTime: 52,
+        accuracy: 90,
+      },
+      {
+        id: "attention",
+        name: "Attention Visualization",
+        description: "Neural network attention weights",
+        icon: Target,
+        available: false,
+        processingTime: 25,
+        accuracy: 85,
+      },
+    ],
+    [],
+  );
 
   const mockExplanationResults: ExplanationResult[] = useMemo(() => {
     return filteredAlerts.slice(0, 5).map((alert, index) => {
-
       const seed = alert.anomaly_score * 1000 + index;
       const hash = (x: number) => {
         x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -159,17 +161,29 @@ export default function ExplainabilityPage() {
         return (x % 1000) / 1000; // Normalize to 0-1
       };
 
-      const generateFeature = (name: string, rank: number, baseScore: number): FeatureExplanation => {
+      const generateFeature = (
+        name: string,
+        rank: number,
+        baseScore: number,
+      ): FeatureExplanation => {
         const seedValue = hash(seed + name.charCodeAt(0) + rank);
         const attributionScore = baseScore + (seedValue - 0.5) * 0.2;
-        const contributionType = attributionScore > 0.05 ? "positive" : attributionScore < -0.05 ? "negative" : "neutral";
+        const contributionType =
+          attributionScore > 0.05
+            ? "positive"
+            : attributionScore < -0.05
+              ? "negative"
+              : "neutral";
         const confidence = 0.7 + seedValue * 0.3;
         const importance = rank + 1;
 
         return {
           feature_name: name,
           attribution_score: parseFloat(attributionScore.toFixed(3)),
-          contribution_type: contributionType as "positive" | "negative" | "neutral",
+          contribution_type: contributionType as
+            | "positive"
+            | "negative"
+            | "neutral",
           feature_value: parseFloat((hash(seed + rank * 10) * 100).toFixed(2)),
           importance_rank: importance,
           confidence: parseFloat(confidence.toFixed(3)),
@@ -183,7 +197,9 @@ export default function ExplainabilityPage() {
         generateFeature("disk_io", 4, alert.anomaly_score * 0.3),
         generateFeature("process_count", 5, alert.anomaly_score * 0.2),
         generateFeature("connection_count", 6, alert.anomaly_score * 0.1),
-      ].sort((a, b) => Math.abs(b.attribution_score) - Math.abs(a.attribution_score));
+      ].sort(
+        (a, b) => Math.abs(b.attribution_score) - Math.abs(a.attribution_score),
+      );
 
       return {
         method: selectedMethod,
@@ -195,44 +211,53 @@ export default function ExplainabilityPage() {
         confidence_score: 0.85 + hash(seed + 100) * 0.15,
         processing_time_ms: 45 + Math.floor(hash(seed + 200) * 30),
         explanation_text: `This anomaly was primarily driven by ${features[0]?.feature_name || "system metrics"} with a contribution score of ${features[0]?.attribution_score.toFixed(3) || "0.000"}.`,
-        top_factors: features.slice(0, 3).map(f => f.feature_name),
+        top_factors: features.slice(0, 3).map((f) => f.feature_name),
         created_at: alert.created_at,
       };
     });
   }, [filteredAlerts, selectedMethod]);
 
-  const modelPerformance: ModelPerformance[] = useMemo(() => [
-    {
-      model_id: "isolation_forest_v2",
-      model_type: "Isolation Forest",
-      accuracy: 99.9,
-      precision: 99.7,
-      recall: 99.8,
-      f1_score: 99.75,
-      avg_inference_time: 12,
-      total_explanations: 1247,
-    },
-    {
-      model_id: "autoencoder_v1",
-      model_type: "Autoencoder",
-      accuracy: 98.5,
-      precision: 97.8,
-      recall: 98.2,
-      f1_score: 98.0,
-      avg_inference_time: 28,
-      total_explanations: 892,
-    },
-  ], []);
+  const modelPerformance: ModelPerformance[] = useMemo(
+    () => [
+      {
+        model_id: "isolation_forest_v2",
+        model_type: "Isolation Forest",
+        accuracy: 99.9,
+        precision: 99.7,
+        recall: 99.8,
+        f1_score: 99.75,
+        avg_inference_time: 12,
+        total_explanations: 1247,
+      },
+      {
+        model_id: "autoencoder_v1",
+        model_type: "Autoencoder",
+        accuracy: 98.5,
+        precision: 97.8,
+        recall: 98.2,
+        f1_score: 98.0,
+        avg_inference_time: 28,
+        total_explanations: 892,
+      },
+    ],
+    [],
+  );
 
   const currentExplanation = mockExplanationResults[0];
-  const selectedMethodData = explanationMethods.find(m => m.id === selectedMethod);
+  const selectedMethodData = explanationMethods.find(
+    (m) => m.id === selectedMethod,
+  );
 
   const getContributionColor = (type: string) => {
     switch (type) {
-      case "positive": return "text-destructive bg-destructive/10 border-destructive/20";
-      case "negative": return "text-primary bg-primary/10 border-primary/20";
-      case "neutral": return "text-muted-foreground bg-muted border-border";
-      default: return "text-muted-foreground bg-muted border-border";
+      case "positive":
+        return "text-destructive bg-destructive/10 border-destructive/20";
+      case "negative":
+        return "text-primary bg-primary/10 border-primary/20";
+      case "neutral":
+        return "text-muted-foreground bg-muted border-border";
+      default:
+        return "text-muted-foreground bg-muted border-border";
     }
   };
 
@@ -258,12 +283,12 @@ export default function ExplainabilityPage() {
   const handleGenerateExplanation = async () => {
     setLoading(true);
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     setLoading(false);
   };
 
   return (
-    <div className="max-w-[1400px] space-y-6">
+    <div className="max-w-350 space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
@@ -288,8 +313,15 @@ export default function ExplainabilityPage() {
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           </div>
 
-          <Button variant="outline" size="sm" onClick={handleGenerateExplanation} disabled={loading}>
-            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateExplanation}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")}
+            />
             Generate
           </Button>
 
@@ -304,7 +336,9 @@ export default function ExplainabilityPage() {
       <Card className="border-border">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Explanation Methods</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              Explanation Methods
+            </h3>
             <Button
               variant="ghost"
               size="sm"
@@ -326,28 +360,36 @@ export default function ExplainabilityPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <Card className={cn(
-                    "cursor-pointer transition-all duration-200 hover:shadow-md",
-                    selectedMethod === method.id
-                      ? "border-primary bg-primary/5"
-                      : method.available
-                        ? "border-border hover:border-primary/50"
-                        : "border-border opacity-50 cursor-not-allowed"
-                  )}
-                    onClick={() => method.available && setSelectedMethod(method.id)}
+                  <Card
+                    className={cn(
+                      "cursor-pointer transition-all duration-200 hover:shadow-md",
+                      selectedMethod === method.id
+                        ? "border-primary bg-primary/5"
+                        : method.available
+                          ? "border-border hover:border-primary/50"
+                          : "border-border opacity-50 cursor-not-allowed",
+                    )}
+                    onClick={() =>
+                      method.available && setSelectedMethod(method.id)
+                    }
                   >
                     <CardContent className="p-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <Icon className={cn(
-                          "h-4 w-4",
-                          selectedMethod === method.id ? "text-primary" : "text-muted-foreground"
-                        )} />
+                        <Icon
+                          className={cn(
+                            "h-4 w-4",
+                            selectedMethod === method.id
+                              ? "text-primary"
+                              : "text-muted-foreground",
+                          )}
+                        />
                         <div className="flex-1 min-w-0">
                           <h4 className="text-sm font-medium text-foreground truncate">
                             {method.name}
                           </h4>
                           <p className="text-xs text-muted-foreground truncate">
-                            {method.processingTime}ms · {method.accuracy}% accuracy
+                            {method.processingTime}ms · {method.accuracy}%
+                            accuracy
                           </p>
                         </div>
                         {!method.available && (
@@ -376,8 +418,13 @@ export default function ExplainabilityPage() {
           <Card className="border-border">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-foreground">Select Anomaly</h3>
-                <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Select Anomaly
+                </h3>
+                <Select
+                  value={selectedDevice}
+                  onValueChange={setSelectedDevice}
+                >
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="All Devices" />
                   </SelectTrigger>
@@ -400,12 +447,13 @@ export default function ExplainabilityPage() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                   >
-                    <Card className={cn(
-                      "cursor-pointer transition-all duration-200",
-                      selectedAlert === alert.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    )}
+                    <Card
+                      className={cn(
+                        "cursor-pointer transition-all duration-200",
+                        selectedAlert === alert.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50",
+                      )}
                       onClick={() => setSelectedAlert(alert.id)}
                     >
                       <CardContent className="p-3">
@@ -415,12 +463,20 @@ export default function ExplainabilityPage() {
                               <span className="text-sm font-medium text-foreground truncate">
                                 {alert.title}
                               </span>
-                              <Badge variant={alert.anomaly_score > 0.9 ? "destructive" : "secondary"} className="text-xs">
+                              <Badge
+                                variant={
+                                  alert.anomaly_score > 0.9
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                                className="text-xs"
+                              >
                                 {alert.anomaly_score.toFixed(2)}
                               </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {alert.device_name} · {formatTimeAgo(alert.created_at)}
+                              {alert.device_id} ·{" "}
+                              {formatTimeAgo(alert.created_at)}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -453,8 +509,13 @@ export default function ExplainabilityPage() {
                     {currentExplanation.explanation_text}
                   </p>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>Confidence: {currentExplanation.confidence_score.toFixed(2)}</span>
-                    <span>Processing: {currentExplanation.processing_time_ms}ms</span>
+                    <span>
+                      Confidence:{" "}
+                      {currentExplanation.confidence_score.toFixed(2)}
+                    </span>
+                    <span>
+                      Processing: {currentExplanation.processing_time_ms}ms
+                    </span>
                     <span>Method: {selectedMethod.toUpperCase()}</span>
                   </div>
                 </div>
@@ -462,7 +523,9 @@ export default function ExplainabilityPage() {
                 {/* Feature Bars */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-foreground">Feature Contributions</h4>
+                    <h4 className="text-sm font-medium text-foreground">
+                      Feature Contributions
+                    </h4>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -494,11 +557,17 @@ export default function ExplainabilityPage() {
                               </Badge>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className={cn(
-                                "text-sm font-mono font-bold",
-                                getContributionColor(feature.contribution_type).replace("text-", "")
-                              )}>
-                                {feature.contribution_type === "positive" ? "+" : ""}
+                              <span
+                                className={cn(
+                                  "text-sm font-mono font-bold",
+                                  getContributionColor(
+                                    feature.contribution_type,
+                                  ).replace("text-", ""),
+                                )}
+                              >
+                                {feature.contribution_type === "positive"
+                                  ? "+"
+                                  : ""}
                                 {feature.attribution_score.toFixed(3)}
                               </span>
                               {showAdvanced && (
@@ -508,8 +577,14 @@ export default function ExplainabilityPage() {
                                       <HelpCircle className="h-3 w-3 text-muted-foreground" />
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p className="text-xs">Value: {feature.feature_value.toFixed(2)}</p>
-                                      <p className="text-xs">Confidence: {(feature.confidence * 100).toFixed(1)}%</p>
+                                      <p className="text-xs">
+                                        Value:{" "}
+                                        {feature.feature_value.toFixed(2)}
+                                      </p>
+                                      <p className="text-xs">
+                                        Confidence:{" "}
+                                        {(feature.confidence * 100).toFixed(1)}%
+                                      </p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
@@ -526,20 +601,30 @@ export default function ExplainabilityPage() {
                                     ? "bg-destructive"
                                     : feature.contribution_type === "negative"
                                       ? "bg-primary"
-                                      : "bg-muted-foreground"
+                                      : "bg-muted-foreground",
                                 )}
                                 initial={{ width: 0 }}
                                 animate={{ width: `${width}%` }}
-                                transition={{ delay: 0.3 + index * 0.05, duration: 0.6, ease: "easeOut" }}
+                                transition={{
+                                  delay: 0.3 + index * 0.05,
+                                  duration: 0.6,
+                                  ease: "easeOut",
+                                }}
                               />
                             </div>
                             {showAdvanced && (
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <div className={cn(
-                                  "w-2 h-2 rounded-full",
-                                  getConfidenceColor(feature.confidence).replace("text-", "bg-")
-                                )} />
-                                <span>{(feature.confidence * 100).toFixed(0)}%</span>
+                                <div
+                                  className={cn(
+                                    "w-2 h-2 rounded-full",
+                                    getConfidenceColor(
+                                      feature.confidence,
+                                    ).replace("text-", "bg-"),
+                                  )}
+                                />
+                                <span>
+                                  {(feature.confidence * 100).toFixed(0)}%
+                                </span>
                               </div>
                             )}
                           </div>
@@ -583,7 +668,9 @@ export default function ExplainabilityPage() {
               {modelPerformance.map((model, index) => (
                 <div key={model.model_id} className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-foreground">{model.model_type}</h4>
+                    <h4 className="text-sm font-medium text-foreground">
+                      {model.model_type}
+                    </h4>
                     <Badge variant="secondary" className="text-xs">
                       {model.total_explanations} explanations
                     </Badge>
@@ -592,15 +679,21 @@ export default function ExplainabilityPage() {
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <p className="text-muted-foreground">Accuracy</p>
-                      <p className="font-bold text-green-500">{model.accuracy}%</p>
+                      <p className="font-bold text-green-500">
+                        {model.accuracy}%
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">F1 Score</p>
-                      <p className="font-bold text-primary">{model.f1_score}%</p>
+                      <p className="font-bold text-primary">
+                        {model.f1_score}%
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Precision</p>
-                      <p className="font-bold text-amber-500">{model.precision}%</p>
+                      <p className="font-bold text-amber-500">
+                        {model.precision}%
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Recall</p>
@@ -610,10 +703,17 @@ export default function ExplainabilityPage() {
 
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Avg Inference</span>
-                      <span className="font-medium">{model.avg_inference_time}ms</span>
+                      <span className="text-muted-foreground">
+                        Avg Inference
+                      </span>
+                      <span className="font-medium">
+                        {model.avg_inference_time}ms
+                      </span>
                     </div>
-                    <Progress value={(model.avg_inference_time / 50) * 100} className="h-1" />
+                    <Progress
+                      value={(model.avg_inference_time / 50) * 100}
+                      className="h-1"
+                    />
                   </div>
 
                   {index < modelPerformance.length - 1 && (
@@ -634,32 +734,51 @@ export default function ExplainabilityPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {explanationMethods.filter(m => m.available).map((method) => (
-                  <div key={method.id} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <method.icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{method.name}</span>
+                {explanationMethods
+                  .filter((m) => m.available)
+                  .map((method) => (
+                    <div key={method.id} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <method.icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">
+                            {method.name}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={
+                            selectedMethod === method.id
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {selectedMethod === method.id
+                            ? "Active"
+                            : "Available"}
+                        </Badge>
                       </div>
-                      <Badge variant={selectedMethod === method.id ? "default" : "secondary"} className="text-xs">
-                        {selectedMethod === method.id ? "Active" : "Available"}
-                      </Badge>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Speed</span>
-                        <span className="font-medium">{method.processingTime}ms</span>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Speed</span>
+                          <span className="font-medium">
+                            {method.processingTime}ms
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Accuracy
+                          </span>
+                          <span className="font-medium">
+                            {method.accuracy}%
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Accuracy</span>
-                        <span className="font-medium">{method.accuracy}%</span>
-                      </div>
-                    </div>
 
-                    <Progress value={method.accuracy} className="h-1" />
-                  </div>
-                ))}
+                      <Progress value={method.accuracy} className="h-1" />
+                    </div>
+                  ))}
               </CardContent>
             </Card>
           )}
@@ -675,15 +794,24 @@ export default function ExplainabilityPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Explanations</p>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Total Explanations
+                  </p>
                   <p className="text-xl font-bold text-foreground">
-                    {modelPerformance.reduce((sum, m) => sum + m.total_explanations, 0).toLocaleString()}
+                    {modelPerformance
+                      .reduce((sum, m) => sum + m.total_explanations, 0)
+                      .toLocaleString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Avg Confidence</p>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Avg Confidence
+                  </p>
                   <p className="text-xl font-bold text-green-500">
-                    {currentExplanation ? (currentExplanation.confidence_score * 100).toFixed(1) : "0"}%
+                    {currentExplanation
+                      ? (currentExplanation.confidence_score * 100).toFixed(1)
+                      : "0"}
+                    %
                   </p>
                 </div>
               </div>
@@ -691,7 +819,9 @@ export default function ExplainabilityPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Active Method</span>
-                  <span className="font-medium">{selectedMethod.toUpperCase()}</span>
+                  <span className="font-medium">
+                    {selectedMethod.toUpperCase()}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Processing Time</span>
