@@ -1,22 +1,22 @@
-import { create } from 'zustand';
-import { HealthRepository } from '@/lib/repositories';
-import { HealthService } from '@/lib/services/health-service';
-import type { DeviceHealth, SystemHealth } from '@/lib/supabase/types';
-import { toast } from 'sonner';
+import { create } from "zustand";
+import { HealthRepository } from "@/lib/repositories";
+import { HealthService } from "@/lib/services/health-service";
+import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
+import { toast } from "sonner";
 
 interface HealthStore {
-  devices: DeviceHealth[];
+  devices: DeviceHealthSnapshot[];
   systemHealth: SystemHealth | null;
   loading: boolean;
   error: string | null;
 
   initialize: () => Promise<void>;
   refreshHealthData: () => Promise<void>;
-  setDevices: (devices: DeviceHealth[]) => void;
+  setDevices: (devices: DeviceHealthSnapshot[]) => void;
   setSystemHealth: (systemHealth: SystemHealth | null) => void;
   clearError: () => void;
 
-  getDeviceById: (deviceId: string) => DeviceHealth | null;
+  getDeviceById: (deviceId: string) => DeviceHealthSnapshot | null;
   getSystemMetrics: () => Promise<SystemHealth | null>;
 
   subscribeToHealthUpdates: () => void;
@@ -28,22 +28,15 @@ const healthService = new HealthService({ repository: healthRepository });
 
 let healthSubscription: { unsubscribe: () => void } | null = null;
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'An unexpected error occurred';
+  return err instanceof Error ? err.message : "An unexpected error occurred";
 }
 
-// ─── Store ─────────────────────────────────────────────────────────────────────
-
 export const useHealthStore = create<HealthStore>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
   devices: [],
   systemHealth: null,
   loading: false,
   error: null,
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   initialize: async () => {
     try {
@@ -51,12 +44,11 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
 
       const [devices, systemHealth] = await Promise.all([
         healthService.getDeviceHealth({ limit: 100 }),
-        healthService.getSystemHealth()
+        healthService.getSystemHealth(),
       ]);
 
       set({ devices, systemHealth, loading: false });
 
-      // Subscribe to realtime updates
       get().subscribeToHealthUpdates();
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
@@ -69,18 +61,16 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
 
       const [devices, systemHealth] = await Promise.all([
         healthService.refreshDeviceHealth(),
-        healthService.getSystemHealth()
+        healthService.getSystemHealth(),
       ]);
 
       set({ devices, systemHealth, loading: false });
-      toast.success('Health data refreshed');
+      toast.success("Health data refreshed");
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
-      toast.error('Failed to refresh health data');
+      toast.error("Failed to refresh health data");
     }
   },
-
-  // ── Local mutations ────────────────────────────────────────────────────────
 
   setDevices: (devices) => set({ devices }),
 
@@ -88,10 +78,8 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  // ── Queries ───────────────────────────────────────────────────────────────
-
   getDeviceById: (deviceId) => {
-    return get().devices.find(d => d.device_id === deviceId) || null;
+    return get().devices.find((d) => d.device_id === deviceId) || null;
   },
 
   getSystemMetrics: async () => {
@@ -105,8 +93,6 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
     }
   },
 
-  // ── Realtime subscriptions ─────────────────────────────────────────────────────
-
   subscribeToHealthUpdates: () => {
     if (healthSubscription) return; // Already subscribed
 
@@ -115,7 +101,7 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
     healthSubscription = {
       unsubscribe: () => {
         healthSubscription = null;
-      }
+      },
     };
   },
 
