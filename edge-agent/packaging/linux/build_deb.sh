@@ -75,12 +75,16 @@ echo "[3/5] Building Python venv..."
 python3 -m venv "${VENV_DIR}"
 "${VENV_DIR}/bin/pip" install --quiet --upgrade pip wheel setuptools
 
-if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
-    echo "  Using lockfile constraints from poetry.lock"
-    CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+if command -v poetry &>/dev/null; then
+    if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
+        echo "  Using lockfile constraints from poetry.lock"
+        CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+    else
+        CONSTRAINT=""
+        echo "  Note: poetry.lock not found or invalid — skipping lockfile constraint"
+    fi
 else
     CONSTRAINT=""
-    echo "  Warning: poetry export unavailable — skipping lockfile constraint"
 fi
 
 "${VENV_DIR}/bin/pip" install --quiet ${CONSTRAINT:+"${CONSTRAINT}"} \

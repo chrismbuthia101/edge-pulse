@@ -27,6 +27,8 @@ jobs:
     defaults:
       run:
         working-directory: ./edge-agent
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - run: sudo gem install fpm --no-document
@@ -60,6 +62,8 @@ jobs:
     defaults:
       run:
         working-directory: ./edge-agent
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

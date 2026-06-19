@@ -53,12 +53,16 @@ mkdir -p \
 # Install Python packages via pip --target
 echo "[2/4] Installing Python packages via pip --target..."
 
-if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
-    echo "  Using lockfile constraints from poetry.lock"
-    CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+if command -v poetry &>/dev/null; then
+    if poetry export --without-hashes -f requirements.txt -o /tmp/ep-requirements.txt 2>/dev/null; then
+        echo "  Using lockfile constraints from poetry.lock"
+        CONSTRAINT="--constraint /tmp/ep-requirements.txt"
+    else
+        CONSTRAINT=""
+        echo "  Note: poetry.lock not found or invalid — skipping lockfile constraint"
+    fi
 else
     CONSTRAINT=""
-    echo "  Warning: poetry export unavailable — skipping lockfile constraint"
 fi
 
 python3 -m pip install --quiet --upgrade pip wheel setuptools
