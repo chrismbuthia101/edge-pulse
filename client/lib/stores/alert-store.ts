@@ -1,8 +1,8 @@
-import { create } from 'zustand';
-import { AlertRepository } from '@/lib/repositories';
-import { AlertService } from '@/lib/services/alert-service';
-import type { Alert, AlertStatus } from '@/lib/supabase/types';
-import { toast } from 'sonner';
+import { create } from "zustand";
+import { AlertRepository } from "@/lib/repositories";
+import { AlertService } from "@/lib/services/alert-service";
+import type { Alert, AlertStatus } from "@/lib/supabase/types";
+import { toast } from "sonner";
 
 interface AlertStore {
   alerts: Alert[];
@@ -16,13 +16,21 @@ interface AlertStore {
   refreshAlertsForUser: (userId: string, isAdmin: boolean) => Promise<void>;
   addAlert: (alert: Alert) => void;
   updateAlert: (id: string, updates: Partial<Alert>) => void;
-  updateAlertStatus: (id: string, status: AlertStatus, userId?: string) => Promise<void>;
+  updateAlertStatus: (
+    id: string,
+    status: AlertStatus,
+    userId?: string,
+  ) => Promise<void>;
   markRead: (id: string) => void;
   markMultipleRead: (ids: string[]) => Promise<void>;
   setAlerts: (alerts: Alert[]) => void;
   clearError: () => void;
 
-  bulkUpdateStatus: (ids: string[], status: AlertStatus, userId?: string) => Promise<void>;
+  bulkUpdateStatus: (
+    ids: string[],
+    status: AlertStatus,
+    userId?: string,
+  ) => Promise<void>;
   bulkAcknowledge: (ids: string[], userId?: string) => Promise<void>;
   bulkClose: (ids: string[], userId?: string) => Promise<void>;
 
@@ -41,15 +49,17 @@ const alertService = new AlertService(alertRepository);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function deriveCounters(alerts: Alert[]): Pick<AlertStore, 'pendingCount' | 'unreadCount'> {
+function deriveCounters(
+  alerts: Alert[],
+): Pick<AlertStore, "pendingCount" | "unreadCount"> {
   return {
-    pendingCount: alerts.filter((a) => a.status === 'PENDING').length,
-    unreadCount: alerts.filter((a) => !a.read && a.status !== 'CLOSED').length,
+    pendingCount: alerts.filter((a) => a.status === "PENDING").length,
+    unreadCount: alerts.filter((a) => !a.read && a.status !== "CLOSED").length,
   };
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'An unexpected error occurred';
+  return err instanceof Error ? err.message : "An unexpected error occurred";
 }
 
 export const useAlertStore = create<AlertStore>((set, get) => ({
@@ -65,8 +75,15 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   initialize: async () => {
     try {
       set({ loading: true, error: null });
-      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
-      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
+      const result = await alertService.getAlertsPaginated({
+        page: 1,
+        limit: 100,
+      });
+      set({
+        alerts: result.alerts,
+        ...deriveCounters(result.alerts),
+        loading: false,
+      });
       get().subscribeToAlerts();
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
@@ -76,8 +93,15 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   refreshAlerts: async () => {
     try {
       set({ loading: true, error: null });
-      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
-      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
+      const result = await alertService.getAlertsPaginated({
+        page: 1,
+        limit: 100,
+      });
+      set({
+        alerts: result.alerts,
+        ...deriveCounters(result.alerts),
+        loading: false,
+      });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
     }
@@ -87,8 +111,15 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     try {
       set({ loading: true, error: null });
 
-      const result = await alertService.getAlertsPaginated({ page: 1, limit: 100 });
-      set({ alerts: result.alerts, ...deriveCounters(result.alerts), loading: false });
+      const result = await alertService.getAlertsPaginated({
+        page: 1,
+        limit: 100,
+      });
+      set({
+        alerts: result.alerts,
+        ...deriveCounters(result.alerts),
+        loading: false,
+      });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
     }
@@ -105,7 +136,9 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 
   updateAlert: (id, updates) => {
     set((state) => {
-      const alerts = state.alerts.map((a) => (a.id === id ? { ...a, ...updates } : a));
+      const alerts = state.alerts.map((a) =>
+        a.id === id ? { ...a, ...updates } : a,
+      );
       return { alerts, ...deriveCounters(alerts) };
     });
   },
@@ -116,7 +149,9 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 
   markRead: (id) => {
     set((state) => {
-      const alerts = state.alerts.map((a) => (a.id === id ? { ...a, read: true } : a));
+      const alerts = state.alerts.map((a) =>
+        a.id === id ? { ...a, read: true } : a,
+      );
       return { alerts, ...deriveCounters(alerts) };
     });
   },
@@ -144,7 +179,10 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     ids.forEach((id) => get().markRead(id));
 
     try {
-      await alertService.bulkUpdateAlerts({ alertIds: ids, operation: 'mark_read' });
+      await alertService.bulkUpdateAlerts({
+        alertIds: ids,
+        operation: "mark_read",
+      });
     } catch (err) {
       set({ error: errorMessage(err) });
     }
@@ -155,11 +193,11 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     ids.forEach((id) => get().updateAlert(id, { status }));
 
     const operation =
-      status === 'ACKNOWLEDGED'
-        ? 'acknowledge'
-        : status === 'INVESTIGATED'
-          ? 'investigate'
-          : 'close';
+      status === "ACKNOWLEDGED"
+        ? "acknowledge"
+        : status === "INVESTIGATED"
+          ? "investigate"
+          : "close";
 
     try {
       await alertService.bulkUpdateAlerts({
@@ -172,9 +210,10 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     }
   },
 
-  bulkAcknowledge: (ids, userId) => get().bulkUpdateStatus(ids, 'ACKNOWLEDGED', userId),
+  bulkAcknowledge: (ids, userId) =>
+    get().bulkUpdateStatus(ids, "ACKNOWLEDGED", userId),
 
-  bulkClose: (ids, userId) => get().bulkUpdateStatus(ids, 'CLOSED', userId),
+  bulkClose: (ids, userId) => get().bulkUpdateStatus(ids, "CLOSED", userId),
 
   // ── Queries (return data, not stored) ─────────────────────────────────────
 
@@ -230,10 +269,10 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
       onNewAlert: (alert) => {
         get().addAlert(alert);
 
-        if (alert.severity === 'critical') {
+        if (alert.severity === "critical") {
           toast.error(`Critical Alert: ${alert.title}`, {
             action: {
-              label: 'View',
+              label: "View",
               onClick: () => {
                 window.location.href = `/dashboard/alerts/${alert.id}`;
               },
@@ -248,7 +287,7 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
         get().updateAlert(alert.id, alert);
       },
       onError: (error) => {
-        console.error('[AlertStore] Realtime error:', error);
+        console.error("[AlertStore] Realtime error:", error);
       },
     });
   },

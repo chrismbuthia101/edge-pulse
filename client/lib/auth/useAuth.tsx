@@ -36,8 +36,8 @@ export function useAuth(): AuthContextType {
     initializeAuth();
   }, []);
 
-  const isApproved = authStore.user?.approval_status === 'APPROVED' && authStore.user?.is_active === true;
-  const approvalStatus = authStore.user?.approval_status || null;
+  const isApproved = authStore.user?.account_status === "ACTIVE";
+  const approvalStatus = authStore.user?.account_status || null;
 
   return {
     user: authStore.user,
@@ -56,7 +56,7 @@ export function useAuth(): AuthContextType {
 
 export function withRole<T extends object>(
   Component: React.ComponentType<T>,
-  requiredRoles: string[]
+  requiredRoles: string[],
 ) {
   return function RoleProtectedComponent(props: T) {
     const { hasRole, loading } = useAuth();

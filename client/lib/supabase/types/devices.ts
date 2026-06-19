@@ -1,4 +1,8 @@
-import type { DeviceStatus, DeviceRisk, DeviceType } from '@/lib/supabase/types/shared';
+import type {
+  DeviceStatus,
+  DeviceRisk,
+  DeviceType,
+} from "@/lib/supabase/types/shared";
 
 export interface Device {
   id: string;

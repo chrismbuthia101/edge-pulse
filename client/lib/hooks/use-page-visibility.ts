@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Hook to detect if page/tab is visible
@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
  */
 export function usePageVisibility(): boolean {
   const [isVisible, setIsVisible] = useState(
-    typeof document !== 'undefined' ? !document.hidden : true
+    typeof document !== "undefined" ? !document.hidden : true,
   );
 
   useEffect(() => {
@@ -16,10 +16,10 @@ export function usePageVisibility(): boolean {
       setIsVisible(!document.hidden);
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

@@ -40,7 +40,11 @@ export const severityConfig = {
 export type Severity = keyof typeof severityConfig;
 
 export const riskConfig = {
-  critical: { color: "text-destructive", bg: "bg-destructive/10", label: "Critical" },
+  critical: {
+    color: "text-destructive",
+    bg: "bg-destructive/10",
+    label: "Critical",
+  },
   high: { color: "text-orange-500", bg: "bg-orange-500/10", label: "High" },
   medium: { color: "text-amber-500", bg: "bg-amber-500/10", label: "Medium" },
   low: { color: "text-primary", bg: "bg-primary/10", label: "Low" },

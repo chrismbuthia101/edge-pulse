@@ -67,14 +67,13 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<NotifFilter>("all");
   const [error, setError] = useState<string | null>(null);
-  const notificationRepo = new NotificationRepository();
-
   const loadNotifications = useCallback(async () => {
     if (!authUser) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await notificationRepo.findNotifications({
+      const repo = new NotificationRepository();
+      const data = await repo.findNotifications({
         userId: authUser.id,
         orderBy: { column: "created_at", ascending: false },
         limit: 100,
@@ -96,7 +95,8 @@ export default function NotificationsPage() {
   const markAllRead = async () => {
     if (!authUser) return;
     try {
-      await notificationRepo.markAllAsRead(authUser.id, "");
+      const repo = new NotificationRepository();
+      await repo.markAllAsRead(authUser.id, "");
       setNotifications((prev) =>
         prev.map((n) => ({
           ...n,
@@ -111,7 +111,8 @@ export default function NotificationsPage() {
 
   const markRead = async (id: string) => {
     try {
-      await notificationRepo.markAsRead(id);
+      const repo = new NotificationRepository();
+      await repo.markAsRead(id);
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === id
@@ -127,7 +128,8 @@ export default function NotificationsPage() {
   const dismiss = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     try {
-      await notificationRepo.delete(id);
+      const repo = new NotificationRepository();
+      await repo.delete(id);
     } catch {
       loadNotifications();
     }

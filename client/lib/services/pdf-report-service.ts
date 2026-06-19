@@ -91,7 +91,7 @@ export class PDFReportService {
    */
   async generateReport(
     data: ReportData,
-    chartImages?: ChartImage[]
+    chartImages?: ChartImage[],
   ): Promise<Blob> {
     this.doc = new jsPDF();
     this.pageWidth = this.doc.internal.pageSize.getWidth();
@@ -115,14 +115,18 @@ export class PDFReportService {
     this.addDeviceRiskMatrix(data.deviceRiskMatrix);
 
     // Distribution (with charts if provided)
-    const severityChart = chartImages?.find((c) => c.id === "severity-distribution-chart");
-    const categoryChart = chartImages?.find((c) => c.id === "category-distribution-chart");
+    const severityChart = chartImages?.find(
+      (c) => c.id === "severity-distribution-chart",
+    );
+    const categoryChart = chartImages?.find(
+      (c) => c.id === "category-distribution-chart",
+    );
 
     if (severityChart || categoryChart) {
       await this.addDistributionCharts(
         data.distribution,
         severityChart,
-        categoryChart
+        categoryChart,
       );
     } else {
       this.addDistributionTable(data.distribution);
@@ -196,24 +200,19 @@ export class PDFReportService {
       `Generated on ${data.generatedAt.toLocaleDateString()}`,
       this.pageWidth / 2,
       150,
-      { align: "center" }
+      { align: "center" },
     );
 
     this.doc.text(
       `Period: ${data.dateRange.start.toLocaleDateString()} - ${data.dateRange.end.toLocaleDateString()}`,
       this.pageWidth / 2,
       165,
-      { align: "center" }
+      { align: "center" },
     );
 
     this.doc.setDrawColor(59, 130, 246);
     this.doc.setLineWidth(2);
-    this.doc.line(
-      this.margin,
-      200,
-      this.pageWidth - this.margin,
-      200
-    );
+    this.doc.line(this.margin, 200, this.pageWidth - this.margin, 200);
 
     this.doc.setTextColor(255, 255, 255);
     this.doc.setFontSize(10);
@@ -229,7 +228,10 @@ export class PDFReportService {
       ["Total Alerts", data.executiveSummary.totalAlerts.toString()],
       ["Critical Alerts", data.executiveSummary.criticalAlerts.toString()],
       ["Devices Monitored", data.executiveSummary.devicesMonitored.toString()],
-      ["ML Accuracy", `${(data.executiveSummary.mlAccuracy * 100).toFixed(1)}%`],
+      [
+        "ML Accuracy",
+        `${(data.executiveSummary.mlAccuracy * 100).toFixed(1)}%`,
+      ],
     ];
 
     autoTable(this.doc, {
@@ -259,13 +261,15 @@ export class PDFReportService {
       this.margin,
       40,
       imgWidth,
-      imgHeight
+      imgHeight,
     );
 
     this.doc.addPage();
   }
 
-  private addAlertTrendsTable(trends: Array<{ date: string; count: number }>): void {
+  private addAlertTrendsTable(
+    trends: Array<{ date: string; count: number }>,
+  ): void {
     this.addSectionHeader("Alert Trends");
 
     const tableData = trends.map((t) => [t.date, t.count.toString()]);
@@ -285,12 +289,14 @@ export class PDFReportService {
     this.doc.addPage();
   }
 
-  private addDeviceRiskMatrix(devices: Array<{
-    deviceId: string;
-    deviceName: string;
-    riskScore: number;
-    status: string;
-  }>): void {
+  private addDeviceRiskMatrix(
+    devices: Array<{
+      deviceId: string;
+      deviceName: string;
+      riskScore: number;
+      status: string;
+    }>,
+  ): void {
     this.addSectionHeader("Device Risk Matrix");
 
     const tableData = devices.map((d) => [
@@ -317,7 +323,7 @@ export class PDFReportService {
   private async addDistributionCharts(
     distribution: ReportData["distribution"],
     severityChart?: ChartImage,
-    categoryChart?: ChartImage
+    categoryChart?: ChartImage,
   ): Promise<void> {
     this.addSectionHeader("Alert Distribution");
 
@@ -330,7 +336,7 @@ export class PDFReportService {
         this.margin,
         yPos,
         (this.pageWidth - this.margin * 2) / 2 - 5,
-        100
+        100,
       );
       yPos += 110;
     }
@@ -342,7 +348,7 @@ export class PDFReportService {
         this.pageWidth / 2 + 5,
         40,
         (this.pageWidth - this.margin * 2) / 2 - 5,
-        100
+        100,
       );
     }
 
@@ -377,7 +383,9 @@ export class PDFReportService {
       margin: { left: this.margin, right: this.margin },
     });
 
-    const lastY = (this.doc as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 100;
+    const lastY =
+      (this.doc as { lastAutoTable?: { finalY: number } }).lastAutoTable
+        ?.finalY || 100;
 
     autoTable(this.doc, {
       startY: lastY + 10,
@@ -394,11 +402,13 @@ export class PDFReportService {
     this.doc.addPage();
   }
 
-  private addTopDevices(devices: Array<{
-    deviceName: string;
-    alertCount: number;
-    avgRiskScore: number;
-  }>): void {
+  private addTopDevices(
+    devices: Array<{
+      deviceName: string;
+      alertCount: number;
+      avgRiskScore: number;
+    }>,
+  ): void {
     this.addSectionHeader("Top Devices by Alert Count");
 
     const tableData = devices.map((d) => [
@@ -422,13 +432,15 @@ export class PDFReportService {
     this.doc.addPage();
   }
 
-  private addCriticalIncidents(incidents: Array<{
-    id: string;
-    deviceName: string;
-    severity: string;
-    description: string;
-    timestamp: Date;
-  }>): void {
+  private addCriticalIncidents(
+    incidents: Array<{
+      id: string;
+      deviceName: string;
+      severity: string;
+      description: string;
+      timestamp: Date;
+    }>,
+  ): void {
     this.addSectionHeader("Critical Incidents");
 
     const tableData = incidents.map((i) => [
@@ -499,7 +511,7 @@ export class PDFReportService {
         `Page ${i} of ${pageCount} | CONFIDENTIAL`,
         this.pageWidth / 2,
         this.pageHeight - 10,
-        { align: "center" }
+        { align: "center" },
       );
     }
   }

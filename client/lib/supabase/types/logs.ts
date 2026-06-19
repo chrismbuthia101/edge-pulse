@@ -7,7 +7,7 @@ export interface AuditLogEntry {
   resource_id: string | null;
   old_values: Record<string, unknown> | null;
   new_values: Record<string, unknown> | null;
-  severity: 'INFO' | 'WARNING' | 'ERROR';
+  severity: "INFO" | "WARNING" | "ERROR";
   ip_address: string | null;
   user_agent: string | null;
   organization_id: string | null;

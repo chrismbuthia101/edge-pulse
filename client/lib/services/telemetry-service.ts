@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from "@/lib/supabase/client";
 
 export interface TelemetrySample {
   collected_at: string;
@@ -11,8 +11,8 @@ export interface GetTelemetryOptions {
   startDate?: string;
   endDate?: string;
   limit?: number;
-  orderBy?: 'collected_at' | 'received_at' | 'created_at';
-  orderDirection?: 'asc' | 'desc';
+  orderBy?: "collected_at" | "received_at" | "created_at";
+  orderDirection?: "asc" | "desc";
 }
 
 interface TelemetryData {
@@ -20,29 +20,31 @@ interface TelemetryData {
   payload: Record<string, unknown>;
 }
 
-const telemetryClient = () => createClient().schema('telemetry');
+const telemetryClient = () => createClient().schema("telemetry");
 
 export class TelemetryService {
-  async getTelemetry(options: GetTelemetryOptions = {}): Promise<TelemetrySample[]> {
+  async getTelemetry(
+    options: GetTelemetryOptions = {},
+  ): Promise<TelemetrySample[]> {
     let query = telemetryClient()
-      .from('events')
-      .select('collected_at, payload');
+      .from("events")
+      .select("collected_at, payload");
 
     if (options.deviceId) {
-      query = query.eq('device_id', options.deviceId);
+      query = query.eq("device_id", options.deviceId);
     }
 
     if (options.startDate) {
-      query = query.gte('collected_at', options.startDate);
+      query = query.gte("collected_at", options.startDate);
     }
 
     if (options.endDate) {
-      query = query.lte('collected_at', options.endDate);
+      query = query.lte("collected_at", options.endDate);
     }
 
-    const orderBy = options.orderBy || 'collected_at';
-    const orderDirection = options.orderDirection || 'desc';
-    query = query.order(orderBy, { ascending: orderDirection === 'asc' });
+    const orderBy = options.orderBy || "collected_at";
+    const orderDirection = options.orderDirection || "desc";
+    query = query.order(orderBy, { ascending: orderDirection === "asc" });
 
     if (options.limit) {
       query = query.limit(options.limit);
@@ -52,7 +54,10 @@ export class TelemetryService {
     if (error) throw error;
 
     return (data || []).map((t: TelemetryData) => {
-      const payload = t.payload as { cpu_percent?: number; ram_percent?: number };
+      const payload = t.payload as {
+        cpu_percent?: number;
+        ram_percent?: number;
+      };
       return {
         collected_at: t.collected_at,
         cpu_percent: payload.cpu_percent ?? 0,
@@ -61,37 +66,42 @@ export class TelemetryService {
     });
   }
 
-  async getLatestTelemetry(deviceId: string, limit = 48): Promise<TelemetrySample[]> {
+  async getLatestTelemetry(
+    deviceId: string,
+    limit = 48,
+  ): Promise<TelemetrySample[]> {
     return this.getTelemetry({
       deviceId,
       limit,
-      orderBy: 'collected_at',
-      orderDirection: 'desc',
+      orderBy: "collected_at",
+      orderDirection: "desc",
     });
   }
 
   async getTelemetryByTimeRange(
     deviceId: string,
     startDate: string,
-    endDate: string
+    endDate: string,
   ): Promise<TelemetrySample[]> {
     return this.getTelemetry({
       deviceId,
       startDate,
       endDate,
-      orderBy: 'collected_at',
-      orderDirection: 'asc',
+      orderBy: "collected_at",
+      orderDirection: "asc",
     });
   }
 
   async getAverageCpuUsage(deviceId: string, hours = 24): Promise<number> {
-    const startDate = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const startDate = new Date(
+      Date.now() - hours * 60 * 60 * 1000,
+    ).toISOString();
 
     const telemetry = await this.getTelemetry({
       deviceId,
       startDate,
-      orderBy: 'collected_at',
-      orderDirection: 'desc',
+      orderBy: "collected_at",
+      orderDirection: "desc",
       limit: 100,
     });
 
@@ -102,13 +112,15 @@ export class TelemetryService {
   }
 
   async getAverageRamUsage(deviceId: string, hours = 24): Promise<number> {
-    const startDate = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const startDate = new Date(
+      Date.now() - hours * 60 * 60 * 1000,
+    ).toISOString();
 
     const telemetry = await this.getTelemetry({
       deviceId,
       startDate,
-      orderBy: 'collected_at',
-      orderDirection: 'desc',
+      orderBy: "collected_at",
+      orderDirection: "desc",
       limit: 100,
     });
 
@@ -137,12 +149,16 @@ export class TelemetryService {
       };
     }
 
-    const cpuValues = telemetry.map(t => t.cpu_percent);
-    const ramValues = telemetry.map(t => t.ram_percent);
+    const cpuValues = telemetry.map((t) => t.cpu_percent);
+    const ramValues = telemetry.map((t) => t.ram_percent);
 
     return {
-      avgCpu: Math.round(cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length),
-      avgRam: Math.round(ramValues.reduce((a, b) => a + b, 0) / ramValues.length),
+      avgCpu: Math.round(
+        cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length,
+      ),
+      avgRam: Math.round(
+        ramValues.reduce((a, b) => a + b, 0) / ramValues.length,
+      ),
       maxCpu: Math.max(...cpuValues),
       maxRam: Math.max(...ramValues),
       samples: telemetry.length,

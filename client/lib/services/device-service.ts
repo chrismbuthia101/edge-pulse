@@ -1,10 +1,10 @@
-import { DeviceRepository } from '@/lib/repositories';
+import { DeviceRepository } from "@/lib/repositories";
 import type {
   DeviceMetrics,
   DeviceHealthStatus,
   DeviceSubscriptionCallbacks,
-} from '@/lib/repositories/device-repository';
-import type { Device, DeviceStatus } from '@/lib/supabase/types';
+} from "@/lib/repositories/device-repository";
+import type { Device, DeviceStatus } from "@/lib/supabase/types";
 
 export interface GetDevicesOptions {
   limit?: number;
@@ -28,7 +28,7 @@ export interface UpdateDeviceMetricsParams {
   activelyReporting?: boolean;
 }
 
-export type BulkDeviceOperation = 'isolate' | 'unisolate';
+export type BulkDeviceOperation = "isolate" | "unisolate";
 
 export interface BulkDeviceOperationParams {
   deviceIds: string[];
@@ -44,16 +44,16 @@ export interface DeviceSubscriptionOptions {
 }
 
 export interface DeviceAnalytics {
-  timeframe: '24h' | '7d' | '30d';
+  timeframe: "24h" | "7d" | "30d";
   metrics: DeviceMetrics;
-  distribution: Awaited<ReturnType<DeviceRepository['getDeviceDistribution']>>;
+  distribution: Awaited<ReturnType<DeviceRepository["getDeviceDistribution"]>>;
   healthStatuses: DeviceHealthStatus[];
 }
 
 export class DeviceService {
   private channelName: string | null = null;
 
-  constructor(private readonly repository: DeviceRepository) { }
+  constructor(private readonly repository: DeviceRepository) {}
 
   async getDevices(options: GetDevicesOptions = {}): Promise<Device[]> {
     return this.repository.findDevices({
@@ -65,7 +65,7 @@ export class DeviceService {
       agentVersion: options.agentVersion,
       osType: options.osType,
       limit: options.limit,
-      orderBy: { column: 'name', ascending: true },
+      orderBy: { column: "name", ascending: true },
     });
   }
 
@@ -77,7 +77,17 @@ export class DeviceService {
     return this.repository.getOnlineDevices();
   }
 
-  async getDevicesPaginated(options: GetDevicesOptions & { page: number; limit: number }): Promise<{ devices: Device[]; total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean }> {
+  async getDevicesPaginated(
+    options: GetDevicesOptions & { page: number; limit: number },
+  ): Promise<{
+    devices: Device[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  }> {
     const result = await this.repository.findDevicesPaginated({
       status: options.status,
       type: options.type,
@@ -88,7 +98,7 @@ export class DeviceService {
       osType: options.osType,
       page: options.page,
       limit: options.limit,
-      orderBy: { column: 'name', ascending: true },
+      orderBy: { column: "name", ascending: true },
     });
 
     return {
@@ -114,7 +124,10 @@ export class DeviceService {
     return this.repository.getDevicesWithPerformanceIssues();
   }
 
-  async searchDevices(query: string, options: GetDevicesOptions = {}): Promise<Device[]> {
+  async searchDevices(
+    query: string,
+    options: GetDevicesOptions = {},
+  ): Promise<Device[]> {
     return this.repository.searchDevices(query, {
       status: options.status,
       type: options.type,
@@ -135,7 +148,10 @@ export class DeviceService {
     return this.repository.unisolateDevice(id);
   }
 
-  async updateDeviceMetrics(id: string, metrics: UpdateDeviceMetricsParams): Promise<Device> {
+  async updateDeviceMetrics(
+    id: string,
+    metrics: UpdateDeviceMetricsParams,
+  ): Promise<Device> {
     return this.repository.updateDeviceMetrics(id, metrics);
   }
 
@@ -143,10 +159,12 @@ export class DeviceService {
     return this.repository.updateDeviceStatus(id, status);
   }
 
-  async bulkDeviceOperation(params: BulkDeviceOperationParams): Promise<Device[]> {
+  async bulkDeviceOperation(
+    params: BulkDeviceOperationParams,
+  ): Promise<Device[]> {
     const { deviceIds, operation } = params;
 
-    if (operation === 'isolate') {
+    if (operation === "isolate") {
       return Promise.all(deviceIds.map((id) => this.isolateDevice(id)));
     }
 
@@ -162,7 +180,7 @@ export class DeviceService {
   }
 
   async getDeviceDistribution(): Promise<
-    Awaited<ReturnType<DeviceRepository['getDeviceDistribution']>>
+    Awaited<ReturnType<DeviceRepository["getDeviceDistribution"]>>
   > {
     return this.repository.getDeviceDistribution();
   }
@@ -171,12 +189,16 @@ export class DeviceService {
     return this.repository.getDeviceHealthStatuses();
   }
 
-  async getDeviceHealthReport(deviceId: string): Promise<DeviceHealthStatus | null> {
+  async getDeviceHealthReport(
+    deviceId: string,
+  ): Promise<DeviceHealthStatus | null> {
     const statuses = await this.repository.getDeviceHealthStatuses();
     return statuses.find((s) => s.deviceId === deviceId) ?? null;
   }
 
-  async getDeviceAnalytics(timeframe: '24h' | '7d' | '30d' = '24h'): Promise<DeviceAnalytics> {
+  async getDeviceAnalytics(
+    timeframe: "24h" | "7d" | "30d" = "24h",
+  ): Promise<DeviceAnalytics> {
     const [metrics, distribution, healthStatuses] = await Promise.all([
       this.getMetrics(),
       this.getDeviceDistribution(),
@@ -198,9 +220,12 @@ export class DeviceService {
         callbacks.onDeviceOnline?.(device);
       },
       onUpdate: (device) => {
-        if (device.status === 'online') {
+        if (device.status === "online") {
           callbacks.onDeviceOnline?.(device);
-        } else if (device.status === 'offline' || device.status === 'gone_silent') {
+        } else if (
+          device.status === "offline" ||
+          device.status === "gone_silent"
+        ) {
           callbacks.onDeviceOffline?.(device);
         } else {
           callbacks.onDeviceHealthChange?.(device);
@@ -210,11 +235,16 @@ export class DeviceService {
         callbacks.onDeviceOffline?.(device);
       },
       onError: (err) => {
-        callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+        callbacks.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
       },
     };
 
-    this.channelName = this.repository.subscribeToDeviceUpdates({}, repoCallbacks);
+    this.channelName = this.repository.subscribeToDeviceUpdates(
+      {},
+      repoCallbacks,
+    );
   }
 
   unsubscribeFromDeviceUpdates(): void {

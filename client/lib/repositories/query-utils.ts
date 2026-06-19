@@ -4,12 +4,12 @@
 
 export interface SortOption {
   field: string;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 export interface FilterOption {
   field: string;
-  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'like' | 'ilike';
+  operator: "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "like" | "ilike";
   value: string | number | boolean | string[] | number[];
 }
 
@@ -51,28 +51,30 @@ export function buildCacheKey(tableName: string, query: QueryBuilder): string {
   if (query.filters?.length) {
     const filterStr = query.filters
       .map((f) => `${f.field}:${f.operator}:${JSON.stringify(f.value)}`)
-      .join(',');
+      .join(",");
     parts.push(`filters:${filterStr}`);
   }
 
   if (query.sorts?.length) {
-    const sortStr = query.sorts.map((s) => `${s.field}:${s.direction}`).join(',');
+    const sortStr = query.sorts
+      .map((s) => `${s.field}:${s.direction}`)
+      .join(",");
     parts.push(`sorts:${sortStr}`);
   }
 
   if (query.limit != null) parts.push(`limit:${query.limit}`);
   if (query.offset != null) parts.push(`offset:${query.offset}`);
 
-  return parts.join('|');
+  return parts.join("|");
 }
 
 export function escapeWildcards(value: string): string {
-  return value.replace(/[%_\\]/g, '\\$&');
+  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 export function parseSearchQuery(
   search: string,
-  searchableFields: string[]
+  searchableFields: string[],
 ): FilterOption[] {
   const trimmed = search.trim();
   if (!trimmed || searchableFields.length === 0) return [];
@@ -81,7 +83,7 @@ export function parseSearchQuery(
 
   return searchableFields.map((field) => ({
     field,
-    operator: 'ilike' as const,
+    operator: "ilike" as const,
     value: `%${escaped}%`,
   }));
 }
@@ -91,19 +93,27 @@ export function buildFilterString(filters: FilterOption[]): string {
     .filter(validateFilter)
     .map(({ field, operator, value }) => {
       switch (operator) {
-        case 'eq': return `${field}=eq.${value}`;
-        case 'ne': return `${field}=neq.${value}`;
-        case 'gt': return `${field}=gt.${value}`;
-        case 'gte': return `${field}=gte.${value}`;
-        case 'lt': return `${field}=lt.${value}`;
-        case 'lte': return `${field}=lte.${value}`;
-        case 'like': return `${field}=like.${value}`;
-        case 'ilike': return `${field}=ilike.${value}`;
-        case 'in':
-          return `${field}=in.(${Array.isArray(value) ? value.join(',') : value})`;
+        case "eq":
+          return `${field}=eq.${value}`;
+        case "ne":
+          return `${field}=neq.${value}`;
+        case "gt":
+          return `${field}=gt.${value}`;
+        case "gte":
+          return `${field}=gte.${value}`;
+        case "lt":
+          return `${field}=lt.${value}`;
+        case "lte":
+          return `${field}=lte.${value}`;
+        case "like":
+          return `${field}=like.${value}`;
+        case "ilike":
+          return `${field}=ilike.${value}`;
+        case "in":
+          return `${field}=in.(${Array.isArray(value) ? value.join(",") : value})`;
       }
     })
-    .join('&');
+    .join("&");
 }
 
 /** Returns true when the filter has all required fields and a usable value. */
@@ -111,16 +121,20 @@ export function validateFilter(filter: FilterOption): boolean {
   if (!filter.field || !filter.operator) return false;
 
   switch (filter.operator) {
-    case 'eq':
-    case 'ne':
-    case 'gt':
-    case 'gte':
-    case 'lt':
-    case 'lte':
-    case 'like':
-    case 'ilike':
-      return filter.value !== undefined && filter.value !== null && filter.value !== '';
-    case 'in':
+    case "eq":
+    case "ne":
+    case "gt":
+    case "gte":
+    case "lt":
+    case "lte":
+    case "like":
+    case "ilike":
+      return (
+        filter.value !== undefined &&
+        filter.value !== null &&
+        filter.value !== ""
+      );
+    case "in":
       return Array.isArray(filter.value) && filter.value.length > 0;
     default:
       return false;
@@ -159,7 +173,7 @@ export function optimizeQuery(query: QueryBuilder): QueryBuilder {
 export function calculatePagination(
   total: number,
   page: number,
-  limit: number
+  limit: number,
 ): PaginationResult {
   const totalPages = Math.ceil(total / limit);
 
@@ -191,18 +205,22 @@ export class QueryOptimizer {
   constructor(
     private defaultTTL: number = 5 * 60 * 1000,
     /** When set, the oldest entry is evicted once the cache exceeds this size. */
-    private maxSize?: number
-  ) { }
+    private maxSize?: number,
+  ) {}
 
   async execute<T>(
     key: string,
     queryFn: () => Promise<T>,
-    options: { ttl?: number; forceRefresh?: boolean } = {}
+    options: { ttl?: number; forceRefresh?: boolean } = {},
   ): Promise<T> {
     const ttl = options.ttl ?? this.defaultTTL;
     const cached = this.cache.get(key) as CacheEntry<T> | undefined;
 
-    if (!options.forceRefresh && cached && Date.now() - cached.timestamp < cached.ttl) {
+    if (
+      !options.forceRefresh &&
+      cached &&
+      Date.now() - cached.timestamp < cached.ttl
+    ) {
       this.hits++;
       return cached.data;
     }
@@ -258,7 +276,7 @@ export interface DebouncedFn<T extends (...args: unknown[]) => unknown> {
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
-  wait: number
+  wait: number,
 ): DebouncedFn<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -291,7 +309,7 @@ export interface ThrottledFn<T extends (...args: unknown[]) => unknown> {
  */
 export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
-  limit: number
+  limit: number,
 ): ThrottledFn<T> {
   let lastCall = 0;
   let trailingTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -335,7 +353,7 @@ export function memoize<T extends (...args: unknown[]) => unknown>(
   options: {
     keyGenerator?: (...args: Parameters<T>) => string;
     maxSize?: number;
-  } = {}
+  } = {},
 ): T {
   const cache = new Map<string, ReturnType<T>>();
   const { keyGenerator, maxSize } = options;
@@ -370,9 +388,9 @@ export async function retry<T>(
   func: () => Promise<T>,
   maxAttempts = 3,
   baseDelay = 1000,
-  shouldRetry?: (error: unknown, attempt: number) => boolean
+  shouldRetry?: (error: unknown, attempt: number) => boolean,
 ): Promise<T> {
-  let lastError: unknown = new Error('retry: no attempts were made');
+  let lastError: unknown = new Error("retry: no attempts were made");
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -399,7 +417,7 @@ export async function batchProcess<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   batchSize = 5,
-  delayBetweenBatches = 100
+  delayBetweenBatches = 100,
 ): Promise<R[]> {
   const results: R[] = [];
 
@@ -423,21 +441,34 @@ export function sleep(ms: number): Promise<void> {
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
-const BYTE_UNITS = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'] as const;
+const BYTE_UNITS = [
+  "Bytes",
+  "KB",
+  "MB",
+  "GB",
+  "TB",
+  "PB",
+  "EB",
+  "ZB",
+  "YB",
+] as const;
 
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '0 Bytes';
-  if (bytes === 0) return '0 Bytes';
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 Bytes";
+  if (bytes === 0) return "0 Bytes";
 
   const k = 1024;
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), BYTE_UNITS.length - 1);
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(k)),
+    BYTE_UNITS.length - 1,
+  );
   const dm = Math.max(0, decimals);
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${BYTE_UNITS[i]}`;
 }
 
 export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return '0ms';
+  if (!Number.isFinite(ms) || ms < 0) return "0ms";
   if (ms < 1_000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
   if (ms < 3_600_000) return `${(ms / 60_000).toFixed(1)}m`;
@@ -460,7 +491,7 @@ export function clamp(value: number, min: number, max: number): number {
 
 // ─── Colour utilities ─────────────────────────────────────────────────────────
 
-type ColourType = 'bg' | 'text' | 'border';
+type ColourType = "bg" | "text" | "border";
 
 /**
  * Returns a Tailwind colour class from a lookup map, with a grey fallback.
@@ -470,9 +501,16 @@ type ColourType = 'bg' | 'text' | 'border';
 function lookupColorClass(
   key: string,
   map: Record<string, Record<ColourType, string>>,
-  type: ColourType
+  type: ColourType,
 ): string {
-  return map[key]?.[type] ?? (type === 'bg' ? 'bg-gray-500' : type === 'border' ? 'border-gray-500' : 'text-gray-500');
+  return (
+    map[key]?.[type] ??
+    (type === "bg"
+      ? "bg-gray-500"
+      : type === "border"
+        ? "border-gray-500"
+        : "text-gray-500")
+  );
 }
 
 /** Produces a three-way colour map entry (bg / text / border) for a Tailwind colour. */
@@ -485,30 +523,36 @@ function colourEntry(colour: string): Record<ColourType, string> {
 }
 
 const STATUS_COLOURS: Record<string, Record<ColourType, string>> = {
-  online: colourEntry('green-500'),
-  offline: colourEntry('red-500'),
-  isolated: colourEntry('orange-500'),
-  gone_silent: colourEntry('amber-500'),
-  unsynced: colourEntry('blue-500'),
-  PENDING: colourEntry('red-500'),
-  ACKNOWLEDGED: colourEntry('orange-500'),
-  INVESTIGATED: colourEntry('blue-500'),
-  CLOSED: colourEntry('green-500'),
+  online: colourEntry("green-500"),
+  offline: colourEntry("red-500"),
+  isolated: colourEntry("orange-500"),
+  gone_silent: colourEntry("amber-500"),
+  unsynced: colourEntry("blue-500"),
+  PENDING: colourEntry("red-500"),
+  ACKNOWLEDGED: colourEntry("orange-500"),
+  INVESTIGATED: colourEntry("blue-500"),
+  CLOSED: colourEntry("green-500"),
 };
 
 const SEVERITY_COLOURS: Record<string, Record<ColourType, string>> = {
-  critical: colourEntry('red-500'),
-  high: colourEntry('orange-500'),
-  medium: colourEntry('amber-500'),
-  low: colourEntry('blue-500'),
-  none: colourEntry('green-500'),
+  critical: colourEntry("red-500"),
+  high: colourEntry("orange-500"),
+  medium: colourEntry("amber-500"),
+  low: colourEntry("blue-500"),
+  none: colourEntry("green-500"),
 };
 
-export function getStatusColorClass(status: string, type: ColourType = 'text'): string {
+export function getStatusColorClass(
+  status: string,
+  type: ColourType = "text",
+): string {
   return lookupColorClass(status, STATUS_COLOURS, type);
 }
 
-export function getSeverityColorClass(severity: string, type: ColourType = 'text'): string {
+export function getSeverityColorClass(
+  severity: string,
+  type: ColourType = "text",
+): string {
   return lookupColorClass(severity, SEVERITY_COLOURS, type);
 }
 

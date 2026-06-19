@@ -1,18 +1,23 @@
 import { BaseRepository } from "@/lib/repositories/base-repository";
-import type { PrivacySettings, PrivacySettingsUpdate } from "@/lib/supabase/types/privacy-settings";
+import type {
+  PrivacySettings,
+  PrivacySettingsUpdate,
+} from "@/lib/supabase/types/privacy-settings";
 
 export class PrivacyRepository extends BaseRepository<PrivacySettings> {
   constructor() {
     super("privacy_settings");
   }
 
-  async findByDeviceId(deviceId: string | null): Promise<PrivacySettings | null> {
+  async findByDeviceId(
+    deviceId: string | null,
+  ): Promise<PrivacySettings | null> {
     return this.findOne({ device_id: deviceId });
   }
 
   async upsertByDeviceId(
     deviceId: string | null,
-    data: PrivacySettingsUpdate
+    data: PrivacySettingsUpdate,
   ): Promise<PrivacySettings> {
     try {
       const { data: result, error } = await this.supabase

@@ -1,10 +1,10 @@
-import { AlertRepository } from '@/lib/repositories';
+import { AlertRepository } from "@/lib/repositories";
 import type {
   AlertQueryOptions,
   AlertMetrics,
   AlertSubscriptionCallbacks,
-} from '@/lib/repositories/alert-repository';
-import type { Alert, AlertStatus } from '@/lib/supabase/types';
+} from "@/lib/repositories/alert-repository";
+import type { Alert, AlertStatus } from "@/lib/supabase/types";
 
 export interface GetAlertsOptions {
   limit?: number;
@@ -22,7 +22,11 @@ export interface UpdateAlertStatusOptions {
   userId?: string;
 }
 
-export type BulkOperation = 'acknowledge' | 'investigate' | 'close' | 'mark_read';
+export type BulkOperation =
+  | "acknowledge"
+  | "investigate"
+  | "close"
+  | "mark_read";
 
 export interface BulkUpdateAlertsOptions {
   alertIds: string[];
@@ -37,29 +41,32 @@ export interface AlertSubscriptionOptions {
   onError?: (error: Error) => void;
 }
 
-const OPERATION_TO_STATUS: Record<Exclude<BulkOperation, 'mark_read'>, AlertStatus> = {
-  acknowledge: 'ACKNOWLEDGED',
-  investigate: 'INVESTIGATED',
-  close: 'CLOSED',
+const OPERATION_TO_STATUS: Record<
+  Exclude<BulkOperation, "mark_read">,
+  AlertStatus
+> = {
+  acknowledge: "ACKNOWLEDGED",
+  investigate: "INVESTIGATED",
+  close: "CLOSED",
 };
 
 export class AlertService {
   private channelName: string | null = null;
 
-  constructor(private readonly repository: AlertRepository) { }
+  constructor(private readonly repository: AlertRepository) {}
 
   async getAlerts(options: GetAlertsOptions = {}): Promise<Alert[]> {
     return this.repository.findAlerts({
       deviceId: options.deviceId,
       status: options.status,
-      severity: options.severity as AlertQueryOptions['severity'],
+      severity: options.severity as AlertQueryOptions["severity"],
       category: options.category,
       search: options.search,
       startDate: options.startDate,
       endDate: options.endDate,
       unreadOnly: options.unreadOnly,
       limit: options.limit,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
     });
   }
 
@@ -71,11 +78,21 @@ export class AlertService {
     return this.repository.getRecentAlerts(limit);
   }
 
-  async getAlertsPaginated(options: GetAlertsOptions & { page: number; limit: number }): Promise<{ alerts: Alert[]; total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean }> {
+  async getAlertsPaginated(
+    options: GetAlertsOptions & { page: number; limit: number },
+  ): Promise<{
+    alerts: Alert[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  }> {
     const result = await this.repository.findAlertsPaginated({
       deviceId: options.deviceId,
       status: options.status,
-      severity: options.severity as AlertQueryOptions['severity'],
+      severity: options.severity as AlertQueryOptions["severity"],
       category: options.category,
       search: options.search,
       startDate: options.startDate,
@@ -83,7 +100,7 @@ export class AlertService {
       unreadOnly: options.unreadOnly,
       page: options.page,
       limit: options.limit,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
     });
 
     return {
@@ -113,20 +130,23 @@ export class AlertService {
     return this.repository.getAlertsNeedingAttention();
   }
 
-  async searchAlerts(query: string, options: GetAlertsOptions = {}): Promise<Alert[]> {
+  async searchAlerts(
+    query: string,
+    options: GetAlertsOptions = {},
+  ): Promise<Alert[]> {
     return this.repository.searchAlerts(query, {
       deviceId: options.deviceId,
       status: options.status,
-      severity: options.severity as AlertQueryOptions['severity'],
+      severity: options.severity as AlertQueryOptions["severity"],
       limit: options.limit,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
     });
   }
 
   async updateAlertStatus(
     id: string,
     status: AlertStatus,
-    options: UpdateAlertStatusOptions = {}
+    options: UpdateAlertStatusOptions = {},
   ): Promise<Alert> {
     return this.repository.updateAlertStatus(id, status, options.userId);
   }
@@ -135,10 +155,12 @@ export class AlertService {
     return this.repository.markAsRead(id);
   }
 
-  async bulkUpdateAlerts(params: BulkUpdateAlertsOptions): Promise<Alert[] | void> {
+  async bulkUpdateAlerts(
+    params: BulkUpdateAlertsOptions,
+  ): Promise<Alert[] | void> {
     const { alertIds, operation, options = {} } = params;
 
-    if (operation === 'mark_read') {
+    if (operation === "mark_read") {
       return this.repository.markMultipleAsRead(alertIds);
     }
 
@@ -153,12 +175,14 @@ export class AlertService {
   async getAlertsByTimeRange(
     startDate: string,
     endDate: string,
-    groupBy: 'hour' | 'day' | 'week' = 'day'
+    groupBy: "hour" | "day" | "week" = "day",
   ): Promise<{ timestamp: string; count: number }[]> {
     return this.repository.getAlertsByTimeRange(startDate, endDate, groupBy);
   }
 
-  async getTopCategories(limit = 10): Promise<{ category: string; count: number }[]> {
+  async getTopCategories(
+    limit = 10,
+  ): Promise<{ category: string; count: number }[]> {
     return this.repository.getTopCategories(limit);
   }
 
@@ -172,7 +196,7 @@ export class AlertService {
         callbacks.onNewAlert?.(alert);
       },
       onUpdate: (alert) => {
-        if (alert.status === 'CLOSED') {
+        if (alert.status === "CLOSED") {
           callbacks.onAlertClosed?.(alert);
         } else {
           callbacks.onAlertUpdated?.(alert);
@@ -182,7 +206,9 @@ export class AlertService {
         callbacks.onAlertClosed?.(alert);
       },
       onError: (err) => {
-        callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+        callbacks.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
       },
     };
 

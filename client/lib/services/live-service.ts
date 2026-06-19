@@ -1,9 +1,9 @@
-import { LiveRepository } from '@/lib/repositories';
+import { LiveRepository } from "@/lib/repositories";
 import type {
   LiveStats,
   LiveQueryOptions,
-} from '@/lib/repositories/live-repository';
-import type { Alert, TelemetryEvent } from '@/lib/supabase/types';
+} from "@/lib/repositories/live-repository";
+import type { Alert, TelemetryEvent } from "@/lib/supabase/types";
 
 export interface LiveSubscriptionOptions {
   onNewAlert?: (alert: Alert) => void;
@@ -15,7 +15,7 @@ export interface LiveSubscriptionOptions {
 export class LiveService {
   private cleanup: (() => void) | null = null;
 
-  constructor(private readonly repository: LiveRepository) { }
+  constructor(private readonly repository: LiveRepository) {}
 
   async getRecentAlerts(options: LiveQueryOptions = {}): Promise<Alert[]> {
     return this.repository.getRecentAlerts(options);
@@ -25,7 +25,9 @@ export class LiveService {
     return this.repository.getTodayStats();
   }
 
-  async getRecentTelemetry(options: LiveQueryOptions = {}): Promise<TelemetryEvent[]> {
+  async getRecentTelemetry(
+    options: LiveQueryOptions = {},
+  ): Promise<TelemetryEvent[]> {
     return this.repository.getRecentTelemetry(options);
   }
 

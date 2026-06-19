@@ -1,17 +1,20 @@
-import { DeviceEnrollmentRepository } from '@/lib/repositories';
-import type { EnrollmentToken } from '@/lib/supabase/types';
-import type { CreateTokenOptions, CreateTokenResult } from '@/lib/repositories';
-import { toast } from 'sonner';
-import { AuthService } from '@/lib/services/auth-service';
+import { DeviceEnrollmentRepository } from "@/lib/repositories";
+import type { EnrollmentTokenRow } from "@/lib/supabase/types";
+import type { CreateTokenOptions, CreateTokenResult } from "@/lib/repositories";
+import { toast } from "sonner";
+import { AuthService } from "@/lib/services/auth-service";
 
 export class DeviceEnrollmentService {
-  constructor(private repository: DeviceEnrollmentRepository, private authService: AuthService) { }
+  constructor(
+    private repository: DeviceEnrollmentRepository,
+    private authService: AuthService,
+  ) {}
 
   async getTokens(options?: { limit?: number; includeExpired?: boolean }) {
     return await this.repository.getTokens(options);
   }
 
-  async getTokenById(tokenId: string): Promise<EnrollmentToken | null> {
+  async getTokenById(tokenId: string): Promise<EnrollmentTokenRow | null> {
     return await this.repository.getTokenById(tokenId);
   }
 
@@ -22,15 +25,18 @@ export class DeviceEnrollmentService {
     const userData = await this.authService.getCurrentUser();
 
     if (!userData) {
-      throw new Error('User not authenticated');
+      throw new Error("User not authenticated");
     }
 
-    const enrollmentToken = await this.repository.createToken(tokenHash, userData.id, options);
+    const enrollmentToken = await this.repository.createToken(
+      userData.id,
+      options,
+    );
 
     try {
       await navigator.clipboard.writeText(token);
     } catch (err) {
-      console.warn('Failed to copy token to clipboard:', err);
+      console.warn("Failed to copy token to clipboard:", err);
     }
 
     return {
@@ -44,15 +50,21 @@ export class DeviceEnrollmentService {
     return await this.repository.deleteToken(tokenId);
   }
 
-  async validateToken(tokenHash: string): Promise<EnrollmentToken | null> {
+  async validateToken(tokenHash: string): Promise<EnrollmentTokenRow | null> {
     return await this.repository.validateToken(tokenHash);
   }
 
-  async updateTokenUsage(tokenId: string, deviceId: string): Promise<EnrollmentToken> {
+  async updateTokenUsage(
+    tokenId: string,
+    deviceId: string,
+  ): Promise<EnrollmentTokenRow> {
     return await this.repository.updateTokenUsage(tokenId, deviceId);
   }
 
-  async getTokensByUser(userId: string, options?: { limit?: number }): Promise<EnrollmentToken[]> {
+  async getTokensByUser(
+    userId: string,
+    options?: { limit?: number },
+  ): Promise<EnrollmentTokenRow[]> {
     return await this.repository.getTokensByUser(userId, options);
   }
 
@@ -73,18 +85,18 @@ export class DeviceEnrollmentService {
     const data = encoder.encode(token);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
-  isTokenExpired(token: EnrollmentToken): boolean {
+  isTokenExpired(token: EnrollmentTokenRow): boolean {
     return new Date(token.expires_at) < new Date();
   }
 
-  isTokenFullyUsed(token: EnrollmentToken): boolean {
+  isTokenFullyUsed(token: EnrollmentTokenRow): boolean {
     return token.current_uses >= token.max_uses || token.is_used;
   }
 
-  getUsagePercentage(token: EnrollmentToken): number {
+  getUsagePercentage(token: EnrollmentTokenRow): number {
     return (token.current_uses / token.max_uses) * 100;
   }
 
@@ -97,7 +109,7 @@ export class DeviceEnrollmentService {
       await navigator.clipboard.writeText(text);
       toast.success("Copied to clipboard");
     } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
+      console.error("Failed to copy to clipboard:", err);
       toast.error("Failed to copy to clipboard");
       throw err;
     }

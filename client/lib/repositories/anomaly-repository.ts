@@ -3,14 +3,14 @@ import {
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
-} from '@/lib/repositories/base-repository';
+} from "@/lib/repositories/base-repository";
 import {
   buildCacheKey,
   parseSearchQuery,
   optimizeQuery,
   type QueryBuilder,
   type FilterOption,
-} from '@/lib/repositories/query-utils';
+} from "@/lib/repositories/query-utils";
 
 const DEFAULT_ANOMALY_SELECT = `
   id,
@@ -37,7 +37,7 @@ export interface AnomalyScore {
   threshold_applied: number;
   above_threshold: boolean;
   inference_latency_ms: number;
-  connectivity_state: 'online' | 'offline';
+  connectivity_state: "online" | "offline";
   created_at: string;
   scored_at: string;
 }
@@ -46,7 +46,7 @@ export interface GetAnomalyScoresOptions extends QueryOptions {
   deviceId: string;
   limit?: number;
   orderBy?: {
-    column: 'created_at' | 'score';
+    column: "created_at" | "score";
     ascending?: boolean;
   };
   search?: string;
@@ -57,44 +57,51 @@ export interface AnomalyAnalytics {
   currentScore: number;
   baselineScore: number;
   deviation: number;
-  trend: 'improving' | 'stable' | 'degrading';
+  trend: "improving" | "stable" | "degrading";
   history: AnomalyScore[];
 }
 
 export interface AnomalyTrend {
-  direction: 'up' | 'down' | 'stable';
+  direction: "up" | "down" | "stable";
   magnitude: number;
   confidence: number;
 }
 
 export class AnomalyRepository extends BaseRepository<AnomalyScore> {
   constructor() {
-    super('anomaly_scores');
-    this.schema = 'telemetry';
+    super("anomaly_scores");
+    this.schema = "telemetry";
   }
 
-  async getAnomalyScores(options: GetAnomalyScoresOptions): Promise<AnomalyScore[]> {
+  async getAnomalyScores(
+    options: GetAnomalyScoresOptions,
+  ): Promise<AnomalyScore[]> {
     const queryBuilder: QueryBuilder = {
       select: DEFAULT_ANOMALY_SELECT,
       filters: [
-        { field: 'device_id', operator: 'eq', value: options.deviceId }
+        { field: "device_id", operator: "eq", value: options.deviceId },
       ],
-      sorts: options.orderBy ? [{
-        field: options.orderBy.column,
-        direction: options.orderBy.ascending ? 'asc' : 'desc'
-      }] : [{ field: 'created_at', direction: 'desc' }],
+      sorts: options.orderBy
+        ? [
+            {
+              field: options.orderBy.column,
+              direction: options.orderBy.ascending ? "asc" : "desc",
+            },
+          ]
+        : [{ field: "created_at", direction: "desc" }],
       limit: options.limit ?? 20,
       cacheKey: options.cacheKey,
-      cacheTTL: options.cacheTTL ?? 5 * 60 * 1000
+      cacheTTL: options.cacheTTL ?? 5 * 60 * 1000,
     };
 
     if (options.search) {
-      const searchFilters = parseSearchQuery(options.search, ['label']);
+      const searchFilters = parseSearchQuery(options.search, ["label"]);
       queryBuilder.filters?.push(...searchFilters);
     }
 
     const optimizedQuery = optimizeQuery(queryBuilder);
-    const cacheKey = options.cacheKey ?? buildCacheKey('anomaly_scores', optimizedQuery);
+    const cacheKey =
+      options.cacheKey ?? buildCacheKey("anomaly_scores", optimizedQuery);
 
     return this.cachedQuery(
       cacheKey,
@@ -102,17 +109,19 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
         const { data, error } = await this.buildQuery({
           select: optimizedQuery.select,
           filters: this.convertFilters(optimizedQuery.filters),
-          orderBy: optimizedQuery.sorts?.[0] ? {
-            column: optimizedQuery.sorts[0].field,
-            ascending: optimizedQuery.sorts[0].direction === 'asc'
-          } : undefined,
-          limit: optimizedQuery.limit
+          orderBy: optimizedQuery.sorts?.[0]
+            ? {
+                column: optimizedQuery.sorts[0].field,
+                ascending: optimizedQuery.sorts[0].direction === "asc",
+              }
+            : undefined,
+          limit: optimizedQuery.limit,
         });
 
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as AnomalyScore[];
       },
-      optimizedQuery.cacheTTL
+      optimizedQuery.cacheTTL,
     );
   }
 
@@ -120,45 +129,49 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     return this.findOne(
       { device_id: deviceId },
       {
-        orderBy: { column: 'created_at', ascending: false },
-        cacheTTL: 2 * 60 * 1000
-      }
+        orderBy: { column: "created_at", ascending: false },
+        cacheTTL: 2 * 60 * 1000,
+      },
     );
   }
 
   async getAnomalyScoresInTimeframe(
     deviceId: string,
     startTime: string,
-    endTime: string
+    endTime: string,
   ): Promise<AnomalyScore[]> {
     return this.findMany({
       select: DEFAULT_ANOMALY_SELECT,
       filters: {
         device_id: deviceId,
-        created_at: { gte: startTime, lte: endTime }
+        created_at: { gte: startTime, lte: endTime },
       },
-      orderBy: { column: 'created_at', ascending: true },
-      cacheTTL: 10 * 60 * 1000
+      orderBy: { column: "created_at", ascending: true },
+      cacheTTL: 10 * 60 * 1000,
     });
   }
 
   async getAnomalyScoresWithPagination(
-    options: GetAnomalyScoresOptions & PaginationOptions
+    options: GetAnomalyScoresOptions & PaginationOptions,
   ): Promise<PaginatedResult<AnomalyScore>> {
     const queryBuilder: QueryBuilder = {
       filters: [
-        { field: 'device_id', operator: 'eq', value: options.deviceId }
+        { field: "device_id", operator: "eq", value: options.deviceId },
       ],
-      sorts: options.orderBy ? [{
-        field: options.orderBy.column,
-        direction: options.orderBy.ascending ? 'asc' : 'desc'
-      }] : [{ field: 'created_at', direction: 'desc' }],
+      sorts: options.orderBy
+        ? [
+            {
+              field: options.orderBy.column,
+              direction: options.orderBy.ascending ? "asc" : "desc",
+            },
+          ]
+        : [{ field: "created_at", direction: "desc" }],
       limit: options.limit,
-      cacheTTL: 5 * 60 * 1000
+      cacheTTL: 5 * 60 * 1000,
     };
 
     if (options.search) {
-      const searchFilters = parseSearchQuery(options.search, ['label']);
+      const searchFilters = parseSearchQuery(options.search, ["label"]);
       queryBuilder.filters?.push(...searchFilters);
     }
 
@@ -169,27 +182,32 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
       limit: options.limit,
       select: DEFAULT_ANOMALY_SELECT,
       filters: this.convertFilters(optimizedQuery.filters),
-      orderBy: optimizedQuery.sorts?.[0] ? {
-        column: optimizedQuery.sorts[0].field,
-        ascending: optimizedQuery.sorts[0].direction === 'asc'
-      } : undefined,
-      cacheTTL: optimizedQuery.cacheTTL
+      orderBy: optimizedQuery.sorts?.[0]
+        ? {
+            column: optimizedQuery.sorts[0].field,
+            ascending: optimizedQuery.sorts[0].direction === "asc",
+          }
+        : undefined,
+      cacheTTL: optimizedQuery.cacheTTL,
     });
   }
 
-  async getAnomalyAnalytics(deviceId: string, timeframe: '24h' | '7d' | '30d' = '24h'): Promise<AnomalyAnalytics | null> {
+  async getAnomalyAnalytics(
+    deviceId: string,
+    timeframe: "24h" | "7d" | "30d" = "24h",
+  ): Promise<AnomalyAnalytics | null> {
     // Calculate the time cutoff based on timeframe
     const now = new Date();
     const cutoff = new Date();
 
     switch (timeframe) {
-      case '24h':
+      case "24h":
         cutoff.setHours(now.getHours() - 24);
         break;
-      case '7d':
+      case "7d":
         cutoff.setDate(now.getDate() - 7);
         break;
-      case '30d':
+      case "30d":
         cutoff.setDate(now.getDate() - 30);
         break;
     }
@@ -197,7 +215,7 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     const scores = await this.getAnomalyScoresInTimeframe(
       deviceId,
       cutoff.toISOString(),
-      now.toISOString()
+      now.toISOString(),
     );
 
     if (scores.length === 0) {
@@ -209,25 +227,32 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     // Calculate baseline (average of first 70% of data, excluding most recent 30%)
     const baselineCutoffIndex = Math.floor(scores.length * 0.7);
     const baselineScores = scores.slice(0, baselineCutoffIndex);
-    const baselineScore = baselineScores.length > 0
-      ? baselineScores.reduce((sum, s) => sum + s.score, 0) / baselineScores.length
-      : 0.1;
+    const baselineScore =
+      baselineScores.length > 0
+        ? baselineScores.reduce((sum, s) => sum + s.score, 0) /
+          baselineScores.length
+        : 0.1;
 
     const deviation = currentScore - baselineScore;
 
     // Determine trend based on recent vs older scores
     const recentScores = scores.slice(-Math.min(10, scores.length));
-    const olderScores = scores.slice(0, Math.min(10, scores.length - recentScores.length));
+    const olderScores = scores.slice(
+      0,
+      Math.min(10, scores.length - recentScores.length),
+    );
 
-    let trend: 'improving' | 'stable' | 'degrading' = 'stable';
+    let trend: "improving" | "stable" | "degrading" = "stable";
     if (recentScores.length > 0 && olderScores.length > 0) {
-      const recentAvg = recentScores.reduce((sum, s) => sum + s.score, 0) / recentScores.length;
-      const olderAvg = olderScores.reduce((sum, s) => sum + s.score, 0) / olderScores.length;
+      const recentAvg =
+        recentScores.reduce((sum, s) => sum + s.score, 0) / recentScores.length;
+      const olderAvg =
+        olderScores.reduce((sum, s) => sum + s.score, 0) / olderScores.length;
 
       if (recentAvg < olderAvg - 0.05) {
-        trend = 'improving';
+        trend = "improving";
       } else if (recentAvg > olderAvg + 0.05) {
-        trend = 'degrading';
+        trend = "degrading";
       }
     }
 
@@ -241,14 +266,17 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     };
   }
 
-  async getAnomalyTrend(deviceId: string, hours: number = 24): Promise<AnomalyTrend | null> {
+  async getAnomalyTrend(
+    deviceId: string,
+    hours: number = 24,
+  ): Promise<AnomalyTrend | null> {
     const cutoff = new Date();
     cutoff.setHours(cutoff.getHours() - hours);
 
     const scores = await this.getAnomalyScoresInTimeframe(
       deviceId,
       cutoff.toISOString(),
-      new Date().toISOString()
+      new Date().toISOString(),
     );
 
     if (scores.length < 2) {
@@ -267,30 +295,33 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
 
     // Calculate R-squared for confidence
     const meanY = sumY / n;
-    const totalSumSquares = scores.reduce((sum, s) => sum + Math.pow(s.score - meanY, 2), 0);
+    const totalSumSquares = scores.reduce(
+      (sum, s) => sum + Math.pow(s.score - meanY, 2),
+      0,
+    );
     const residualSumSquares = scores.reduce((sum, s, i) => {
       const predicted = slope * i + intercept;
       return sum + Math.pow(s.score - predicted, 2);
     }, 0);
 
-    const rSquared = 1 - (residualSumSquares / totalSumSquares);
+    const rSquared = 1 - residualSumSquares / totalSumSquares;
     const confidence = Math.max(0, Math.min(1, rSquared));
 
-    let direction: 'up' | 'down' | 'stable' = 'stable';
+    let direction: "up" | "down" | "stable" = "stable";
     if (Math.abs(slope) > 0.001) {
-      direction = slope > 0 ? 'up' : 'down';
+      direction = slope > 0 ? "up" : "down";
     }
 
     return {
       direction,
       magnitude: Math.abs(slope),
-      confidence
+      confidence,
     };
   }
 
   async getAnomalyScoresForMultipleDevices(
     deviceIds: string[],
-    options: Omit<GetAnomalyScoresOptions, 'deviceId'> = {}
+    options: Omit<GetAnomalyScoresOptions, "deviceId"> = {},
   ): Promise<Record<string, AnomalyScore[]>> {
     const results: Record<string, AnomalyScore[]> = {};
 
@@ -299,13 +330,16 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
         try {
           results[deviceId] = await this.getAnomalyScores({
             deviceId,
-            ...options
+            ...options,
           });
         } catch (error) {
-          console.error(`Failed to fetch anomaly scores for device ${deviceId}:`, error);
+          console.error(
+            `Failed to fetch anomaly scores for device ${deviceId}:`,
+            error,
+          );
           results[deviceId] = [];
         }
-      })
+      }),
     );
 
     return results;
@@ -318,8 +352,8 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .delete()
-      .lt('created_at', cutoff.toISOString())
-      .select('count');
+      .lt("created_at", cutoff.toISOString())
+      .select("count");
 
     if (error) throw this.handleError(error);
 
@@ -337,30 +371,30 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
 
     for (const filter of filters) {
       switch (filter.operator) {
-        case 'eq':
+        case "eq":
           result[filter.field] = filter.value;
           break;
-        case 'ne':
+        case "ne":
           // Handle neq by using not filter - this would need base repository extension
           result[filter.field] = filter.value;
           break;
-        case 'gt':
+        case "gt":
           result[`${filter.field}_gt`] = filter.value;
           break;
-        case 'gte':
+        case "gte":
           result[`${filter.field}_gte`] = filter.value;
           break;
-        case 'lt':
+        case "lt":
           result[`${filter.field}_lt`] = filter.value;
           break;
-        case 'lte':
+        case "lte":
           result[`${filter.field}_lte`] = filter.value;
           break;
-        case 'in':
+        case "in":
           result[filter.field] = filter.value;
           break;
-        case 'like':
-        case 'ilike':
+        case "like":
+        case "ilike":
           result[filter.field] = filter.value;
           break;
       }

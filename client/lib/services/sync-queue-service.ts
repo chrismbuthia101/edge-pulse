@@ -1,9 +1,7 @@
-import { SyncQueueRepository } from '@/lib/repositories';
-import type {
-  SyncQueueSubscriptionCallbacks,
-} from '@/lib/repositories/sync-queue-repository';
-import type { DeviceSyncQueueSummary } from '@/lib/supabase/types';
-import type { SyncQueueItem } from '@/lib/repositories/sync-queue-repository';
+import { SyncQueueRepository } from "@/lib/repositories";
+import type { SyncQueueSubscriptionCallbacks } from "@/lib/repositories/sync-queue-repository";
+import type { DeviceSyncQueueSummary } from "@/lib/supabase/types";
+import type { SyncQueueItem } from "@/lib/repositories/sync-queue-repository";
 
 export interface GetSyncQueueOptions {
   limit?: number;
@@ -23,16 +21,18 @@ export interface SyncQueueSubscriptionOptions {
 export class SyncQueueService {
   private channelName: string | null = null;
 
-  constructor(private readonly repository: SyncQueueRepository) { }
+  constructor(private readonly repository: SyncQueueRepository) {}
 
-  async getSyncQueueItems(options: GetSyncQueueOptions = {}): Promise<SyncQueueItem[]> {
+  async getSyncQueueItems(
+    options: GetSyncQueueOptions = {},
+  ): Promise<SyncQueueItem[]> {
     return this.repository.findSyncQueueItems({
       deviceId: options.deviceId,
       status: options.status,
       startDate: options.startDate,
       endDate: options.endDate,
       limit: options.limit,
-      orderBy: { column: 'queued_at', ascending: false },
+      orderBy: { column: "queued_at", ascending: false },
     });
   }
 
@@ -40,7 +40,10 @@ export class SyncQueueService {
     return this.repository.getDeviceSyncQueueSummaries();
   }
 
-  async getSyncQueueByDevice(deviceId: string, limit = 50): Promise<SyncQueueItem[]> {
+  async getSyncQueueByDevice(
+    deviceId: string,
+    limit = 50,
+  ): Promise<SyncQueueItem[]> {
     return this.repository.getSyncQueueByDevice(deviceId, limit);
   }
 
@@ -77,7 +80,9 @@ export class SyncQueueService {
         callbacks.onItemDeleted?.(queue);
       },
       onError: (err) => {
-        callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+        callbacks.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
       },
     };
 

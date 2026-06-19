@@ -1,10 +1,15 @@
-import type { AlertSeverity, AlertStatus, TelemetrySource, PrivilegeLevel } from '@/lib/supabase/types/shared';
+import type {
+  AlertSeverity,
+  AlertStatus,
+  TelemetrySource,
+  PrivilegeLevel,
+} from "@/lib/supabase/types/shared";
 
 export interface ShapFeature {
   feature_name: string;
   feature_value: number;
   attribution_score: number;
-  contribution_type: 'positive' | 'negative' | 'neutral';
+  contribution_type: "positive" | "negative" | "neutral";
   rank: number;
   normalised_attribution?: number;
 }

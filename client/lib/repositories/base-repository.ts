@@ -31,7 +31,7 @@ export class RepositoryError extends Error {
   constructor(
     message: string,
     public code?: string,
-    public details?: unknown
+    public details?: unknown,
   ) {
     super(message);
     this.name = "RepositoryError";
@@ -51,12 +51,12 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
   protected supabase: AnySupabaseClient = createClient();
   protected cache = new Map<string, CacheEntry>();
   protected subscriptions = new Map<string, RealtimeChannel>();
-  protected schema: string = 'public';
+  protected schema: string = "public";
 
-  constructor(protected tableName: string) { }
+  constructor(protected tableName: string) {}
 
   protected getClient(): SupabaseClient<any> {
-    if (this.schema === 'public') return this.supabase;
+    if (this.schema === "public") return this.supabase;
     return this.supabase.schema(this.schema) as unknown as SupabaseClient<any>;
   }
 
@@ -65,7 +65,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
   protected async cachedQuery<R>(
     key: string,
     queryFn: () => Promise<R>,
-    ttl: number = 5 * 60 * 1000
+    ttl: number = 5 * 60 * 1000,
   ): Promise<R> {
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.timestamp < cached.ttl) {
@@ -122,7 +122,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
     if (options.offset != null) {
       query = query.range(
         options.offset,
-        options.offset + (options.limit ?? 10) - 1
+        options.offset + (options.limit ?? 10) - 1,
       );
     }
 
@@ -142,13 +142,13 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
         if (error) throw error;
         return data as T[];
       },
-      options.cacheTTL
+      options.cacheTTL,
     );
   }
 
   async findById(
     id: string,
-    options: Omit<QueryOptions, "filters"> = {}
+    options: Omit<QueryOptions, "filters"> = {},
   ): Promise<T | null> {
     const cacheKey = `${this.tableName}_${id}_${JSON.stringify(options)}`;
 
@@ -166,13 +166,13 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
         }
         return data as T;
       },
-      options.cacheTTL
+      options.cacheTTL,
     );
   }
 
   async findOne(
     filters: Record<string, unknown>,
-    options: Omit<QueryOptions, "filters"> = {}
+    options: Omit<QueryOptions, "filters"> = {},
   ): Promise<T | null> {
     const cacheKey = `${this.tableName}_one_${JSON.stringify(filters)}_${JSON.stringify(options)}`;
 
@@ -190,12 +190,12 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
         }
         return data as T;
       },
-      options.cacheTTL
+      options.cacheTTL,
     );
   }
 
   async findPaginated(
-    options: QueryOptions & PaginationOptions
+    options: QueryOptions & PaginationOptions,
   ): Promise<PaginatedResult<T>> {
     const { page, limit, ...queryOptions } = options;
     const offset = (page - 1) * limit;
@@ -257,7 +257,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
 
   async updateMany(
     filters: Record<string, unknown>,
-    data: Partial<T>
+    data: Partial<T>,
   ): Promise<T[]> {
     try {
       let query = this.getClient().from(this.tableName).update(data);
@@ -301,7 +301,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
     id: string,
     updateData: Partial<T>,
     optimisticFn: () => void,
-    rollback: () => void
+    rollback: () => void,
   ): Promise<U> {
     optimisticFn();
     try {
@@ -318,7 +318,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
   subscribe(
     channelName: string,
     filters: Record<string, unknown>,
-    callback: (payload: unknown) => void
+    callback: (payload: unknown) => void,
   ): RealtimeChannel {
     const channel = this.supabase
       .channel(channelName)
@@ -330,7 +330,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
           table: this.tableName,
           filter: this.buildFilterString(filters),
         },
-        callback
+        callback,
       )
       .subscribe();
 
@@ -363,7 +363,7 @@ export abstract class BaseRepository<T = Record<string, unknown>> {
       .map(([key, value]) =>
         Array.isArray(value)
           ? `${key}=in.(${(value as unknown[]).join(",")})`
-          : `${key}=eq.${value}`
+          : `${key}=eq.${value}`,
       )
       .join("&");
   }

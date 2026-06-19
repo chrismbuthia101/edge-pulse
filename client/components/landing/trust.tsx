@@ -41,7 +41,7 @@ export function Trust() {
       <div className="absolute bottom-0 inset-x-0 h-px bg-linear-to-r from-transparent via-white/10 to-transparent" />
 
       {/* background glow */}
-      <div className="absolute top-1/2 right-0 w-[600px] h-[600px] rounded-full opacity-10 pointer-events-none"
+      <div className="absolute top-1/2 right-0 w-150 h-150 rounded-full opacity-10 pointer-events-none"
         style={{ background: "radial-gradient(circle, #7c3aed, transparent)", filter: "blur(100px)", transform: "translate(40%, -50%)" }} />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">

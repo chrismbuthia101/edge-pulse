@@ -21,8 +21,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const roleColors: Record<string, string> = {
-    ADMINISTRATOR: "bg-red-500/10 text-red-500 border-red-500/20",
-    ANALYST: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    ORG_ADMIN: "bg-red-500/10 text-red-500 border-red-500/20",
+    PLATFORM_ADMIN: "bg-red-500/10 text-red-500 border-red-500/20",
+    ORG_ANALYST: "bg-blue-500/10 text-blue-500 border-blue-500/20",
 };
 
 const statusColors: Record<string, string> = {
@@ -37,12 +38,10 @@ function UserManagementReport() {
         searchTerm,
         filterRole,
         filterStatus,
-        filterApprovalStatus,
         initialize,
         setSearchTerm,
         setFilterRole,
         setFilterStatus,
-        setFilterApprovalStatus,
     } = useUserStore();
     const [refreshing, setRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -54,19 +53,15 @@ function UserManagementReport() {
     const filteredUsers = users.filter((user) => {
         const matchesSearch =
             !searchTerm ||
-            user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.department?.toLowerCase().includes(searchTerm.toLowerCase());
+            user.full_name.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesRole = filterRole === "all" || user.role === filterRole;
         const matchesStatus =
             filterStatus === "all" ||
-            (filterStatus === "active" && user.is_active) ||
-            (filterStatus === "inactive" && !user.is_active);
-        const matchesApproval =
-            filterApprovalStatus === "all" ||
-            user.approval_status === filterApprovalStatus;
+            (filterStatus === "active" && user.account_status === "ACTIVE") ||
+            (filterStatus === "inactive" && user.account_status !== "ACTIVE");
 
-        return matchesSearch && matchesRole && matchesStatus && matchesApproval;
+        return matchesSearch && matchesRole && matchesStatus;
     });
 
     const stats = [
@@ -80,7 +75,7 @@ function UserManagementReport() {
         },
         {
             label: "Active Users",
-            value: users.filter(u => u.is_active).length.toString(),
+            value: users.filter(u => u.account_status === "ACTIVE").length.toString(),
             color: "text-green-500",
             bg: "bg-green-500/5",
             border: "border-green-500/20",
@@ -88,7 +83,7 @@ function UserManagementReport() {
         },
         {
             label: "Administrators",
-            value: users.filter(u => u.role === "ADMINISTRATOR").length.toString(),
+            value: users.filter(u => u.role === "ORG_ADMIN" || u.role === "PLATFORM_ADMIN").length.toString(),
             color: "text-red-500",
             bg: "bg-red-500/5",
             border: "border-red-500/20",
@@ -96,7 +91,7 @@ function UserManagementReport() {
         },
         {
             label: "Analysts",
-            value: users.filter(u => u.role === "ANALYST").length.toString(),
+            value: users.filter(u => u.role === "ORG_ANALYST").length.toString(),
             color: "text-blue-500",
             bg: "bg-blue-500/5",
             border: "border-blue-500/20",
@@ -134,12 +129,11 @@ function UserManagementReport() {
         doc.setTextColor(60);
         const summaryData = [
             ["Total Users", users.length.toString()],
-            ["Active Users", users.filter(u => u.is_active).length.toString()],
-            ["Administrators", users.filter(u => u.role === "ADMINISTRATOR").length.toString()],
-            ["Analysts", users.filter(u => u.role === "ANALYST").length.toString()],
-            ["Approved", users.filter(u => u.approval_status === "APPROVED").length.toString()],
-            ["Pending", users.filter(u => u.approval_status === "PENDING").length.toString()],
-            ["Rejected", users.filter(u => u.approval_status === "REJECTED").length.toString()],
+            ["Active Users", users.filter(u => u.account_status === "ACTIVE").length.toString()],
+            ["Administrators", users.filter(u => u.role === "ORG_ADMIN" || u.role === "PLATFORM_ADMIN").length.toString()],
+            ["Analysts", users.filter(u => u.role === "ORG_ANALYST").length.toString()],
+            ["Pending", users.filter(u => u.account_status === "PENDING").length.toString()],
+            ["Suspended", users.filter(u => u.account_status === "SUSPENDED").length.toString()],
         ];
 
         autoTable(doc, {
@@ -159,26 +153,22 @@ function UserManagementReport() {
         const userData = filteredUsers.map(u => [
             u.full_name,
             u.role,
-            u.department || "N/A",
-            u.is_active ? "Active" : "Inactive",
-            u.approval_status || "N/A",
+            u.account_status === "ACTIVE" ? "Active" : u.account_status === "PENDING" ? "Pending" : "Suspended",
             new Date(u.created_at).toLocaleDateString(),
         ]);
 
         autoTable(doc, {
             startY: 120,
-            head: [["Name", "Role", "Department", "Status", "Approval", "Created"]],
+            head: [["Name", "Role", "Status", "Created"]],
             body: userData,
             theme: "grid",
             headStyles: { fillColor: [59, 130, 246] },
             styles: { fontSize: 8 },
             columnStyles: {
-                0: { cellWidth: 40 },
-                1: { cellWidth: 25 },
-                2: { cellWidth: 35 },
-                3: { cellWidth: 20 },
-                4: { cellWidth: 25 },
-                5: { cellWidth: 25 },
+                0: { cellWidth: 50 },
+                1: { cellWidth: 30 },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 30 },
             },
         });
 
@@ -189,7 +179,7 @@ function UserManagementReport() {
         name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
     return (
-        <div className="max-w-[1200px] space-y-6">
+        <div className="max-w-300 space-y-6">
             <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between">
                 <div>
                     <h1 className="text-2xl font-display font-bold text-foreground">User Management Report</h1>
@@ -260,7 +250,7 @@ function UserManagementReport() {
                     <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name or department..."
+                            placeholder="Search by name or email..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10"
@@ -269,19 +259,13 @@ function UserManagementReport() {
                     <div className="flex gap-2 flex-wrap">
                         <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
                             <option value="all">All Roles</option>
-                            <option value="ADMINISTRATOR">Administrators</option>
-                            <option value="ANALYST">Analysts</option>
+                            <option value="ORG_ADMIN">Administrators</option>
+                            <option value="ORG_ANALYST">Analysts</option>
                         </select>
                         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
                             <option value="all">All Status</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
-                        </select>
-                        <select value={filterApprovalStatus} onChange={(e) => setFilterApprovalStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
-                            <option value="all">All Approval</option>
-                            <option value="PENDING">Pending</option>
-                            <option value="APPROVED">Approved</option>
-                            <option value="REJECTED">Rejected</option>
                         </select>
                     </div>
                 </div>
@@ -311,15 +295,13 @@ function UserManagementReport() {
                                     <TableRow>
                                         <TableHead>User</TableHead>
                                         <TableHead>Role</TableHead>
-                                        <TableHead>Department</TableHead>
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Approval</TableHead>
                                         <TableHead>Created</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {filteredUsers.map((user) => (
-                                        <TableRow key={user.user_id}>
+                                        <TableRow key={user.id}>
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar>
@@ -330,7 +312,7 @@ function UserManagementReport() {
                                                     <div>
                                                         <div className="font-medium">{user.full_name}</div>
                                                         <div className="text-xs text-muted-foreground font-mono">
-                                                            {user.user_id.slice(0, 8)}…
+                                                            {user.id.slice(0, 8)}…
                                                         </div>
                                                     </div>
                                                 </div>
@@ -338,21 +320,13 @@ function UserManagementReport() {
                                             <TableCell>
                                                 <Badge className={roleColors[user.role]}>{user.role}</Badge>
                                             </TableCell>
-                                            <TableCell>{user.department || "—"}</TableCell>
-                                            <TableCell>
-                                                <Badge className={statusColors[user.is_active ? "active" : "inactive"]}>
-                                                    {user.is_active ? "Active" : "Inactive"}
-                                                </Badge>
-                                            </TableCell>
                                             <TableCell>
                                                 <Badge className={
-                                                    user.approval_status === "APPROVED"
-                                                        ? "bg-green-500/10 text-green-500 border-green-500/20"
-                                                        : user.approval_status === "PENDING"
-                                                            ? "bg-orange-500/10 text-orange-500 border-orange-500/20"
-                                                            : "bg-red-500/10 text-red-500 border-red-500/20"
+                                                    user.account_status === "ACTIVE"
+                                                        ? statusColors.active
+                                                        : statusColors.inactive
                                                 }>
-                                                    {user.approval_status || "UNKNOWN"}
+                                                    {user.account_status === "ACTIVE" ? "Active" : user.account_status === "PENDING" ? "Pending" : "Suspended"}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
@@ -370,4 +344,4 @@ function UserManagementReport() {
     );
 }
 
-export default withRole(UserManagementReport, ["ADMINISTRATOR"]);
+export default withRole(UserManagementReport, ["ORG_ADMIN", "PLATFORM_ADMIN"]);

@@ -1,19 +1,23 @@
-import { BaseRepository } from '@/lib/repositories/base-repository';
-import type { DeviceHealthSnapshot, SystemHealth } from '@/lib/supabase/types';
-import type { DeviceHealthRow } from '@/lib/supabase/types/database';
+import { BaseRepository } from "@/lib/repositories/base-repository";
+import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
+import type { DeviceHealthRow } from "@/lib/supabase/types/database";
 
 export class HealthRepository extends BaseRepository<DeviceHealthRow> {
   constructor() {
-    super('device_health');
-    this.schema = 'telemetry';
+    super("device_health");
+    this.schema = "telemetry";
   }
 
-  async getDeviceHealth(options?: { limit?: number; organizationId?: string }): Promise<DeviceHealthSnapshot[]> {
+  async getDeviceHealth(options?: {
+    limit?: number;
+    organizationId?: string;
+  }): Promise<DeviceHealthSnapshot[]> {
     const limit = options?.limit || 100;
 
     let query = this.getClient()
       .from(this.tableName)
-      .select(`
+      .select(
+        `
         *,
         devices:device_id (
           name,
@@ -22,12 +26,13 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
           is_active,
           last_seen
         )
-      `)
-      .order('created_at', { ascending: false })
+      `,
+      )
+      .order("created_at", { ascending: false })
       .limit(limit);
 
     if (options?.organizationId) {
-      query = query.eq('organization_id', options.organizationId);
+      query = query.eq("organization_id", options.organizationId);
     }
 
     const { data, error } = await query;
@@ -44,15 +49,26 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
       return true;
     });
 
-    return uniqueRows.map(row => this.transformDeviceHealth(
-      row as DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
-    ));
+    return uniqueRows.map((row) =>
+      this.transformDeviceHealth(
+        row as DeviceHealthRow & {
+          devices?: {
+            name?: string;
+            os?: string;
+            agent_version?: string;
+            is_active?: boolean;
+            last_seen?: string;
+          } | null;
+        },
+      ),
+    );
   }
 
   async getDeviceById(deviceId: string): Promise<DeviceHealthSnapshot | null> {
     const { data, error } = await this.getClient()
       .from(this.tableName)
-      .select(`
+      .select(
+        `
         *,
         devices:device_id (
           name,
@@ -61,30 +77,48 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
           is_active,
           last_seen
         )
-      `)
-      .eq('device_id', deviceId)
-      .order('created_at', { ascending: false })
+      `,
+      )
+      .eq("device_id", deviceId)
+      .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') return null;
+      if (error.code === "PGRST116") return null;
       throw this.handleError(error);
     }
 
     return this.transformDeviceHealth(
-      data as DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
+      data as DeviceHealthRow & {
+        devices?: {
+          name?: string;
+          os?: string;
+          agent_version?: string;
+          is_active?: boolean;
+          last_seen?: string;
+        } | null;
+      },
     );
   }
 
-  async getLatestHealthSnapshot(deviceId: string): Promise<DeviceHealthSnapshot | null> {
+  async getLatestHealthSnapshot(
+    deviceId: string,
+  ): Promise<DeviceHealthSnapshot | null> {
     return this.getDeviceById(deviceId);
   }
 
   private transformDeviceHealth(
-    snapshot: DeviceHealthRow & { devices?: { name?: string; os?: string; agent_version?: string; is_active?: boolean; last_seen?: string } | null }
+    snapshot: DeviceHealthRow & {
+      devices?: {
+        name?: string;
+        os?: string;
+        agent_version?: string;
+        is_active?: boolean;
+        last_seen?: string;
+      } | null;
+    },
   ): DeviceHealthSnapshot {
-    const dev = snapshot.devices;
     return {
       id: snapshot.id,
       device_id: snapshot.device_id,
@@ -106,12 +140,15 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
   }
 
   async getSystemHealth(organizationId?: string): Promise<SystemHealth> {
-    const cacheKey = `system_health_${organizationId || 'all'}`;
+    const cacheKey = `system_health_${organizationId || "all"}`;
 
     return this.cachedQuery(
       cacheKey,
       async () => {
-        const deviceHealth = await this.getDeviceHealth({ limit: 1000, organizationId });
+        const deviceHealth = await this.getDeviceHealth({
+          limit: 1000,
+          organizationId,
+        });
 
         if (deviceHealth.length === 0) {
           return {
@@ -128,29 +165,55 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
             critical_alerts_24h: 0,
             system_uptime: 0,
             api_response_time: 0,
-            system_status: 'HEALTHY' as const,
+            system_status: "HEALTHY" as const,
             last_updated: new Date().toISOString(),
           };
         }
 
-        const onlineCount = deviceHealth.filter(d => d.status === 'ONLINE').length;
-        const offlineCount = deviceHealth.filter(d => d.status === 'OFFLINE').length;
-        const warningCount = deviceHealth.filter(d => d.status === 'WARNING').length;
-        const errorCount = deviceHealth.filter(d => d.status === 'ERROR').length;
+        const onlineCount = deviceHealth.filter(
+          (d) => d.status === "ONLINE",
+        ).length;
+        const offlineCount = deviceHealth.filter(
+          (d) => d.status === "OFFLINE",
+        ).length;
+        const warningCount = deviceHealth.filter(
+          (d) => d.status === "WARNING",
+        ).length;
+        const errorCount = deviceHealth.filter(
+          (d) => d.status === "ERROR",
+        ).length;
 
-        const totalCpu = deviceHealth.reduce((sum, d) => sum + (d.cpu_usage ?? 0), 0);
-        const totalMemory = deviceHealth.reduce((sum, d) => sum + (d.memory_usage ?? 0), 0);
-        const totalDisk = deviceHealth.reduce((sum, d) => sum + (d.disk_usage ?? 0), 0);
-        const totalAlerts = deviceHealth.reduce((sum, d) => sum + d.alerts_last_24h, 0);
+        const totalCpu = deviceHealth.reduce(
+          (sum, d) => sum + (d.cpu_usage ?? 0),
+          0,
+        );
+        const totalMemory = deviceHealth.reduce(
+          (sum, d) => sum + (d.memory_usage ?? 0),
+          0,
+        );
+        const totalDisk = deviceHealth.reduce(
+          (sum, d) => sum + (d.disk_usage ?? 0),
+          0,
+        );
+        const totalAlerts = deviceHealth.reduce(
+          (sum, d) => sum + d.alerts_last_24h,
+          0,
+        );
 
         const n = deviceHealth.length;
         const avgCpu = totalCpu / n;
         const avgMemory = totalMemory / n;
         const avgDisk = totalDisk / n;
 
-        let systemStatus: 'HEALTHY' | 'WARNING' | 'CRITICAL' = 'HEALTHY';
-        if (errorCount > 0) systemStatus = 'CRITICAL';
-        else if (warningCount > 0 || avgCpu > 80 || avgMemory > 80 || avgDisk > 80) systemStatus = 'WARNING';
+        let systemStatus: "HEALTHY" | "WARNING" | "CRITICAL" = "HEALTHY";
+        if (errorCount > 0) systemStatus = "CRITICAL";
+        else if (
+          warningCount > 0 ||
+          avgCpu > 80 ||
+          avgMemory > 80 ||
+          avgDisk > 80
+        )
+          systemStatus = "WARNING";
 
         return {
           total_devices: n,
@@ -170,7 +233,7 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
           last_updated: new Date().toISOString(),
         };
       },
-      30 * 1000
+      30 * 1000,
     );
   }
 }

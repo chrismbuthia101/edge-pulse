@@ -13,7 +13,9 @@ interface PurgeDeviceDataProps {
 
 export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
   const [selectedDevice, setSelectedDevice] = useState(deviceId || "");
-  const [purgeType, setPurgeType] = useState<"telemetry" | "alerts" | "all">("telemetry");
+  const [purgeType, setPurgeType] = useState<"telemetry" | "alerts" | "all">(
+    "telemetry",
+  );
   const [timeRange, setTimeRange] = useState("older-than-90");
   const [confirming, setConfirming] = useState(false);
   const [purging, setPurging] = useState(false);
@@ -24,8 +26,18 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
   const deviceDataService = new DeviceDataService(deviceDataRepository);
 
   const devices = [
-    { id: "device-1", name: "Server-01", lastSeen: "2 minutes ago", risk: "high" },
-    { id: "device-2", name: "Workstation-05", lastSeen: "1 hour ago", risk: "medium" },
+    {
+      id: "device-1",
+      name: "Server-01",
+      lastSeen: "2 minutes ago",
+      risk: "high",
+    },
+    {
+      id: "device-2",
+      name: "Workstation-05",
+      lastSeen: "1 hour ago",
+      risk: "medium",
+    },
     { id: "device-3", name: "Laptop-12", lastSeen: "3 days ago", risk: "low" },
   ];
 
@@ -47,8 +59,13 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
         purgeType,
       });
 
-      const totalRowsDeleted = results.reduce((sum, result) => sum + result.rowsDeleted, 0);
-      setSuccess(`Successfully purged ${totalRowsDeleted} rows from ${results.length} table(s)`);
+      const totalRowsDeleted = results.reduce(
+        (sum, result) => sum + result.rowsDeleted,
+        0,
+      );
+      setSuccess(
+        `Successfully purged ${totalRowsDeleted} rows from ${results.length} table(s)`,
+      );
       setConfirming(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to purge data");
@@ -60,16 +77,16 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
   const getCutoffDate = () => {
     const now = new Date();
     switch (timeRange) {
-      case 'older-than-30':
+      case "older-than-30":
         now.setDate(now.getDate() - 30);
         break;
-      case 'older-than-90':
+      case "older-than-90":
         now.setDate(now.getDate() - 90);
         break;
-      case 'older-than-180':
+      case "older-than-180":
         now.setDate(now.getDate() - 180);
         break;
-      case 'all-time':
+      case "all-time":
         return new Date(0).toISOString(); // Beginning of time
       default:
         now.setDate(now.getDate() - 90);
@@ -114,13 +131,19 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
     { value: "all-time", label: "All time data" },
   ];
 
-  const selectedPurgeOption = purgeOptions.find(opt => opt.type === purgeType);
+  const selectedPurgeOption = purgeOptions.find(
+    (opt) => opt.type === purgeType,
+  );
   const getImpactColor = (impact: string) => {
     switch (impact) {
-      case "Low": return "text-green-500 bg-green-500/10";
-      case "Medium": return "text-amber-500 bg-amber-500/10";
-      case "High": return "text-destructive bg-destructive/10";
-      default: return "text-muted-foreground bg-muted";
+      case "Low":
+        return "text-green-500 bg-green-500/10";
+      case "Medium":
+        return "text-amber-500 bg-amber-500/10";
+      case "High":
+        return "text-destructive bg-destructive/10";
+      default:
+        return "text-muted-foreground bg-muted";
     }
   };
 
@@ -129,7 +152,9 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 lg:px-5 py-3 lg:py-4 border-b border-border gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Trash2 className="h-4 w-4 text-destructive shrink-0" />
-          <h3 className="text-sm font-semibold text-foreground truncate">Purge Device Data</h3>
+          <h3 className="text-sm font-semibold text-foreground truncate">
+            Purge Device Data
+          </h3>
         </div>
         <div className="flex items-center gap-2 lg:gap-3 text-xs min-w-0">
           <AlertTriangle className="h-3 w-3 text-destructive" />
@@ -140,7 +165,9 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
       <div className="p-4 lg:p-5 space-y-4">
         {/* Device Selection */}
         <div>
-          <label className="text-xs font-medium text-foreground block mb-2">Select Device</label>
+          <label className="text-xs font-medium text-foreground block mb-2">
+            Select Device
+          </label>
           <select
             value={selectedDevice}
             onChange={(e) => setSelectedDevice(e.target.value)}
@@ -157,7 +184,9 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
 
         {/* Purge Type Selection */}
         <div>
-          <label className="text-xs font-medium text-foreground block mb-2">Data to Purge</label>
+          <label className="text-xs font-medium text-foreground block mb-2">
+            Data to Purge
+          </label>
           <div className="space-y-2">
             {purgeOptions.map((option) => {
               const Icon = option.icon;
@@ -169,26 +198,38 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
                     "w-full p-3 rounded-lg border text-left transition-all",
                     purgeType === option.type
                       ? "bg-destructive/10 border-destructive/30"
-                      : "bg-background border-border hover:bg-accent/50"
+                      : "bg-background border-border hover:bg-accent/50",
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <Icon className={cn(
-                      "h-4 w-4 shrink-0 mt-0.5",
-                      purgeType === option.type ? "text-destructive" : "text-muted-foreground"
-                    )} />
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 shrink-0 mt-0.5",
+                        purgeType === option.type
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-foreground">{option.label}</span>
-                        <span className={cn(
-                          "text-xs px-2 py-0.5 rounded-full",
-                          getImpactColor(option.impact)
-                        )}>
+                        <span className="text-sm font-medium text-foreground">
+                          {option.label}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            getImpactColor(option.impact),
+                          )}
+                        >
                           {option.impact}
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mb-1">{option.description}</div>
-                      <div className="text-xs text-muted-foreground">~{option.estimatedSize}</div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {option.description}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        ~{option.estimatedSize}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -199,7 +240,9 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
 
         {/* Time Range Selection */}
         <div>
-          <label className="text-xs font-medium text-foreground block mb-2">Time Range</label>
+          <label className="text-xs font-medium text-foreground block mb-2">
+            Time Range
+          </label>
           <div className="grid grid-cols-2 gap-2">
             {timeRanges.map((range) => (
               <button
@@ -209,7 +252,7 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
                   "p-2 rounded-lg border text-xs transition-all",
                   timeRange === range.value
                     ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border hover:bg-accent/50"
+                    : "bg-background border-border hover:bg-accent/50",
                 )}
               >
                 {range.label}
@@ -261,7 +304,9 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
               <div className="text-xs text-destructive">
-                <div className="font-medium mb-1">Warning: Destructive Action</div>
+                <div className="font-medium mb-1">
+                  Warning: Destructive Action
+                </div>
                 <div>{selectedPurgeOption.warning}</div>
                 <div className="mt-1">This action cannot be undone.</div>
               </div>
@@ -273,9 +318,12 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
         {confirming ? (
           <div className="space-y-3">
             <div className="p-3 rounded-lg bg-muted/50 border border-border">
-              <div className="text-xs text-muted-foreground mb-2">Confirm purge action:</div>
+              <div className="text-xs text-muted-foreground mb-2">
+                Confirm purge action:
+              </div>
               <div className="text-xs font-mono bg-background p-2 rounded border border-border">
-                PURGE {purgeType.toUpperCase()} FROM {selectedDevice || 'DEVICE'} ({timeRange})
+                PURGE {purgeType.toUpperCase()} FROM{" "}
+                {selectedDevice || "DEVICE"} ({timeRange})
               </div>
             </div>
 
@@ -297,7 +345,11 @@ export function PurgeDeviceData({ deviceId }: PurgeDeviceDataProps) {
                     <motion.div
                       className="w-3 h-3 border border-current border-t-transparent rounded-full"
                       animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      transition={{
+                        duration: 1,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
                     />
                     Purging...
                   </span>

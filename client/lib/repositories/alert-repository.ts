@@ -3,15 +3,19 @@ import {
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
-} from '@/lib/repositories/base-repository';
+} from "@/lib/repositories/base-repository";
 import type {
   Alert,
   AlertStatus,
   AlertSeverity,
   RealtimeAlertPayload,
-} from '@/lib/supabase/types';
+} from "@/lib/supabase/types";
 
-const ACTIVE_STATUSES: AlertStatus[] = ['PENDING', 'ACKNOWLEDGED', 'INVESTIGATED'];
+const ACTIVE_STATUSES: AlertStatus[] = [
+  "PENDING",
+  "ACKNOWLEDGED",
+  "INVESTIGATED",
+];
 
 const DEFAULT_ALERT_SELECT = `
   id,
@@ -59,7 +63,7 @@ const DEFAULT_ALERT_SELECT = `
 `.trim();
 
 const METRICS_SELECT =
-  'id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at';
+  "id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at";
 
 export interface AlertQueryOptions extends QueryOptions {
   deviceId?: string;
@@ -99,7 +103,7 @@ export interface AlertSubscriptionCallbacks {
 
 export class AlertRepository extends BaseRepository<Alert> {
   constructor() {
-    super('alerts');
+    super("alerts");
   }
 
   private buildAlertQuery(options: AlertQueryOptions) {
@@ -119,15 +123,17 @@ export class AlertRepository extends BaseRepository<Alert> {
       offset: options.offset,
     });
 
-    if (options.startDate) query = query.gte('created_at', options.startDate);
-    if (options.endDate) query = query.lte('created_at', options.endDate);
-    if (options.minAnomalyScore !== undefined) query = query.gte('anomaly_score', options.minAnomalyScore);
-    if (options.maxAnomalyScore !== undefined) query = query.lte('anomaly_score', options.maxAnomalyScore);
+    if (options.startDate) query = query.gte("created_at", options.startDate);
+    if (options.endDate) query = query.lte("created_at", options.endDate);
+    if (options.minAnomalyScore !== undefined)
+      query = query.gte("anomaly_score", options.minAnomalyScore);
+    if (options.maxAnomalyScore !== undefined)
+      query = query.lte("anomaly_score", options.maxAnomalyScore);
 
     if (options.search) {
-      const s = options.search.replace(/[%_]/g, '\\$&');
+      const s = options.search.replace(/[%_]/g, "\\$&");
       query = query.or(
-        `title.ilike.%${s}%,description.ilike.%${s}%,category.ilike.%${s}%`
+        `title.ilike.%${s}%,description.ilike.%${s}%,category.ilike.%${s}%`,
       );
     }
 
@@ -144,12 +150,12 @@ export class AlertRepository extends BaseRepository<Alert> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as Alert[];
       },
-      options.cacheTTL
+      options.cacheTTL,
     );
   }
 
   async findAlertsPaginated(
-    options: AlertQueryOptions & PaginationOptions
+    options: AlertQueryOptions & PaginationOptions,
   ): Promise<PaginatedResult<Alert>> {
     const { page, limit, ...queryOptions } = options;
 
@@ -170,12 +176,12 @@ export class AlertRepository extends BaseRepository<Alert> {
       select: queryOptions.select ?? DEFAULT_ALERT_SELECT,
       filters,
       orderBy: queryOptions.orderBy,
-      cacheTTL: queryOptions.cacheTTL
+      cacheTTL: queryOptions.cacheTTL,
     });
   }
 
   private async findAlertsWithSearchPaginated(
-    options: AlertQueryOptions & PaginationOptions
+    options: AlertQueryOptions & PaginationOptions,
   ): Promise<PaginatedResult<Alert>> {
     const { page, limit, ...queryOptions } = options;
     const offset = (page - 1) * limit;
@@ -185,7 +191,7 @@ export class AlertRepository extends BaseRepository<Alert> {
 
     const { count, error: countError } = await this.supabase
       .from(this.tableName)
-      .select('*', { count: 'exact', head: true });
+      .select("*", { count: "exact", head: true });
     if (countError) throw this.handleError(countError);
 
     const { data, error } = await query;
@@ -209,7 +215,7 @@ export class AlertRepository extends BaseRepository<Alert> {
     yesterday.setDate(yesterday.getDate() - 1);
     return this.findAlerts({
       startDate: yesterday.toISOString(),
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
       limit,
       cacheTTL: 30 * 1000,
     });
@@ -218,7 +224,7 @@ export class AlertRepository extends BaseRepository<Alert> {
   async getActiveAlerts(limit = 100): Promise<Alert[]> {
     return this.findAlerts({
       status: ACTIVE_STATUSES,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
       limit,
       cacheTTL: 60 * 1000,
     });
@@ -226,8 +232,8 @@ export class AlertRepository extends BaseRepository<Alert> {
 
   async getPendingAlerts(): Promise<Alert[]> {
     return this.findAlerts({
-      status: 'PENDING',
-      orderBy: { column: 'created_at', ascending: false },
+      status: "PENDING",
+      orderBy: { column: "created_at", ascending: false },
       cacheTTL: 30 * 1000,
     });
   }
@@ -235,7 +241,7 @@ export class AlertRepository extends BaseRepository<Alert> {
   async getAlertsByDevice(deviceId: string, limit = 50): Promise<Alert[]> {
     return this.findAlerts({
       deviceId,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
       limit,
       cacheTTL: 2 * 60 * 1000,
     });
@@ -243,34 +249,41 @@ export class AlertRepository extends BaseRepository<Alert> {
 
   async getCriticalAlerts(): Promise<Alert[]> {
     return this.findAlerts({
-      severity: 'critical',
+      severity: "critical",
       status: ACTIVE_STATUSES,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
       cacheTTL: 30 * 1000,
     });
   }
 
   async getAlertsNeedingAttention(): Promise<Alert[]> {
     return this.findAlerts({
-      status: ['PENDING', 'ACKNOWLEDGED'],
-      severity: ['critical', 'high'],
-      orderBy: { column: 'created_at', ascending: false },
+      status: ["PENDING", "ACKNOWLEDGED"],
+      severity: ["critical", "high"],
+      orderBy: { column: "created_at", ascending: false },
       limit: 20,
       cacheTTL: 30 * 1000,
     });
   }
 
-  async searchAlerts(query: string, options: AlertQueryOptions = {}): Promise<Alert[]> {
+  async searchAlerts(
+    query: string,
+    options: AlertQueryOptions = {},
+  ): Promise<Alert[]> {
     return this.findAlerts({ ...options, search: query });
   }
 
-  async updateAlertStatus(id: string, status: AlertStatus, userId?: string): Promise<Alert> {
+  async updateAlertStatus(
+    id: string,
+    status: AlertStatus,
+    userId?: string,
+  ): Promise<Alert> {
     try {
       const updates = buildStatusTransition(status, userId);
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update(updates)
-        .eq('id', id)
+        .eq("id", id)
         .select(DEFAULT_ALERT_SELECT)
         .single();
       if (error) throw error;
@@ -286,7 +299,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update({ read: true })
-        .eq('id', id)
+        .eq("id", id)
         .select(DEFAULT_ALERT_SELECT)
         .single();
       if (error) throw error;
@@ -302,7 +315,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { error } = await this.supabase
         .from(this.tableName)
         .update({ read: true })
-        .in('id', ids);
+        .in("id", ids);
       if (error) throw error;
       this.invalidateCache();
     } catch (error) {
@@ -310,13 +323,17 @@ export class AlertRepository extends BaseRepository<Alert> {
     }
   }
 
-  async bulkUpdateStatus(ids: string[], status: AlertStatus, userId?: string): Promise<Alert[]> {
+  async bulkUpdateStatus(
+    ids: string[],
+    status: AlertStatus,
+    userId?: string,
+  ): Promise<Alert[]> {
     try {
       const updates = buildStatusTransition(status, userId);
       const { data, error } = await this.supabase
         .from(this.tableName)
         .update(updates)
-        .in('id', ids)
+        .in("id", ids)
         .select(DEFAULT_ALERT_SELECT);
       if (error) throw error;
       this.invalidateCache();
@@ -328,46 +345,89 @@ export class AlertRepository extends BaseRepository<Alert> {
 
   async getAlertMetrics(): Promise<AlertMetrics> {
     return this.cachedQuery(
-      'alert_metrics',
+      "alert_metrics",
       async () => {
         const alerts = await this.findAlerts({ select: METRICS_SELECT });
         const today = new Date().toDateString();
 
         const metrics: AlertMetrics = {
           total: alerts.length,
-          pending: 0, acknowledged: 0, investigated: 0, closed: 0,
-          critical: 0, high: 0, medium: 0, low: 0,
-          avgAnomalyScore: 0, avgInferenceLatency: 0,
-          anomaliesResolved: 0, resolvedToday: 0,
+          pending: 0,
+          acknowledged: 0,
+          investigated: 0,
+          closed: 0,
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          avgAnomalyScore: 0,
+          avgInferenceLatency: 0,
+          anomaliesResolved: 0,
+          resolvedToday: 0,
         };
 
-        let scoreSum = 0, scoreCount = 0, latencySum = 0, latencyCount = 0;
+        let scoreSum = 0,
+          scoreCount = 0,
+          latencySum = 0,
+          latencyCount = 0;
 
         for (const a of alerts) {
           switch (a.status) {
-            case 'PENDING': metrics.pending++; break;
-            case 'ACKNOWLEDGED': metrics.acknowledged++; break;
-            case 'INVESTIGATED': metrics.investigated++; break;
-            case 'CLOSED': metrics.closed++; break;
+            case "PENDING":
+              metrics.pending++;
+              break;
+            case "ACKNOWLEDGED":
+              metrics.acknowledged++;
+              break;
+            case "INVESTIGATED":
+              metrics.investigated++;
+              break;
+            case "CLOSED":
+              metrics.closed++;
+              break;
           }
           switch (a.severity) {
-            case 'critical': metrics.critical++; break;
-            case 'high': metrics.high++; break;
-            case 'medium': metrics.medium++; break;
-            case 'low': metrics.low++; break;
+            case "critical":
+              metrics.critical++;
+              break;
+            case "high":
+              metrics.high++;
+              break;
+            case "medium":
+              metrics.medium++;
+              break;
+            case "low":
+              metrics.low++;
+              break;
           }
           const score = a.anomaly_score ?? a.confidence ?? null;
-          if (score !== null) { scoreSum += score; scoreCount++; }
-          if ((a.inference_latency_ms ?? 0) > 0) { latencySum += a.inference_latency_ms; latencyCount++; }
-          if (a.status === 'CLOSED' && (a.severity === 'critical' || a.severity === 'high')) metrics.anomaliesResolved++;
-          if (a.status === 'CLOSED' && a.closed_at && new Date(a.closed_at).toDateString() === today) metrics.resolvedToday++;
+          if (score !== null) {
+            scoreSum += score;
+            scoreCount++;
+          }
+          if ((a.inference_latency_ms ?? 0) > 0) {
+            latencySum += a.inference_latency_ms;
+            latencyCount++;
+          }
+          if (
+            a.status === "CLOSED" &&
+            (a.severity === "critical" || a.severity === "high")
+          )
+            metrics.anomaliesResolved++;
+          if (
+            a.status === "CLOSED" &&
+            a.closed_at &&
+            new Date(a.closed_at).toDateString() === today
+          )
+            metrics.resolvedToday++;
         }
 
         if (scoreCount > 0) metrics.avgAnomalyScore = scoreSum / scoreCount;
-        if (latencyCount > 0) metrics.avgInferenceLatency = latencySum / latencyCount;
+        if (latencyCount > 0)
+          metrics.avgInferenceLatency = latencySum / latencyCount;
         return metrics;
       },
-      60 * 1000
+      60 * 1000,
     );
   }
 
@@ -376,11 +436,11 @@ export class AlertRepository extends BaseRepository<Alert> {
       const { data, error } = await this.supabase
         .from(this.tableName)
         .select(DEFAULT_ALERT_SELECT)
-        .eq('id', id)
+        .eq("id", id)
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') return null;
+        if (error.code === "PGRST116") return null;
         throw this.handleError(error);
       }
 
@@ -393,13 +453,17 @@ export class AlertRepository extends BaseRepository<Alert> {
   async getAlertsByTimeRange(
     startDate: string,
     endDate: string,
-    groupBy: 'hour' | 'day' | 'week' = 'day'
+    groupBy: "hour" | "day" | "week" = "day",
   ): Promise<{ timestamp: string; count: number }[]> {
     const cacheKey = `alerts_time_range_${startDate}_${endDate}_${groupBy}`;
     return this.cachedQuery(
       cacheKey,
       async () => {
-        const alerts = await this.findAlerts({ startDate, endDate, select: 'created_at' });
+        const alerts = await this.findAlerts({
+          startDate,
+          endDate,
+          select: "created_at",
+        });
         const grouped = new Map<string, number>();
         for (const alert of alerts) {
           const key = toGroupKey(new Date(alert.created_at), groupBy);
@@ -409,40 +473,49 @@ export class AlertRepository extends BaseRepository<Alert> {
           .map(([timestamp, count]) => ({ timestamp, count }))
           .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       },
-      5 * 60 * 1000
+      5 * 60 * 1000,
     );
   }
 
-  async getTopCategories(limit = 10): Promise<{ category: string; count: number }[]> {
+  async getTopCategories(
+    limit = 10,
+  ): Promise<{ category: string; count: number }[]> {
     return this.cachedQuery(
       `top_categories_${limit}`,
       async () => {
-        const alerts = await this.findAlerts({ select: 'category' });
+        const alerts = await this.findAlerts({ select: "category" });
         const counts = new Map<string, number>();
         for (const alert of alerts) {
-          if (alert.category) counts.set(alert.category, (counts.get(alert.category) ?? 0) + 1);
+          if (alert.category)
+            counts.set(alert.category, (counts.get(alert.category) ?? 0) + 1);
         }
         return Array.from(counts.entries())
           .map(([category, count]) => ({ category, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, limit);
       },
-      10 * 60 * 1000
+      10 * 60 * 1000,
     );
   }
 
   subscribeToAlerts(
     filters: Partial<AlertQueryOptions> = {},
-    callbacks: AlertSubscriptionCallbacks = {}
+    callbacks: AlertSubscriptionCallbacks = {},
   ): string {
     const channelName = `realtime-alerts-${Date.now()}`;
     this.subscribe(channelName, filters, (payload) => {
       try {
         const p = payload as RealtimeAlertPayload;
         switch (p.eventType) {
-          case 'INSERT': callbacks.onInsert?.(p.new); break;
-          case 'UPDATE': callbacks.onUpdate?.(p.new); break;
-          case 'DELETE': callbacks.onDelete?.(p.old as Alert); break;
+          case "INSERT":
+            callbacks.onInsert?.(p.new);
+            break;
+          case "UPDATE":
+            callbacks.onUpdate?.(p.new);
+            break;
+          case "DELETE":
+            callbacks.onDelete?.(p.old as Alert);
+            break;
         }
       } catch (error) {
         callbacks.onError?.(error);
@@ -456,19 +529,22 @@ export class AlertRepository extends BaseRepository<Alert> {
   }
 }
 
-function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Alert> {
+function buildStatusTransition(
+  status: AlertStatus,
+  userId?: string,
+): Partial<Alert> {
   const now = new Date().toISOString();
   const updates: Partial<Alert> = { status };
   switch (status) {
-    case 'ACKNOWLEDGED':
+    case "ACKNOWLEDGED":
       updates.acknowledged_at = now;
       if (userId) updates.acknowledged_by = userId;
       break;
-    case 'INVESTIGATED':
+    case "INVESTIGATED":
       updates.investigated_at = now;
       if (userId) updates.investigated_by = userId;
       break;
-    case 'CLOSED':
+    case "CLOSED":
       updates.closed_at = now;
       if (userId) updates.closed_by = userId;
       break;
@@ -476,14 +552,16 @@ function buildStatusTransition(status: AlertStatus, userId?: string): Partial<Al
   return updates;
 }
 
-function toGroupKey(date: Date, groupBy: 'hour' | 'day' | 'week'): string {
+function toGroupKey(date: Date, groupBy: "hour" | "day" | "week"): string {
   switch (groupBy) {
-    case 'hour': return date.toISOString().slice(0, 13) + ':00';
-    case 'week': {
+    case "hour":
+      return date.toISOString().slice(0, 13) + ":00";
+    case "week": {
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       return weekStart.toISOString().slice(0, 10);
     }
-    default: return date.toISOString().slice(0, 10);
+    default:
+      return date.toISOString().slice(0, 10);
   }
 }

@@ -1,8 +1,8 @@
-import { create } from 'zustand';
-import { RetentionRepository } from '@/lib/repositories';
-import { RetentionService } from '@/lib/services/retention-service';
-import type { StorageUsage } from '@/lib/repositories/retention-repository';
-import { toast } from 'sonner';
+import { create } from "zustand";
+import { RetentionRepository } from "@/lib/repositories";
+import { RetentionService } from "@/lib/services/retention-service";
+import type { StorageUsage } from "@/lib/repositories/retention-repository";
+import { toast } from "sonner";
 
 interface RetentionStore {
   retentionPeriod: number;
@@ -11,7 +11,11 @@ interface RetentionStore {
   error: string | null;
 
   initialize: (deviceId?: string) => Promise<void>;
-  updateRetentionPeriod: (days: number, deviceId?: string) => Promise<void>;
+  updateRetentionPeriod: (
+    days: number,
+    deviceId?: string,
+    organizationId?: string,
+  ) => Promise<void>;
   purgeOldData: (deviceId?: string) => Promise<void>;
   refreshStorageUsage: (deviceId?: string) => Promise<void>;
   clearError: () => void;
@@ -41,39 +45,60 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
         retentionService.getStorageUsage(deviceId || null),
       ]);
 
-      set({ 
-        retentionPeriod, 
-        storageUsage, 
-        loading: false 
+      set({
+        retentionPeriod,
+        storageUsage,
+        loading: false,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize retention settings';
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to initialize retention settings";
       set({ error: errorMessage, loading: false });
       toast.error(errorMessage);
     }
   },
 
-  updateRetentionPeriod: async (days: number, deviceId?: string) => {
+  updateRetentionPeriod: async (
+    days: number,
+    deviceId?: string,
+    organizationId?: string,
+  ) => {
     const previousPeriod = get().retentionPeriod;
     const previousStorage = get().storageUsage;
-    
-    set({ retentionPeriod: days, loading: true, error: null });
-    
-    try {
-      await retentionService.updateRetentionSettings(deviceId || null, days);
 
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, days);
-      
+    set({ retentionPeriod: days, loading: true, error: null });
+
+    try {
+      await retentionService.updateRetentionSettings(
+        deviceId || null,
+        days,
+        organizationId || "",
+      );
+
+      const storageUsage = await retentionService.refreshStorageUsage(
+        deviceId || null,
+        days,
+      );
+
       set({ storageUsage, loading: false });
-      toast.success('Retention period updated');
+      toast.success("Retention period updated");
     } catch (error) {
-      set({ 
+      set({
         retentionPeriod: previousPeriod,
         storageUsage: previousStorage,
-        error: error instanceof Error ? error.message : 'Failed to update retention period',
-        loading: false
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update retention period",
+        loading: false,
       });
-      toast.error(error instanceof Error ? error.message : 'Failed to update retention period');
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update retention period",
+      );
     }
   },
 
@@ -84,35 +109,47 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
       telemetry: previousStorage.telemetry * 0.9,
       total: previousStorage.total * 0.9,
     };
-    
+
     set({ storageUsage: optimisticStorage, loading: true, error: null });
-    
+
     try {
       const { retentionPeriod } = get();
       await retentionService.purgeOldData(deviceId || null, retentionPeriod);
 
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, retentionPeriod);
-      
+      const storageUsage = await retentionService.refreshStorageUsage(
+        deviceId || null,
+        retentionPeriod,
+      );
+
       set({ storageUsage, loading: false });
-      toast.success('Old data purged successfully');
+      toast.success("Old data purged successfully");
     } catch (error) {
-      set({ 
+      set({
         storageUsage: previousStorage,
-        error: error instanceof Error ? error.message : 'Failed to purge old data',
-        loading: false
+        error:
+          error instanceof Error ? error.message : "Failed to purge old data",
+        loading: false,
       });
-      toast.error(error instanceof Error ? error.message : 'Failed to purge old data');
+      toast.error(
+        error instanceof Error ? error.message : "Failed to purge old data",
+      );
     }
   },
 
   refreshStorageUsage: async (deviceId?: string) => {
     try {
       const { retentionPeriod } = get();
-      const storageUsage = await retentionService.refreshStorageUsage(deviceId || null, retentionPeriod);
-      
+      const storageUsage = await retentionService.refreshStorageUsage(
+        deviceId || null,
+        retentionPeriod,
+      );
+
       set({ storageUsage });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh storage usage';
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to refresh storage usage";
       set({ error: errorMessage });
       toast.error(errorMessage);
     }

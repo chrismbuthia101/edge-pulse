@@ -1,7 +1,7 @@
 export interface DeviceHealthSnapshot {
   id: string;
   device_id: string;
-  status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
+  status: "ONLINE" | "OFFLINE" | "WARNING" | "ERROR";
   cpu_usage: number | null;
   memory_usage: number | null;
   disk_usage: number | null;
@@ -31,6 +31,6 @@ export interface SystemHealth {
   critical_alerts_24h: number;
   system_uptime: number;
   api_response_time: number;
-  system_status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  system_status: "HEALTHY" | "WARNING" | "CRITICAL";
   last_updated: string;
 }

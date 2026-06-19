@@ -38,9 +38,9 @@ interface Device {
 }
 
 interface Analyst {
-  user_id: string;
+  id: string;
   full_name: string;
-  department: string | null;
+  role: string;
 }
 
 export function DeviceAssignmentManager() {
@@ -54,20 +54,24 @@ export function DeviceAssignmentManager() {
     totalAssignments: 0,
     activeAssignments: 0,
     unassignedDevices: 0,
-    analystsWithAssignments: 0,
+    usersWithAssignments: 0,
   });
 
-  const deviceAssignmentRepository = useMemo(() => new DeviceAssignmentRepository(), []);
+  const deviceAssignmentRepository = useMemo(
+    () => new DeviceAssignmentRepository(),
+    [],
+  );
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [assignmentsData, devicesData, analystsData, statsData] = await Promise.all([
-        deviceAssignmentRepository.getAllActiveAssignments(),
-        deviceAssignmentRepository.getUnassignedDevices(),
-        deviceAssignmentRepository.getAnalystsForAssignment(),
-        deviceAssignmentRepository.getAssignmentStats(),
-      ]);
+      const [assignmentsData, devicesData, analystsData, statsData] =
+        await Promise.all([
+          deviceAssignmentRepository.getAllActiveAssignments(),
+          deviceAssignmentRepository.getUnassignedDevices(),
+          deviceAssignmentRepository.getUsersForAssignment(),
+          deviceAssignmentRepository.getAssignmentStats(),
+        ]);
 
       setAssignments(assignmentsData);
       setUnassignedDevices(devicesData);
@@ -92,7 +96,9 @@ export function DeviceAssignmentManager() {
         <div className="text-center">
           <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold">Access Denied</h3>
-          <p className="text-muted-foreground">You don&apos;t have permission to access device assignments.</p>
+          <p className="text-muted-foreground">
+            You don&apos;t have permission to access device assignments.
+          </p>
         </div>
       </div>
     );
@@ -101,7 +107,11 @@ export function DeviceAssignmentManager() {
   const assignDevice = async (deviceId: string, analystId: string) => {
     if (!user) return;
     try {
-      await deviceAssignmentRepository.assignDeviceToAnalyst(deviceId, analystId, user.id);
+      await deviceAssignmentRepository.assignDeviceToUser(
+        deviceId,
+        analystId,
+        user.id,
+      );
       toast.success("Device assigned successfully");
       await loadData();
     } catch (error) {
@@ -113,7 +123,10 @@ export function DeviceAssignmentManager() {
   const removeAssignment = async (deviceId: string, analystId: string) => {
     if (!user) return;
     try {
-      await deviceAssignmentRepository.removeDeviceAssignment(deviceId, analystId);
+      await deviceAssignmentRepository.removeDeviceAssignment(
+        deviceId,
+        analystId,
+      );
       toast.success("Device assignment removed");
       await loadData();
     } catch (error) {
@@ -122,10 +135,19 @@ export function DeviceAssignmentManager() {
     }
   };
 
-  const reassignDevice = async (deviceId: string, fromAnalystId: string, toAnalystId: string) => {
+  const reassignDevice = async (
+    deviceId: string,
+    fromAnalystId: string,
+    toAnalystId: string,
+  ) => {
     if (!user) return;
     try {
-      await deviceAssignmentRepository.reassignDevice(deviceId, fromAnalystId, toAnalystId, user.id);
+      await deviceAssignmentRepository.reassignDevice(
+        deviceId,
+        fromAnalystId,
+        toAnalystId,
+        user.id,
+      );
       toast.success("Device reassigned successfully");
       await loadData();
     } catch (error) {
@@ -134,14 +156,18 @@ export function DeviceAssignmentManager() {
     }
   };
 
-  const filteredUnassignedDevices = unassignedDevices.filter((device) =>
-    device.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    device.ip?.includes(searchTerm)
+  const filteredUnassignedDevices = unassignedDevices.filter(
+    (device) =>
+      device.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      device.ip?.includes(searchTerm),
   );
 
-  const filteredAssignments = assignments.filter((assignment) =>
-    assignment.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    assignment.analyst_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAssignments = assignments.filter(
+    (assignment) =>
+      assignment.device_name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      assignment.user_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   if (!hasRole(["ADMINISTRATOR"])) {
@@ -187,10 +213,30 @@ export function DeviceAssignmentManager() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Assignments", value: assignmentStats.totalAssignments, icon: MonitorSmartphone, color: "text-foreground" },
-          { label: "Active Assignments", value: assignmentStats.activeAssignments, icon: CheckCircle, color: "text-green-600" },
-          { label: "Unassigned Devices", value: assignmentStats.unassignedDevices, icon: AlertCircle, color: "text-orange-600" },
-          { label: "Analysts with Assignments", value: assignmentStats.analystsWithAssignments, icon: User, color: "text-blue-600" },
+          {
+            label: "Total Assignments",
+            value: assignmentStats.totalAssignments,
+            icon: MonitorSmartphone,
+            color: "text-foreground",
+          },
+          {
+            label: "Active Assignments",
+            value: assignmentStats.activeAssignments,
+            icon: CheckCircle,
+            color: "text-green-600",
+          },
+          {
+            label: "Unassigned Devices",
+            value: assignmentStats.unassignedDevices,
+            icon: AlertCircle,
+            color: "text-orange-600",
+          },
+          {
+            label: "Users with Assignments",
+            value: assignmentStats.usersWithAssignments,
+            icon: User,
+            color: "text-blue-600",
+          },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -202,8 +248,12 @@ export function DeviceAssignmentManager() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
-                    <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {stat.label}
+                    </p>
+                    <p className={`text-2xl font-bold ${stat.color}`}>
+                      {stat.value}
+                    </p>
                   </div>
                   <stat.icon className={`h-8 w-8 ${stat.color}`} />
                 </div>
@@ -258,7 +308,9 @@ export function DeviceAssignmentManager() {
               {filteredUnassignedDevices.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <p className="text-muted-foreground">All devices are assigned</p>
+                  <p className="text-muted-foreground">
+                    All devices are assigned
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -268,7 +320,9 @@ export function DeviceAssignmentManager() {
                       className="flex items-center justify-between p-3 border rounded-lg"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{device.name}</div>
+                        <div className="font-medium truncate">
+                          {device.name}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {device.type} · {device.ip || "—"} · {device.status}
                         </div>
@@ -283,9 +337,8 @@ export function DeviceAssignmentManager() {
                         </SelectTrigger>
                         <SelectContent>
                           {analysts.map((analyst) => (
-                            <SelectItem key={analyst.user_id} value={analyst.user_id}>
+                            <SelectItem key={analyst.id} value={analyst.id}>
                               {analyst.full_name}
-                              {analyst.department ? ` (${analyst.department})` : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -315,30 +368,43 @@ export function DeviceAssignmentManager() {
               {filteredAssignments.length === 0 ? (
                 <div className="text-center py-8">
                   <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-muted-foreground">No device assignments found</p>
+                  <p className="text-muted-foreground">
+                    No device assignments found
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {filteredAssignments.map((assignment) => (
                     <div
-                      key={assignment.assignment_id}
+                      key={assignment.id}
                       className="flex items-center justify-between p-3 border rounded-lg"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{assignment.device_name}</div>
+                        <div className="font-medium truncate">
+                          {assignment.device_name}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {/* show analyst_name only */}
-                          Assigned to {assignment.analyst_name || "Unknown analyst"}
+                          Assigned to{" "}
+                          {assignment.user_name || "Unknown analyst"}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {assignment.device_type} · {assignment.device_ip || "—"}
+                          {assignment.device_type} ·{" "}
+                          {assignment.device_ip || "—"}
                         </div>
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <Select
                           onValueChange={(newAnalystId) => {
-                            if (newAnalystId && newAnalystId !== assignment.analyst_id) {
-                              reassignDevice(assignment.device_id, assignment.analyst_id, newAnalystId);
+                            if (
+                              newAnalystId &&
+                              newAnalystId !== assignment.user_id
+                            ) {
+                              reassignDevice(
+                                assignment.device_id,
+                                assignment.user_id,
+                                newAnalystId,
+                              );
                             }
                           }}
                         >
@@ -347,9 +413,9 @@ export function DeviceAssignmentManager() {
                           </SelectTrigger>
                           <SelectContent>
                             {analysts
-                              .filter((a) => a.user_id !== assignment.analyst_id)
+                              .filter((a) => a.id !== assignment.user_id)
                               .map((analyst) => (
-                                <SelectItem key={analyst.user_id} value={analyst.user_id}>
+                                <SelectItem key={analyst.id} value={analyst.id}>
                                   {analyst.full_name}
                                 </SelectItem>
                               ))}
@@ -358,7 +424,12 @@ export function DeviceAssignmentManager() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => removeAssignment(assignment.device_id, assignment.analyst_id)}
+                          onClick={() =>
+                            removeAssignment(
+                              assignment.device_id,
+                              assignment.user_id,
+                            )
+                          }
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

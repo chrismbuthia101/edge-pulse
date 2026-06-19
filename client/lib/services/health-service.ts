@@ -1,5 +1,5 @@
-import { HealthRepository } from '@/lib/repositories';
-import type { DeviceHealthSnapshot, SystemHealth } from '@/lib/supabase/types';
+import { HealthRepository } from "@/lib/repositories";
+import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
 
 export interface HealthServiceDependencies {
   repository: HealthRepository;
@@ -12,7 +12,9 @@ export class HealthService {
     this.repository = dependencies.repository;
   }
 
-  async getDeviceHealth(options?: { limit?: number }): Promise<DeviceHealthSnapshot[]> {
+  async getDeviceHealth(options?: {
+    limit?: number;
+  }): Promise<DeviceHealthSnapshot[]> {
     return this.repository.getDeviceHealth(options);
   }
 
@@ -36,7 +38,7 @@ export class HealthService {
   }) {
     // TODO: Implement health updates subscription
     // For now, return a placeholder channel name
-    console.warn('Health updates subscription not yet implemented');
-    return 'health-updates-placeholder';
+    console.warn("Health updates subscription not yet implemented");
+    return "health-updates-placeholder";
   }
 }

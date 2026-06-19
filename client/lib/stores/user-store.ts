@@ -7,14 +7,15 @@ import { toast } from "sonner";
 
 interface UserStore {
   users: AnalystUser[];
+  pendingUsers: AnalystUser[];
   loading: boolean;
   error: string | null;
   searchTerm: string;
   filterRole: string;
   filterStatus: string;
-
   initialize: () => Promise<void>;
   refreshUsers: () => Promise<void>;
+  refreshPendingUsers: () => Promise<void>;
   setSearchTerm: (term: string) => void;
   setFilterRole: (role: string) => void;
   setFilterStatus: (status: string) => void;
@@ -22,9 +23,11 @@ interface UserStore {
   createUser: (userData: {
     full_name: string;
     role: UserRole;
-    email?: string;
   }) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
+  approveUser: (userId: string) => Promise<void>;
+  rejectUser: (userId: string, reason: string) => Promise<void>;
+  reapproveUser: (userId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -37,6 +40,7 @@ function errorMessage(err: unknown): string {
 
 export const useUserStore = create<UserStore>((set, get) => ({
   users: [],
+  pendingUsers: [],
   loading: false,
   error: null,
   searchTerm: "",
@@ -60,6 +64,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
       set({ users, loading: false });
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
+    }
+  },
+
+  refreshPendingUsers: async () => {
+    try {
+      const pending = await userRepository.findUsers({
+        search: "",
+        accountStatus: "PENDING",
+        cacheTTL: 0,
+      });
+      set({ pendingUsers: pending });
+    } catch (err) {
+      console.error("Failed to load pending users:", err);
     }
   },
 
@@ -99,11 +116,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  createUser: async (userData: {
-    full_name: string;
-    role: UserRole;
-    email?: string;
-  }) => {
+  createUser: async (userData: { full_name: string; role: UserRole }) => {
     const { users } = get();
 
     const optimisticUser: AnalystUser = {
@@ -120,8 +133,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     try {
       await userService.createUser({
-        ...userData,
-        is_active: true,
+        full_name: userData.full_name,
+        role: userData.role,
+        account_status: "ACTIVE",
       });
       toast.success("User created successfully");
       get().refreshUsers();
@@ -146,6 +160,52 @@ export const useUserStore = create<UserStore>((set, get) => ({
       console.error("Failed to delete user:", err);
       toast.error("Failed to delete user");
       set({ users });
+    }
+  },
+
+  approveUser: async (userId: string) => {
+    const { pendingUsers } = get();
+    set({
+      pendingUsers: pendingUsers.filter((u) => u.id !== userId),
+    });
+    try {
+      await userRepository.update(userId, {
+        account_status: "ACTIVE",
+      } as Partial<AnalystUser>);
+      toast.success("User approved successfully");
+      get().refreshUsers();
+    } catch {
+      toast.error("Failed to approve user");
+      get().refreshPendingUsers();
+    }
+  },
+
+  rejectUser: async (userId: string, _reason: string) => {
+    const { pendingUsers } = get();
+    set({
+      pendingUsers: pendingUsers.filter((u) => u.id !== userId),
+    });
+    try {
+      await userRepository.update(userId, {
+        account_status: "SUSPENDED",
+      } as Partial<AnalystUser>);
+      toast.success("User rejected");
+      get().refreshUsers();
+    } catch (err) {
+      toast.error("Failed to reject user");
+      get().refreshPendingUsers();
+    }
+  },
+
+  reapproveUser: async (userId: string) => {
+    try {
+      await userRepository.update(userId, {
+        account_status: "ACTIVE",
+      } as Partial<AnalystUser>);
+      toast.success("User re-approved");
+      get().refreshUsers();
+    } catch (err) {
+      toast.error("Failed to re-approve user");
     }
   },
 

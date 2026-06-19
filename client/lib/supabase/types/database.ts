@@ -1,9 +1,13 @@
-import type { Alert } from '@/lib/supabase/types/alerts';
-import type { Device } from '@/lib/supabase/types/devices';
-import type { SyncQueueEntry } from '@/lib/supabase/types/sync';
-import type { TelemetryEvent, FeatureVector, AnomalyScore } from '@/lib/supabase/types/telemetry';
-import type { UserRole, AccountStatus } from '@/lib/supabase/types/shared';
-import type { AuditLogEntry } from '@/lib/supabase/types/logs';
+import type { Alert } from "@/lib/supabase/types/alerts";
+import type { Device } from "@/lib/supabase/types/devices";
+import type { SyncQueueEntry } from "@/lib/supabase/types/sync";
+import type {
+  TelemetryEvent,
+  FeatureVector,
+  AnomalyScore,
+} from "@/lib/supabase/types/telemetry";
+import type { UserRole, AccountStatus } from "@/lib/supabase/types/shared";
+import type { AuditLogEntry } from "@/lib/supabase/types/logs";
 
 export interface UserRow {
   id: string;
@@ -18,7 +22,7 @@ export interface UserRow {
 export interface DeviceHealthRow {
   id: string;
   device_id: string;
-  status: 'ONLINE' | 'OFFLINE' | 'WARNING' | 'ERROR';
+  status: "ONLINE" | "OFFLINE" | "WARNING" | "ERROR";
   cpu_usage: number | null;
   memory_usage: number | null;
   disk_usage: number | null;
@@ -113,7 +117,7 @@ export interface NotificationRow {
   organization_id: string;
   title: string;
   message: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: "low" | "medium" | "high" | "critical";
   category: string;
   read: boolean;
   alert_id: string | null;
@@ -150,48 +154,41 @@ export interface Database {
     Tables: {
       users: {
         Row: UserRow;
-        Insert: Omit<UserRow, 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<UserRow, 'id'>>;
+        Insert: Omit<UserRow, "created_at" | "updated_at">;
+        Update: Partial<Omit<UserRow, "id">>;
       };
       devices: {
         Row: Device;
-        Insert: Omit<Device, 'id' | 'enrolled_at' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Device, 'id' | 'enrolled_at' | 'created_at'>>;
+        Insert: Omit<
+          Device,
+          "id" | "enrolled_at" | "created_at" | "updated_at"
+        >;
+        Update: Partial<Omit<Device, "id" | "enrolled_at" | "created_at">>;
       };
       alerts: {
         Row: Alert;
-        Insert: Omit<Alert, 'id' | 'created_at' | 'updated_at' | 'read'>;
+        Insert: Omit<Alert, "id" | "created_at" | "updated_at" | "read">;
         Update: Partial<Alert>;
       };
       retention_settings: {
         Row: RetentionSetting;
-        Insert: Omit<RetentionSetting, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<RetentionSetting, 'id' | 'created_at'>>;
+        Insert: Omit<RetentionSetting, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<RetentionSetting, "id" | "created_at">>;
       };
       privacy_settings: {
         Row: PrivacySettingsRow;
-        Insert: Omit<PrivacySettingsRow, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<PrivacySettingsRow, 'id'>>;
+        Insert: Omit<PrivacySettingsRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<PrivacySettingsRow, "id">>;
       };
       device_assignments: {
         Row: DeviceAssignmentRow;
-        Insert: Omit<DeviceAssignmentRow, 'id' | 'assigned_at'>;
-        Update: Partial<Omit<DeviceAssignmentRow, 'id'>>;
+        Insert: Omit<DeviceAssignmentRow, "id" | "assigned_at">;
+        Update: Partial<Omit<DeviceAssignmentRow, "id">>;
       };
       notifications: {
         Row: NotificationRow;
-        Insert: Omit<NotificationRow, 'id' | 'created_at'>;
-        Update: Partial<Omit<NotificationRow, 'id'>>;
-      };
-      organizations: {
-        Row: OrganizationRow;
-        Insert: Omit<OrganizationRow, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<OrganizationRow, 'id' | 'created_at'>>;
-      };
-      billing: {
-        Row: BillingRow;
-        Insert: Omit<BillingRow, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<BillingRow, 'id' | 'created_at'>>;
+        Insert: Omit<NotificationRow, "id" | "created_at">;
+        Update: Partial<Omit<NotificationRow, "id">>;
       };
     };
   };
@@ -199,18 +196,26 @@ export interface Database {
     Tables: {
       api_keys: {
         Row: ApiKeyRow;
-        Insert: Omit<ApiKeyRow, 'id' | 'created_at'>;
-        Update: Partial<Omit<ApiKeyRow, 'id'>>;
+        Insert: Omit<ApiKeyRow, "id" | "created_at">;
+        Update: Partial<Omit<ApiKeyRow, "id">>;
       };
       enrollment_tokens: {
         Row: EnrollmentTokenRow;
-        Insert: Pick<EnrollmentTokenRow, 'token_hash' | 'name' | 'created_by' | 'expires_at' | 'max_uses' | 'organization_id'>;
+        Insert: Pick<
+          EnrollmentTokenRow,
+          | "token_hash"
+          | "name"
+          | "created_by"
+          | "expires_at"
+          | "max_uses"
+          | "organization_id"
+        >;
         Update: Partial<EnrollmentTokenRow>;
       };
       config: {
         Row: DeviceConfigRow;
-        Insert: Omit<DeviceConfigRow, 'id' | 'updated_at' | 'version'>;
-        Update: Partial<Omit<DeviceConfigRow, 'id'>>;
+        Insert: Omit<DeviceConfigRow, "id" | "updated_at" | "version">;
+        Update: Partial<Omit<DeviceConfigRow, "id">>;
       };
     };
   };
@@ -218,22 +223,22 @@ export interface Database {
     Tables: {
       events: {
         Row: TelemetryEvent;
-        Insert: Omit<TelemetryEvent, 'id' | 'received_at' | 'created_at'>;
+        Insert: Omit<TelemetryEvent, "id" | "received_at" | "created_at">;
         Update: never;
       };
       feature_vectors: {
         Row: FeatureVector;
-        Insert: Omit<FeatureVector, 'id' | 'computed_at'>;
+        Insert: Omit<FeatureVector, "id" | "computed_at">;
         Update: never;
       };
       anomaly_scores: {
         Row: AnomalyScore;
-        Insert: Omit<AnomalyScore, 'id' | 'scored_at' | 'created_at'>;
+        Insert: Omit<AnomalyScore, "id" | "scored_at" | "created_at">;
         Update: never;
       };
       device_health: {
         Row: DeviceHealthRow;
-        Insert: Omit<DeviceHealthRow, 'id' | 'created_at'>;
+        Insert: Omit<DeviceHealthRow, "id" | "created_at">;
         Update: never;
       };
     };
@@ -242,13 +247,27 @@ export interface Database {
     Tables: {
       sync_queue: {
         Row: SyncQueueEntry;
-        Insert: Omit<SyncQueueEntry, 'id' | 'created_at' | 'updated_at'>;
+        Insert: Omit<SyncQueueEntry, "id" | "created_at" | "updated_at">;
         Update: Partial<SyncQueueEntry>;
       };
       audit_logs: {
         Row: AuditLogEntry;
-        Insert: Omit<AuditLogEntry, 'id' | 'timestamp'>;
+        Insert: Omit<AuditLogEntry, "id" | "timestamp">;
         Update: never;
+      };
+    };
+  };
+  organization: {
+    Tables: {
+      organizations: {
+        Row: OrganizationRow;
+        Insert: Omit<OrganizationRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<OrganizationRow, "id" | "created_at">>;
+      };
+      billing: {
+        Row: BillingRow;
+        Insert: Omit<BillingRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<BillingRow, "id" | "created_at">>;
       };
     };
   };

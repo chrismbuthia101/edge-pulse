@@ -1,5 +1,8 @@
-import { UserRepository, type AnalystUser } from '@/lib/repositories/user-repository';
-import type { UserRole } from '@/lib/supabase/types';
+import {
+  UserRepository,
+  type AnalystUser,
+} from "@/lib/repositories/user-repository";
+import type { UserRole } from "@/lib/supabase/types";
 
 export interface GetUsersOptions {
   limit?: number;
@@ -11,8 +14,7 @@ export interface GetUsersOptions {
 export interface CreateUserOptions {
   full_name: string;
   role: UserRole;
-  is_active: boolean;
-  email?: string;
+  account_status: "ACTIVE" | "PENDING";
 }
 
 export interface UpdateUserStatusOptions {
@@ -33,12 +35,12 @@ export interface UserSubscriptionOptions {
 export class UserService {
   private channelName: string | null = null;
 
-  constructor(private readonly repository: UserRepository) { }
+  constructor(private readonly repository: UserRepository) {}
 
   async getUsers(options: GetUsersOptions = {}): Promise<AnalystUser[]> {
     return this.repository.findUsers({
       ...options,
-      orderBy: { column: 'created_at', ascending: false },
+      orderBy: { column: "created_at", ascending: false },
       limit: options.limit,
     });
   }
@@ -55,7 +57,10 @@ export class UserService {
     return this.repository.getActiveUsers();
   }
 
-  async searchUsers(query: string, options: GetUsersOptions = {}): Promise<AnalystUser[]> {
+  async searchUsers(
+    query: string,
+    options: GetUsersOptions = {},
+  ): Promise<AnalystUser[]> {
     return this.repository.searchUsers(query, options);
   }
 
@@ -63,15 +68,18 @@ export class UserService {
     return this.repository.createUser({
       full_name: userData.full_name,
       role: userData.role,
-      account_status: userData.is_active ? 'ACTIVE' : 'PENDING',
+      account_status: userData.account_status,
     });
   }
 
   async updateUserStatus(
     id: string,
-    options: UpdateUserStatusOptions
+    options: UpdateUserStatusOptions,
   ): Promise<AnalystUser> {
-    return this.repository.updateUserStatus(id, options.isActive ? 'ACTIVE' : 'SUSPENDED');
+    return this.repository.updateUserStatus(
+      id,
+      options.isActive ? "ACTIVE" : "SUSPENDED",
+    );
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -94,7 +102,9 @@ export class UserService {
         callbacks.onUserDeleted?.(user);
       },
       onError: (err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+        callbacks.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
       },
     };
 

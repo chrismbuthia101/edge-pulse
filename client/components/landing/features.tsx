@@ -8,7 +8,8 @@ const features = [
   {
     icon: Shield,
     title: "Real-time Defense",
-    description: "ML algorithms neutralize threats in milliseconds before they propagate — fully autonomous blocking.",
+    description:
+      "ML algorithms neutralize threats in milliseconds before they propagate — fully autonomous blocking.",
     color: "from-cyan-500 to-blue-600",
     glow: "rgba(6,182,212,0.15)",
     border: "rgba(6,182,212,0.2)",
@@ -16,7 +17,8 @@ const features = [
   {
     icon: Brain,
     title: "Explainable AI",
-    description: "SHAP-powered insights reveal exactly why every detection was made. No black boxes, ever.",
+    description:
+      "SHAP-powered insights reveal exactly why every detection was made. No black boxes, ever.",
     color: "from-violet-500 to-purple-600",
     glow: "rgba(139,92,246,0.15)",
     border: "rgba(139,92,246,0.2)",
@@ -24,7 +26,8 @@ const features = [
   {
     icon: Zap,
     title: "Edge Native",
-    description: "2MB agents with zero cloud dependency. Full inference at the device level. Works air-gapped.",
+    description:
+      "2MB agents with zero cloud dependency. Full inference at the device level. Works air-gapped.",
     color: "from-amber-400 to-orange-500",
     glow: "rgba(251,191,36,0.15)",
     border: "rgba(251,191,36,0.2)",
@@ -32,7 +35,8 @@ const features = [
   {
     icon: Lock,
     title: "Privacy First",
-    description: "Sensitive telemetry never leaves your infrastructure. GDPR, HIPAA & SOC 2 ready by design.",
+    description:
+      "Sensitive telemetry never leaves your infrastructure. GDPR, HIPAA & SOC 2 ready by design.",
     color: "from-emerald-500 to-teal-600",
     glow: "rgba(16,185,129,0.15)",
     border: "rgba(16,185,129,0.2)",
@@ -40,7 +44,8 @@ const features = [
   {
     icon: Eye,
     title: "Full Visibility",
-    description: "Unified dashboard with live anomaly feed, device health, and forensic export — all in one pane.",
+    description:
+      "Unified dashboard with live anomaly feed, device health, and forensic export — all in one pane.",
     color: "from-rose-500 to-pink-600",
     glow: "rgba(244,63,94,0.15)",
     border: "rgba(244,63,94,0.2)",
@@ -48,7 +53,8 @@ const features = [
   {
     icon: Activity,
     title: "Offline Resilience",
-    description: "Queue-and-sync architecture keeps detecting threats even when connectivity drops.",
+    description:
+      "Queue-and-sync architecture keeps detecting threats even when connectivity drops.",
     color: "from-sky-500 to-indigo-600",
     glow: "rgba(14,165,233,0.15)",
     border: "rgba(14,165,233,0.2)",
@@ -60,14 +66,29 @@ export function Features() {
   const isInView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section ref={ref} id="features" className="relative py-32 bg-[#020617] overflow-hidden">
+    <section
+      ref={ref}
+      id="features"
+      className="relative py-32 bg-[#020617] overflow-hidden"
+    >
       {/* Grid */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)", backgroundSize: "72px 72px" }} />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)",
+          backgroundSize: "72px 72px",
+        }}
+      />
 
       {/* Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full opacity-10 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse, #0891b2, transparent)", filter: "blur(80px)" }} />
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-200 h-100 rounded-full opacity-10 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse, #0891b2, transparent)",
+          filter: "blur(80px)",
+        }}
+      />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         {/* Header */}
@@ -75,7 +96,8 @@ export function Features() {
           initial={{ opacity: 0, y: 30 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
-          className="text-center mb-20">
+          className="text-center mb-20"
+        >
           <span className="inline-block text-xs font-bold uppercase tracking-widest text-cyan-400 mb-4">
             Platform Capabilities
           </span>
@@ -86,7 +108,8 @@ export function Features() {
             </span>
           </h2>
           <p className="text-lg text-white/40 max-w-2xl mx-auto">
-            Enterprise-grade protection without cloud dependency, latency penalties, or privacy tradeoffs.
+            Enterprise-grade protection without cloud dependency, latency
+            penalties, or privacy tradeoffs.
           </p>
         </motion.div>
 
@@ -101,24 +124,38 @@ export function Features() {
             >
               <div className="group relative h-full rounded-2xl p-7 border border-white/5 bg-white/2 hover:bg-white/4 transition-all duration-500 overflow-hidden cursor-default">
                 {/* Hover glow */}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
-                  style={{ background: `radial-gradient(circle at 30% 30%, ${f.glow}, transparent 70%)` }} />
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
+                  style={{
+                    background: `radial-gradient(circle at 30% 30%, ${f.glow}, transparent 70%)`,
+                  }}
+                />
 
                 {/* Border glow on hover */}
-                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                  style={{ boxShadow: `inset 0 0 0 1px ${f.border}` }} />
+                <div
+                  className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{ boxShadow: `inset 0 0 0 1px ${f.border}` }}
+                />
 
                 {/* Icon */}
-                <div className={`relative w-12 h-12 rounded-xl bg-linear-to-br ${f.color} flex items-center justify-center mb-6 shadow-lg`}
-                  style={{ boxShadow: `0 0 20px ${f.glow}` }}>
+                <div
+                  className={`relative w-12 h-12 rounded-xl bg-linear-to-br ${f.color} flex items-center justify-center mb-6 shadow-lg`}
+                  style={{ boxShadow: `0 0 20px ${f.glow}` }}
+                >
                   <f.icon className="w-5 h-5 text-white" />
                 </div>
 
-                <h3 className="text-base font-bold text-white mb-3">{f.title}</h3>
-                <p className="text-sm text-white/45 leading-relaxed">{f.description}</p>
+                <h3 className="text-base font-bold text-white mb-3">
+                  {f.title}
+                </h3>
+                <p className="text-sm text-white/45 leading-relaxed">
+                  {f.description}
+                </p>
 
                 {/* Corner accent */}
-                <div className={`absolute bottom-0 right-0 w-24 h-24 rounded-tl-3xl opacity-0 group-hover:opacity-10 transition-opacity duration-500 bg-linear-to-br ${f.color}`} />
+                <div
+                  className={`absolute bottom-0 right-0 w-24 h-24 rounded-tl-3xl opacity-0 group-hover:opacity-10 transition-opacity duration-500 bg-linear-to-br ${f.color}`}
+                />
               </div>
             </motion.div>
           ))}

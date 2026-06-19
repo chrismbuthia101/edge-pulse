@@ -1,4 +1,4 @@
-import type { SyncQueueStatus } from '@/lib/supabase/types/shared';
+import type { SyncQueueStatus } from "@/lib/supabase/types/shared";
 
 export interface SyncQueueEntry {
   id: string;

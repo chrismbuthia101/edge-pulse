@@ -1,14 +1,19 @@
 import { PrivacyRepository } from "@/lib/repositories/privacy-repository";
-import type { PrivacySettings, PrivacySettingsUpdate } from "@/lib/supabase/types/privacy-settings";
+import type {
+  PrivacySettings,
+  PrivacySettingsUpdate,
+} from "@/lib/supabase/types/privacy-settings";
 
 export interface PrivacyServiceOptions {
   deviceId?: string;
 }
 
 export class PrivacyService {
-  constructor(private repository: PrivacyRepository) { }
+  constructor(private repository: PrivacyRepository) {}
 
-  async getPrivacySettings(options?: PrivacyServiceOptions): Promise<PrivacySettings> {
+  async getPrivacySettings(
+    options?: PrivacyServiceOptions,
+  ): Promise<PrivacySettings> {
     const deviceId = options?.deviceId || null;
 
     // Try device-specific settings first, fall back to global
@@ -23,13 +28,15 @@ export class PrivacyService {
 
   async updatePrivacySettings(
     updates: PrivacySettingsUpdate,
-    options?: PrivacyServiceOptions
+    options?: PrivacyServiceOptions,
   ): Promise<PrivacySettings> {
     const deviceId = options?.deviceId || null;
     return this.repository.upsertByDeviceId(deviceId, updates);
   }
 
-  async toggleEnhancedMode(options?: PrivacyServiceOptions): Promise<PrivacySettings> {
+  async toggleEnhancedMode(
+    options?: PrivacyServiceOptions,
+  ): Promise<PrivacySettings> {
     const current = await this.getPrivacySettings(options);
     const newMode = !current.enhanced_mode;
 
@@ -51,9 +58,9 @@ export class PrivacyService {
     callbacks: {
       onUpdate?: (settings: PrivacySettings) => void;
       onError?: (error: unknown) => void;
-    }
+    },
   ) {
-    const channelName = `privacy_settings_${deviceId || 'global'}`;
+    const channelName = `privacy_settings_${deviceId || "global"}`;
 
     return this.repository.subscribe(
       channelName,
@@ -65,15 +72,18 @@ export class PrivacyService {
           old: PrivacySettings;
         };
 
-        if (typedPayload.eventType === 'UPDATE' || typedPayload.eventType === 'INSERT') {
+        if (
+          typedPayload.eventType === "UPDATE" ||
+          typedPayload.eventType === "INSERT"
+        ) {
           callbacks.onUpdate?.(typedPayload.new);
         }
-      }
+      },
     );
   }
 
   unsubscribeFromPrivacySettings(deviceId: string | null) {
-    const channelName = `privacy_settings_${deviceId || 'global'}`;
+    const channelName = `privacy_settings_${deviceId || "global"}`;
     this.repository.unsubscribe(channelName);
   }
 }

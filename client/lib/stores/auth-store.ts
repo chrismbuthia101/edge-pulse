@@ -1,8 +1,11 @@
-import { create } from 'zustand';
-import { AuthService } from '@/lib/services/auth-service';
-import { AuthRepository, type AuthUser } from '@/lib/repositories/auth-repository';
-import { User, Session } from '@supabase/supabase-js';
-import { toast } from 'sonner';
+import { create } from "zustand";
+import { AuthService } from "@/lib/services/auth-service";
+import {
+  AuthRepository,
+  type AuthUser,
+} from "@/lib/repositories/auth-repository";
+import { User, Session } from "@supabase/supabase-js";
+import { toast } from "sonner";
 
 interface AuthStore {
   user: AuthUser | null;
@@ -43,13 +46,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   // Computed properties
   get isAdmin() {
     const { role } = get();
-    return role === "ADMINISTRATOR";
+    return role === "ORG_ADMIN" || role === "PLATFORM_ADMIN";
   },
 
   get isAnalyst() {
     const { role } = get();
-
-    return !role || role === "ANALYST" || role === "ADMINISTRATOR";
+    return role === "ORG_ANALYST";
   },
 
   initialize: async () => {
@@ -68,22 +70,26 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return;
       }
 
-      const session = sessionResult.user ? {
-        user: sessionResult.user as unknown as User,
-        access_token: '',
-        refresh_token: '',
-        expires_in: 3600,
-        token_type: 'bearer' as const
-      } : null;
+      const session = sessionResult.user
+        ? {
+            user: sessionResult.user as unknown as User,
+            access_token: "",
+            refresh_token: "",
+            expires_in: 3600,
+            token_type: "bearer" as const,
+          }
+        : null;
 
       set({ session, user: sessionResult.user });
 
       if (sessionResult.user) {
-        const userProfile = await authRepository.getUserWithProfile(sessionResult.user.id);
+        const userProfile = await authRepository.getUserWithProfile(
+          sessionResult.user.id,
+        );
         if (userProfile.user) {
           set({
             user: userProfile.user,
-            role: userProfile.user.role || null
+            role: userProfile.user.role || null,
           });
         } else {
           // Fallback to role-only fetch if profile fetch fails
@@ -96,7 +102,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       }
     } catch (error) {
       console.error("Error initializing auth:", error);
-      set({ error: error instanceof Error ? error.message : 'Failed to initialize auth' });
+      set({
+        error:
+          error instanceof Error ? error.message : "Failed to initialize auth",
+      });
     } finally {
       set({ loading: false, initialized: true });
     }
@@ -114,22 +123,26 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return;
       }
 
-      const session = refreshResult.user ? {
-        user: refreshResult.user as unknown as User,
-        access_token: '',
-        refresh_token: '',
-        expires_in: 3600,
-        token_type: 'bearer' as const
-      } : null;
+      const session = refreshResult.user
+        ? {
+            user: refreshResult.user as unknown as User,
+            access_token: "",
+            refresh_token: "",
+            expires_in: 3600,
+            token_type: "bearer" as const,
+          }
+        : null;
 
       set({ session, user: refreshResult.user });
 
       if (refreshResult.user) {
-        const userProfile = await authRepository.getUserWithProfile(refreshResult.user.id);
+        const userProfile = await authRepository.getUserWithProfile(
+          refreshResult.user.id,
+        );
         if (userProfile.user) {
           set({
             user: userProfile.user,
-            role: userProfile.user.role || null
+            role: userProfile.user.role || null,
           });
         } else {
           const userRole = await get().fetchUserRole(refreshResult.user.id);
@@ -140,7 +153,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       }
     } catch (error) {
       console.error("Error refreshing session:", error);
-      set({ user: null, session: null, role: null, error: error instanceof Error ? error.message : 'Failed to refresh session' });
+      set({
+        user: null,
+        session: null,
+        role: null,
+        error:
+          error instanceof Error ? error.message : "Failed to refresh session",
+      });
     } finally {
       set({ loading: false });
     }
@@ -156,7 +175,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       window.location.href = "/auth/login";
     } catch (error) {
       console.error("Error signing out:", error);
-      set({ error: error instanceof Error ? error.message : 'Failed to sign out' });
+      set({
+        error: error instanceof Error ? error.message : "Failed to sign out",
+      });
       toast.error("Error signing out");
     }
   },
@@ -177,9 +198,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   hasRole: (roles: string[]): boolean => {
     const { role } = get();
-    // Default to ANALYST role if no role is assigned to ensure access
-    const userRole = role || 'ANALYST';
-    return roles.includes(userRole);
+    if (!role) return false;
+    return roles.includes(role);
   },
 
   clearSessionData: () => {

@@ -1,8 +1,8 @@
-import { create } from 'zustand';
-import { SyncQueueRepository } from '@/lib/repositories';
-import { SyncQueueService } from '@/lib/services/sync-queue-service';
-import type { DeviceSyncQueueSummary } from '@/lib/supabase/types';
-import type { SyncQueueItem } from '@/lib/repositories/sync-queue-repository';
+import { create } from "zustand";
+import { SyncQueueRepository } from "@/lib/repositories";
+import { SyncQueueService } from "@/lib/services/sync-queue-service";
+import type { DeviceSyncQueueSummary } from "@/lib/supabase/types";
+import type { SyncQueueItem } from "@/lib/repositories/sync-queue-repository";
 
 interface SyncQueueStore {
   summaries: DeviceSyncQueueSummary[];
@@ -20,7 +20,10 @@ interface SyncQueueStore {
   refreshSummaries: () => Promise<void>;
   refreshItems: () => Promise<void>;
   addSummary: (summary: DeviceSyncQueueSummary) => void;
-  updateSummary: (deviceId: string, updates: Partial<DeviceSyncQueueSummary>) => void;
+  updateSummary: (
+    deviceId: string,
+    updates: Partial<DeviceSyncQueueSummary>,
+  ) => void;
   setSummaries: (summaries: DeviceSyncQueueSummary[]) => void;
   setItems: (items: SyncQueueItem[]) => void;
   clearError: () => void;
@@ -46,10 +49,14 @@ const syncQueueService = new SyncQueueService(syncQueueRepository);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function deriveMetrics(summaries: DeviceSyncQueueSummary[]): Pick<SyncQueueStore, 'totalPending' | 'totalFailed' | 'devicesWithIssues'> {
+function deriveMetrics(
+  summaries: DeviceSyncQueueSummary[],
+): Pick<SyncQueueStore, "totalPending" | "totalFailed" | "devicesWithIssues"> {
   const totalPending = summaries.reduce((sum, s) => sum + s.pending_count, 0);
   const totalFailed = summaries.reduce((sum, s) => sum + s.failed_count, 0);
-  const devicesWithIssues = summaries.filter(s => s.pending_count > 0 || s.failed_count > 0).length;
+  const devicesWithIssues = summaries.filter(
+    (s) => s.pending_count > 0 || s.failed_count > 0,
+  ).length;
 
   return {
     totalPending,
@@ -59,7 +66,7 @@ function deriveMetrics(summaries: DeviceSyncQueueSummary[]): Pick<SyncQueueStore
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'An unexpected error occurred';
+  return err instanceof Error ? err.message : "An unexpected error occurred";
 }
 
 export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
@@ -81,7 +88,7 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
       set({
         summaries,
         ...deriveMetrics(summaries),
-        loading: false
+        loading: false,
       });
       get().subscribeToSyncQueue();
     } catch (err) {
@@ -113,13 +120,15 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
 
   addSummary: (summary) => {
     set((state) => {
-      const existingIndex = state.summaries.findIndex(s => s.device_id === summary.device_id);
+      const existingIndex = state.summaries.findIndex(
+        (s) => s.device_id === summary.device_id,
+      );
       let newSummaries: DeviceSyncQueueSummary[];
 
       if (existingIndex >= 0) {
         // Update existing summary
         newSummaries = state.summaries.map((s, i) =>
-          i === existingIndex ? summary : s
+          i === existingIndex ? summary : s,
         );
       } else {
         // Add new summary
@@ -133,7 +142,7 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
   updateSummary: (deviceId, updates) => {
     set((state) => {
       const summaries = state.summaries.map((s) =>
-        s.device_id === deviceId ? { ...s, ...updates } : s
+        s.device_id === deviceId ? { ...s, ...updates } : s,
       );
       return { summaries, ...deriveMetrics(summaries) };
     });
@@ -206,7 +215,7 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
         get().refreshSummaries();
       },
       onError: (error) => {
-        console.error('[SyncQueueStore] Realtime error:', error);
+        console.error("[SyncQueueStore] Realtime error:", error);
       },
     });
   },
