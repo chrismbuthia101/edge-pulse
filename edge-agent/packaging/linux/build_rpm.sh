@@ -75,7 +75,7 @@ rm -rf "${STAGING_DIR}${SITE_PACKAGES}"/{pip,wheel,setuptools} \
 # Write _build_vars.py with Supabase URL
 _EDGEPULSE_PKG="${STAGING_DIR}${SITE_PACKAGES}/edgepulse"
 mkdir -p "${_EDGEPULSE_PKG}"
-python3 "${REPO_ROOT}/packaging/scripts/seal_config.py" \
+PYTHONPATH="${STAGING_DIR}${SITE_PACKAGES}" python3 "${REPO_ROOT}/packaging/scripts/seal_config.py" \
     --output "${_EDGEPULSE_PKG}/_build_vars.py"
 
 # Entry-point launcher

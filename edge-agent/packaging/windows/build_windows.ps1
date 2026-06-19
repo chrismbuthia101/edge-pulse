@@ -86,7 +86,7 @@ if (-not $SkipPyInstaller) {
     Write-Step "Generating encrypted build config..."
     $buildVars = Join-Path $SrcRoot "edgepulse\_build_vars.py"
     & python (Join-Path $RepoRoot "packaging\scripts\seal_config.py") --output $buildVars
-    if ($LASTEXITCODE -ne 0) { throw "seal_config.py failed — is SUPABASE_URL set?" }
+    if ($LASTEXITCODE -ne 0) { throw "seal_config.py failed - is SUPABASE_URL set?" }
     Write-OK "Encrypted build config generated"
 
     Write-Step "Running PyInstaller..."
