@@ -4,6 +4,8 @@
 !include "x64.nsh"
 !include "FileFunc.nsh"
 !include "WordFunc.nsh"
+!include "StrFunc.nsh"
+${StrStr}
 
 !ifndef PRODUCT_VERSION
   !define PRODUCT_VERSION "0.1.0"
