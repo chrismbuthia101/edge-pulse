@@ -2,9 +2,9 @@ import sys
 import os
 from pathlib import Path
 
-SPEC_DIR = os.path.dirname(os.path.abspath(SPECPATH))
-REPO_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..', '..'))
-SRC_ROOT  = os.path.join(REPO_ROOT, 'src')
+SPEC_DIR = os.path.abspath(SPECPATH)            # .../edge-agent/packaging/windows/pyinstaller
+REPO_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..', '..'))  # .../edge-agent
+SRC_ROOT  = os.path.join(REPO_ROOT, 'src')      # .../edge-agent/src
 
 datas = [
     (os.path.join(SRC_ROOT, 'data', 'schema.sql'), 'data'),
