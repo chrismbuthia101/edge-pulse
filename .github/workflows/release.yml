@@ -38,7 +38,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: deb-package
-          path: packaging/dist/
+          path: edge-agent/packaging/dist/
 
   build-rpm:
     needs: [ci]
@@ -74,11 +74,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: packaging/dist/
+          path: edge-agent/packaging/dist/
 
   release:
     needs: [build-deb, build-rpm, build-windows]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
       - uses: softprops/action-gh-release@v2
