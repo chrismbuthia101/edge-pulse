@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { HealthRepository } from "@/lib/repositories";
 import { HealthService } from "@/lib/services/health-service";
 import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
+import { errorMessage } from "@/lib/utils/error";
 import { toast } from "sonner";
 
 interface HealthStore {
@@ -26,11 +27,7 @@ interface HealthStore {
 const healthRepository = new HealthRepository();
 const healthService = new HealthService({ repository: healthRepository });
 
-let healthSubscription: { unsubscribe: () => void } | null = null;
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
+let healthChannelName: string | null = null;
 
 export const useHealthStore = create<HealthStore>((set, get) => ({
   devices: [],
@@ -94,21 +91,34 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
   },
 
   subscribeToHealthUpdates: () => {
-    if (healthSubscription) return; // Already subscribed
+    if (healthChannelName) return;
 
-    // TODO: Implement proper subscription when service is ready
-    // For now, create a placeholder subscription
-    healthSubscription = {
-      unsubscribe: () => {
-        healthSubscription = null;
+    healthChannelName = healthService.subscribeToHealthUpdates({
+      onDeviceHealthUpdate: (snapshot) => {
+        set((state) => {
+          const idx = state.devices.findIndex(
+            (d) => d.device_id === snapshot.device_id,
+          );
+          if (idx >= 0) {
+            const devices = [...state.devices];
+            devices[idx] = snapshot;
+            return { devices };
+          }
+          return {
+            devices: [snapshot, ...state.devices].slice(0, 100),
+          };
+        });
       },
-    };
+      onError: (error) => {
+        console.error("[HealthStore] Realtime error:", error);
+      },
+    });
   },
 
   unsubscribeFromHealthUpdates: () => {
-    if (healthSubscription) {
-      healthSubscription.unsubscribe();
-      healthSubscription = null;
+    if (healthChannelName) {
+      healthService.unsubscribeFromHealthUpdates(healthChannelName);
+      healthChannelName = null;
     }
   },
 }));

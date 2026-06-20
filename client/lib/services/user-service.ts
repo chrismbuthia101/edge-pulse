@@ -1,8 +1,10 @@
 import {
   UserRepository,
-  type AnalystUser,
+  type UserWithProfile,
 } from "@/lib/repositories/user-repository";
 import type { UserRole } from "@/lib/supabase/types";
+
+export type { UserWithProfile } from "@/lib/repositories/user-repository";
 
 export interface GetUsersOptions {
   limit?: number;
@@ -14,7 +16,6 @@ export interface GetUsersOptions {
 export interface CreateUserOptions {
   full_name: string;
   role: UserRole;
-  account_status: "ACTIVE" | "PENDING";
 }
 
 export interface UpdateUserStatusOptions {
@@ -26,9 +27,9 @@ export interface UpdateUserRoleOptions {
 }
 
 export interface UserSubscriptionOptions {
-  onNewUser?: (user: AnalystUser) => void;
-  onUserUpdated?: (user: AnalystUser) => void;
-  onUserDeleted?: (user: AnalystUser) => void;
+  onNewUser?: (user: UserWithProfile) => void;
+  onUserUpdated?: (user: UserWithProfile) => void;
+  onUserDeleted?: (user: UserWithProfile) => void;
   onError?: (error: Error) => void;
 }
 
@@ -37,7 +38,7 @@ export class UserService {
 
   constructor(private readonly repository: UserRepository) {}
 
-  async getUsers(options: GetUsersOptions = {}): Promise<AnalystUser[]> {
+  async getUsers(options: GetUsersOptions = {}): Promise<UserWithProfile[]> {
     return this.repository.findUsers({
       ...options,
       orderBy: { column: "created_at", ascending: false },
@@ -45,37 +46,36 @@ export class UserService {
     });
   }
 
-  async getUserById(id: string): Promise<AnalystUser | null> {
+  async getUserById(id: string): Promise<UserWithProfile | null> {
     return this.repository.getUserById(id);
   }
 
-  async getUsersByRole(role: UserRole): Promise<AnalystUser[]> {
+  async getUsersByRole(role: UserRole): Promise<UserWithProfile[]> {
     return this.repository.getUsersByRole(role);
   }
 
-  async getActiveUsers(): Promise<AnalystUser[]> {
+  async getActiveUsers(): Promise<UserWithProfile[]> {
     return this.repository.getActiveUsers();
   }
 
   async searchUsers(
     query: string,
     options: GetUsersOptions = {},
-  ): Promise<AnalystUser[]> {
+  ): Promise<UserWithProfile[]> {
     return this.repository.searchUsers(query, options);
   }
 
-  async createUser(userData: CreateUserOptions): Promise<AnalystUser> {
+  async createUser(userData: CreateUserOptions): Promise<UserWithProfile> {
     return this.repository.createUser({
       full_name: userData.full_name,
       role: userData.role,
-      account_status: userData.account_status,
     });
   }
 
   async updateUserStatus(
     id: string,
     options: UpdateUserStatusOptions,
-  ): Promise<AnalystUser> {
+  ): Promise<UserWithProfile> {
     return this.repository.updateUserStatus(
       id,
       options.isActive ? "ACTIVE" : "SUSPENDED",
@@ -92,13 +92,13 @@ export class UserService {
     }
 
     const repoCallbacks = {
-      onInsert: (user: AnalystUser) => {
+      onInsert: (user: UserWithProfile) => {
         callbacks.onNewUser?.(user);
       },
-      onUpdate: (user: AnalystUser) => {
+      onUpdate: (user: UserWithProfile) => {
         callbacks.onUserUpdated?.(user);
       },
-      onDelete: (user: AnalystUser) => {
+      onDelete: (user: UserWithProfile) => {
         callbacks.onUserDeleted?.(user);
       },
       onError: (err: unknown) => {

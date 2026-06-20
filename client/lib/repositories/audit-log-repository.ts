@@ -49,6 +49,7 @@ export class AuditLogRepository extends BaseRepository<AuditLogEntry> {
   async findByResource(
     resourceType: string,
     resourceId: string,
+    limit = 100,
   ): Promise<AuditLogEntry[]> {
     try {
       const { data, error } = await this.getClient()
@@ -56,7 +57,8 @@ export class AuditLogRepository extends BaseRepository<AuditLogEntry> {
         .select("*")
         .eq("resource_type", resourceType)
         .eq("resource_id", resourceId)
-        .order("timestamp", { ascending: false });
+        .order("timestamp", { ascending: false })
+        .limit(limit);
 
       if (error) throw error;
       return data ?? [];

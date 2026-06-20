@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { AlertRepository } from "@/lib/repositories";
 import { AlertService } from "@/lib/services/alert-service";
 import type { Alert, AlertStatus } from "@/lib/supabase/types";
+import { errorMessage } from "@/lib/utils/error";
 import { toast } from "sonner";
 
 interface AlertStore {
@@ -13,7 +14,8 @@ interface AlertStore {
 
   initialize: () => Promise<void>;
   refreshAlerts: () => Promise<void>;
-  refreshAlertsForUser: (userId: string, isAdmin: boolean) => Promise<void>;
+  refreshAlertsForUser: (userId?: string, isAdmin?: boolean) => Promise<void>;
+  fetchAlerts: () => Promise<void>;
   addAlert: (alert: Alert) => void;
   updateAlert: (id: string, updates: Partial<Alert>) => void;
   updateAlertStatus: (
@@ -47,8 +49,6 @@ interface AlertStore {
 const alertRepository = new AlertRepository();
 const alertService = new AlertService(alertRepository);
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
 function deriveCounters(
   alerts: Alert[],
 ): Pick<AlertStore, "pendingCount" | "unreadCount"> {
@@ -58,59 +58,31 @@ function deriveCounters(
   };
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
-
 export const useAlertStore = create<AlertStore>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
+ 
   alerts: [],
   pendingCount: 0,
   unreadCount: 0,
   loading: false,
   error: null,
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-
   initialize: async () => {
-    try {
-      set({ loading: true, error: null });
-      const result = await alertService.getAlertsPaginated({
-        page: 1,
-        limit: 100,
-      });
-      set({
-        alerts: result.alerts,
-        ...deriveCounters(result.alerts),
-        loading: false,
-      });
-      get().subscribeToAlerts();
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-    }
+    await get().fetchAlerts();
+    get().subscribeToAlerts();
   },
 
   refreshAlerts: async () => {
-    try {
-      set({ loading: true, error: null });
-      const result = await alertService.getAlertsPaginated({
-        page: 1,
-        limit: 100,
-      });
-      set({
-        alerts: result.alerts,
-        ...deriveCounters(result.alerts),
-        loading: false,
-      });
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-    }
+    await get().fetchAlerts();
   },
 
+  /** @deprecated Use refreshAlerts() — alerts are not user-scoped. */
   refreshAlertsForUser: async () => {
+    await get().refreshAlerts();
+  },
+
+  fetchAlerts: async () => {
     try {
       set({ loading: true, error: null });
-
       const result = await alertService.getAlertsPaginated({
         page: 1,
         limit: 100,
@@ -124,8 +96,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
       set({ error: errorMessage(err), loading: false });
     }
   },
-
-  // ── Local mutations (optimistic / realtime) ────────────────────────────────
 
   addAlert: (alert) => {
     set((state) => {
@@ -157,8 +127,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-
-  // ── Remote mutations ───────────────────────────────────────────────────────
 
   updateAlertStatus: async (id, status, userId) => {
     const previous = get().alerts.find((a) => a.id === id);
@@ -215,8 +183,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 
   bulkClose: (ids, userId) => get().bulkUpdateStatus(ids, "CLOSED", userId),
 
-  // ── Queries (return data, not stored) ─────────────────────────────────────
-
   searchAlerts: async (query) => {
     try {
       return await alertService.searchAlerts(query);
@@ -261,8 +227,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
       return null;
     }
   },
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToAlerts: () => {
     alertService.subscribeToAlerts({

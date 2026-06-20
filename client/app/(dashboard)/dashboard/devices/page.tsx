@@ -548,7 +548,7 @@ export default function DevicesPage() {
   }, []);
 
   const { user, hasRole } = useAuth();
-  const isAdmin = hasRole(["ADMINISTRATOR"]);
+  const isAdmin = hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]);
   const storeDevices = useDeviceStore((s) => s.devices);
   const router = useRouter();
   const initializedRef = useRef(false);

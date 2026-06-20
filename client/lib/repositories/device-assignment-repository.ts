@@ -1,5 +1,6 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
 } from "@/lib/repositories/base-repository";
 
@@ -10,6 +11,7 @@ export interface DeviceAssignment {
   assigned_at: string;
   assigned_by: string | null;
   is_active: boolean;
+  organization_id: string;
   device_name?: string;
   device_type?: string;
   device_status?: string;
@@ -24,6 +26,7 @@ interface RawDeviceAssignment {
   assigned_at: string;
   assigned_by: string | null;
   is_active: boolean;
+  organization_id: string;
   devices?: {
     name?: string;
     type?: string;
@@ -77,6 +80,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
             assigned_at,
             assigned_by,
             is_active,
+            organization_id,
             devices:device_id (
               name,
               type,
@@ -113,6 +117,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
             assigned_at: item.assigned_at,
             assigned_by: item.assigned_by,
             is_active: item.is_active,
+            organization_id: item.organization_id,
             device_name: item.devices?.name,
             device_type: item.devices?.type,
             device_status: item.devices?.status,
@@ -121,7 +126,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
           }),
         );
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -174,7 +179,9 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
         assigned_at: new Date().toISOString(),
         is_active: true,
       })
-      .select("id, user_id, device_id, assigned_at, assigned_by, is_active")
+      .select(
+        "id, user_id, device_id, assigned_at, assigned_by, is_active, organization_id",
+      )
       .single();
 
     if (error) throw this.handleError(error);
@@ -255,14 +262,21 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
   > {
     try {
       const { data, error } = await this.supabase
-        .from("users")
-        .select("id, full_name, role")
+        .schema("organization")
+        .from("profiles")
+        .select("user_id, role, user:user_id(full_name)")
         .in("role", ["ORG_ANALYST", "ORG_ADMIN"])
-        .eq("account_status", "ACTIVE")
-        .order("full_name");
+        .eq("account_status", "ACTIVE");
 
       if (error) throw error;
-      return data ?? [];
+      return ((data ?? []) as Record<string, unknown>[]).map((p) => {
+        const u = (p.user ?? {}) as Record<string, unknown>;
+        return {
+          id: (u.id ?? p.user_id) as string,
+          full_name: (u.full_name ?? "") as string,
+          role: p.role as string,
+        };
+      });
     } catch (error) {
       throw this.handleError(error);
     }
@@ -282,6 +296,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
           assigned_at,
           assigned_by,
           is_active,
+          organization_id,
           devices:device_id (name, type, status, ip),
           users:user_id (full_name)
         `,
@@ -302,6 +317,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
         assigned_at: raw.assigned_at,
         assigned_by: raw.assigned_by,
         is_active: raw.is_active,
+        organization_id: raw.organization_id,
         device_name: raw.devices?.name,
         device_type: raw.devices?.type,
         device_status: raw.devices?.status,
@@ -314,7 +330,7 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
   }
 
   subscribeToAssignments(
-    filters: Partial<DeviceAssignmentQueryOptions> = {},
+    filters: Record<string, FilterValue> = {},
     callbacks: DeviceAssignmentSubscriptionCallbacks = {},
   ): string {
     const channelName = `realtime-assignments-${Date.now()}`;

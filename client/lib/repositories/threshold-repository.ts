@@ -1,18 +1,9 @@
 import { BaseRepository } from "@/lib/repositories/base-repository";
+import type { ModelRow } from "@/lib/supabase/types";
 
-export interface ModelThreshold {
-  id: string;
-  organization_id: string;
-  model_id: string;
-  name: string;
-  version: string;
-  threshold: number;
-  detector_type: string | null;
-  is_active: boolean;
-  metadata: Record<string, unknown>;
-}
+export type ModelThreshold = ModelRow;
 
-export class ThresholdRepository extends BaseRepository<ModelThreshold> {
+export class ThresholdRepository extends BaseRepository<ModelRow> {
   constructor() {
     super("models");
     this.schema = "internal";

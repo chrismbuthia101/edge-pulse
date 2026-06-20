@@ -13,7 +13,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,25 +62,7 @@ const strengthTextColors = [
   "text-primary",
 ];
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    const dummy = "\x00".repeat(b.length);
-    let result = 0;
-    for (let i = 0; i < b.length; i++) {
-      result |= dummy.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    void result;
-    return false;
-  }
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
-
 export default function ResetPasswordPage() {
-  const supabase = createClient();
   const router = useRouter();
 
   const [password, setPassword] = useState("");
@@ -95,14 +77,14 @@ export default function ResetPasswordPage() {
     r.test(password),
   ).length;
   const passwordsMatch =
-    confirmPassword.length > 0 && timingSafeEqual(password, confirmPassword);
+    confirmPassword.length > 0 && password === confirmPassword;
   const passwordsMismatch =
-    confirmPassword.length > 0 && !timingSafeEqual(password, confirmPassword);
+    confirmPassword.length > 0 && password !== confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!timingSafeEqual(password, confirmPassword)) {
+    if (password !== confirmPassword) {
       toast.error("Passwords do not match");
       return;
     }
@@ -113,10 +95,10 @@ export default function ResetPasswordPage() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.updateUser({ password });
+    const result = await useAuthStore.getState().updatePassword(password);
 
-    if (error) {
-      toast.error(error.message);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to update password");
       setIsLoading(false);
       return;
     }

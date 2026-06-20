@@ -170,14 +170,16 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
     const filtered =
       filter === "all" ? events : events.filter((e) => e.type === filter);
 
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
     const rows = [
       ["Time", "Title", "Device", "Severity", "Type"],
       ...filtered.map((e) => [
-        new Date(e.rawCreatedAt).toISOString(),
-        `"${e.title}"`,
-        e.device,
-        e.severity,
-        e.type,
+        esc(new Date(e.rawCreatedAt).toISOString()),
+        esc(e.title),
+        esc(e.device),
+        esc(e.severity),
+        esc(e.type),
       ]),
     ];
 

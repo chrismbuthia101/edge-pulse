@@ -13,8 +13,8 @@ import type {
   DeviceAnalytics,
   UpdateDeviceMetricsParams,
 } from "@/lib/services/device-service";
-import type { Device } from "@/lib/supabase/types";
-import type { AnomalyScore } from "@/lib/repositories/anomaly-repository";
+import type { Device, AnomalyScore } from "@/lib/supabase/types";
+import { errorMessage } from "@/lib/utils/error";
 import { toast } from "sonner";
 
 interface DeviceStore {
@@ -26,6 +26,7 @@ interface DeviceStore {
   initialize: () => Promise<void>;
   refreshDevices: () => Promise<void>;
   refreshDevicesForUser: (userId: string, isAdmin: boolean) => Promise<void>;
+  fetchDevices: () => Promise<Device[]>;
   updateDevice: (device: Device) => void;
   setDevices: (devices: Device[]) => void;
   clearError: () => void;
@@ -47,8 +48,6 @@ interface DeviceStore {
   getAnalytics: (
     timeframe?: "24h" | "7d" | "30d",
   ) => Promise<DeviceAnalytics | null>;
-
-  getDeviceHealthReport: (deviceId: string) => Promise<unknown>;
 
   getDeviceAnomalyHistory: (
     deviceId: string,
@@ -76,10 +75,6 @@ function countOnline(devices: Device[]): number {
   return devices.filter((d) => d.status === "online").length;
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
-
 export const useDeviceStore = create<DeviceStore>((set, get) => ({
   devices: [],
   onlineCount: 0,
@@ -87,21 +82,12 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   error: null,
 
   initialize: async () => {
-    try {
-      set({ loading: true, error: null });
-      const result = await deviceService.getDevicesPaginated({
-        page: 1,
-        limit: 200,
-      });
-      set({
-        devices: result.devices,
-        onlineCount: countOnline(result.devices),
-        loading: false,
-      });
-      get().subscribeToDeviceUpdates();
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-    }
+    await get().fetchDevices();
+    get().subscribeToDeviceUpdates();
+  },
+
+  refreshDevices: async () => {
+    await get().fetchDevices();
   },
 
   refreshDevicesForUser: async (userId: string, isAdmin: boolean) => {
@@ -110,30 +96,22 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
 
       let devices: Device[];
       if (isAdmin) {
-        const result = await deviceService.getDevicesPaginated({
-          page: 1,
-          limit: 200,
-        });
-        devices = result.devices;
-      } else {
-        const assignments =
-          await deviceAssignmentRepository.getAssignmentsByUser(userId);
-        const deviceIds = assignments.map((a: DeviceAssignment) => a.device_id);
+        devices = await get().fetchDevices();
+        return;
+      }
 
-        if (deviceIds.length === 0) {
-          devices = [];
-        } else {
-          devices = await Promise.all(
-            deviceIds.map(async (deviceId: string) => {
-              try {
-                return await deviceRepository.findById(deviceId);
-              } catch {
-                console.warn(`Device ${deviceId} not found`);
-                return null;
-              }
-            }),
-          ).then((devices) => devices.filter(Boolean) as Device[]);
-        }
+      const assignments =
+        await deviceAssignmentRepository.getAssignmentsByUser(userId);
+      const deviceIds = [
+        ...new Set(assignments.map((a: DeviceAssignment) => a.device_id)),
+      ];
+
+      if (deviceIds.length === 0) {
+        devices = [];
+      } else {
+        devices = await deviceRepository.findMany({
+          filters: { id: { in: deviceIds } },
+        });
       }
 
       set({ devices, onlineCount: countOnline(devices), loading: false });
@@ -142,20 +120,23 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
     }
   },
 
-  refreshDevices: async () => {
+  fetchDevices: async () => {
     try {
       set({ loading: true, error: null });
       const result = await deviceService.getDevicesPaginated({
         page: 1,
         limit: 200,
       });
+      const devices = result.devices;
       set({
-        devices: result.devices,
-        onlineCount: countOnline(result.devices),
+        devices,
+        onlineCount: countOnline(devices),
         loading: false,
       });
+      return devices;
     } catch (err) {
       set({ error: errorMessage(err), loading: false });
+      return [];
     }
   },
 
@@ -329,15 +310,6 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   getAnalytics: async (timeframe = "24h") => {
     try {
       return await deviceService.getDeviceAnalytics(timeframe);
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return null;
-    }
-  },
-
-  getDeviceHealthReport: async (deviceId) => {
-    try {
-      return await deviceService.getDeviceHealthReport(deviceId);
     } catch (err) {
       set({ error: errorMessage(err) });
       return null;

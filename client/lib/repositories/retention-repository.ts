@@ -1,5 +1,5 @@
-import { BaseRepository } from "@/lib/repositories/base-repository";
-import type { RetentionSetting } from "@/lib/supabase/types/database";
+import { BaseRepository, type FilterValue } from "@/lib/repositories/base-repository";
+import type { RetentionSetting } from "@/lib/supabase/types";
 
 export interface StorageUsage {
   telemetry: number;
@@ -20,10 +20,10 @@ export class RetentionRepository extends BaseRepository<RetentionSetting> {
   ): Promise<RetentionSetting | null> {
     const query = deviceId ? { device_id: deviceId } : { device_id: null };
 
-    const options: Record<string, unknown> = { ...query };
-    if (organizationId) options.organization_id = organizationId;
+    const filters: Record<string, FilterValue> = { ...query };
+    if (organizationId) filters.organization_id = organizationId;
 
-    const result = await this.findOne(options);
+    const result = await this.findOne(filters);
     return result as RetentionSetting | null;
   }
 

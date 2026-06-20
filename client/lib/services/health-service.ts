@@ -22,23 +22,49 @@ export class HealthService {
     return this.repository.getSystemHealth();
   }
 
-  async getDeviceById(deviceId: string): Promise<DeviceHealthSnapshot | null> {
-    return this.repository.getDeviceById(deviceId);
-  }
-
   async refreshDeviceHealth(): Promise<DeviceHealthSnapshot[]> {
     return this.getDeviceHealth({ limit: 100 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  subscribeToHealthUpdates(_callbacks: {
+  subscribeToHealthUpdates(callbacks: {
     onDeviceHealthUpdate?: (device: DeviceHealthSnapshot) => void;
-    onSystemHealthUpdate?: (systemHealth: SystemHealth) => void;
     onError?: (error: Error) => void;
-  }) {
-    // TODO: Implement health updates subscription
-    // For now, return a placeholder channel name
-    console.warn("Health updates subscription not yet implemented");
-    return "health-updates-placeholder";
+  }): string {
+    const channelName = "realtime-health";
+    const channel = this.repository["supabase"]
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "telemetry",
+          table: "device_health",
+        },
+        (payload: unknown) => {
+          try {
+            const p = payload as {
+              eventType: string;
+              new: Record<string, unknown>;
+              old: Record<string, unknown>;
+            };
+            if (p.eventType === "INSERT" || p.eventType === "UPDATE") {
+              const snapshot = p.new as unknown as DeviceHealthSnapshot;
+              callbacks.onDeviceHealthUpdate?.(snapshot);
+            }
+          } catch (error) {
+            callbacks.onError?.(
+              error instanceof Error ? error : new Error("Unknown error"),
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    this.repository["subscriptions"].add(channelName, channel);
+    return channelName;
+  }
+
+  unsubscribeFromHealthUpdates(channelName?: string): void {
+    this.repository.unsubscribe(channelName ?? "realtime-health");
   }
 }

@@ -14,6 +14,9 @@ import {
   Activity,
   CheckCircle2,
   ChevronDown,
+  Building2,
+  LogOut,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +87,10 @@ interface TopBarProps {
 export function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const userRole = useAuthStore((s) => s.role);
+  const hasMultipleOrgs = useAuthStore((s) => s.hasMultipleOrganizations());
+  const signOut = useAuthStore((s) => s.signOut);
 
   const {
     initials,
@@ -436,25 +442,83 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
       <ThemeToggle />
 
-      {/* User avatar */}
-      <div className="flex items-center gap-2.5 ml-2">
-        <div
-          className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
-          aria-label={`User: ${displayName}`}
+      {/* User avatar with dropdown */}
+      <div className="relative ml-2">
+        <button
+          onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+          className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-muted/60 transition-colors"
+          aria-label="User menu"
         >
-          <span className="text-xs font-bold text-primary">{initials}</span>
-        </div>
-        <div className="hidden md:block min-w-0">
-          <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
-            {displayName}
-          </p>
-          <p className="text-[10px] text-muted-foreground leading-none">
-            {userRole
-              ? userRole.charAt(0).toUpperCase() +
-                userRole.slice(1).toLowerCase()
-              : "Analyst"}
-          </p>
-        </div>
+          <div
+            className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
+            aria-label={`User: ${displayName}`}
+          >
+            <span className="text-xs font-bold text-primary">{initials}</span>
+          </div>
+          <div className="hidden md:block min-w-0 text-left">
+            <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
+              {displayName}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-none">
+              {userRole
+                ? userRole.charAt(0).toUpperCase() +
+                  userRole.slice(1).toLowerCase()
+                : "Analyst"}
+            </p>
+          </div>
+          <ChevronDown className="hidden md:block h-3 w-3 text-muted-foreground" />
+        </button>
+
+        <AnimatePresence>
+          {avatarMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setAvatarMenuOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+              >
+                <div className="p-2 space-y-0.5">
+                  <button
+                    onClick={() => {
+                      window.location.href = "/dashboard/settings";
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
+                  >
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Profile & Settings
+                  </button>
+                  {hasMultipleOrgs && (
+                    <button
+                      onClick={() => {
+                        window.location.href = "/auth/organizations";
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
+                    >
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      Switch Organization
+                    </button>
+                  )}
+                  <hr className="my-1 border-border" />
+                  <button
+                    onClick={async () => {
+                      await signOut();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   );

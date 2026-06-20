@@ -2,7 +2,7 @@ import {
   BaseRepository,
   type QueryOptions,
 } from "@/lib/repositories/base-repository";
-import type { EnrollmentTokenRow } from "@/lib/supabase/types/database";
+import type { EnrollmentTokenRow } from "@/lib/supabase/types";
 
 export interface DeviceEnrollmentQueryOptions extends QueryOptions {
   includeExpired?: boolean;
@@ -220,7 +220,7 @@ export class DeviceEnrollmentRepository extends BaseRepository<EnrollmentTokenRo
           ),
         };
       },
-      10 * 60 * 1000,
+      { ttl: 10 * 60 * 1000 },
     );
   }
 }

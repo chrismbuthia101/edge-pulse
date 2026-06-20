@@ -4,13 +4,18 @@ import type {
   DeviceHealthStatus,
   DeviceSubscriptionCallbacks,
 } from "@/lib/repositories/device-repository";
-import type { Device, DeviceStatus } from "@/lib/supabase/types";
+import type {
+  Device,
+  DeviceStatus,
+  DeviceRisk,
+  DeviceType,
+} from "@/lib/supabase/types";
 
 export interface GetDevicesOptions {
   limit?: number;
   status?: DeviceStatus | DeviceStatus[];
-  type?: string | string[];
-  risk?: string | string[];
+  type?: DeviceType | DeviceType[];
+  risk?: DeviceRisk | DeviceRisk[];
   search?: string;
   onlineOnly?: boolean;
   agentVersion?: string;
@@ -54,24 +59,6 @@ export class DeviceService {
   private channelName: string | null = null;
 
   constructor(private readonly repository: DeviceRepository) {}
-
-  async getDevices(options: GetDevicesOptions = {}): Promise<Device[]> {
-    return this.repository.findDevices({
-      status: options.status,
-      type: options.type,
-      risk: options.risk,
-      search: options.search,
-      onlineOnly: options.onlineOnly,
-      agentVersion: options.agentVersion,
-      osType: options.osType,
-      limit: options.limit,
-      orderBy: { column: "name", ascending: true },
-    });
-  }
-
-  async getDeviceById(id: string): Promise<Device | null> {
-    return this.repository.findById(id);
-  }
 
   async getOnlineDevices(): Promise<Device[]> {
     return this.repository.getOnlineDevices();
@@ -120,10 +107,6 @@ export class DeviceService {
     return this.repository.getDevicesNeedingAttention();
   }
 
-  async getDevicesWithPerformanceIssues(): Promise<Device[]> {
-    return this.repository.getDevicesWithPerformanceIssues();
-  }
-
   async searchDevices(
     query: string,
     options: GetDevicesOptions = {},
@@ -134,10 +117,6 @@ export class DeviceService {
       risk: options.risk,
       limit: options.limit,
     });
-  }
-
-  async getDevicesByOS(osPattern: string): Promise<Device[]> {
-    return this.repository.getDevicesByOS(osPattern);
   }
 
   async isolateDevice(id: string): Promise<Device> {
@@ -155,20 +134,16 @@ export class DeviceService {
     return this.repository.updateDeviceMetrics(id, metrics);
   }
 
-  async updateDeviceStatus(id: string, status: DeviceStatus): Promise<Device> {
-    return this.repository.updateDeviceStatus(id, status);
-  }
-
   async bulkDeviceOperation(
     params: BulkDeviceOperationParams,
   ): Promise<Device[]> {
     const { deviceIds, operation } = params;
 
-    if (operation === "isolate") {
-      return Promise.all(deviceIds.map((id) => this.isolateDevice(id)));
-    }
-
-    return Promise.all(deviceIds.map((id) => this.unisolateDevice(id)));
+    const status =
+      operation === "isolate"
+        ? ("isolated" as DeviceStatus)
+        : ("online" as DeviceStatus);
+    return this.repository.bulkUpdateStatus(deviceIds, status);
   }
 
   async deleteDevice(id: string): Promise<void> {
@@ -189,13 +164,6 @@ export class DeviceService {
     return this.repository.getDeviceHealthStatuses();
   }
 
-  async getDeviceHealthReport(
-    deviceId: string,
-  ): Promise<DeviceHealthStatus | null> {
-    const statuses = await this.repository.getDeviceHealthStatuses();
-    return statuses.find((s) => s.deviceId === deviceId) ?? null;
-  }
-
   async getDeviceAnalytics(
     timeframe: "24h" | "7d" | "30d" = "24h",
   ): Promise<DeviceAnalytics> {
@@ -207,8 +175,6 @@ export class DeviceService {
 
     return { timeframe, metrics, distribution, healthStatuses };
   }
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToDeviceUpdates(callbacks: DeviceSubscriptionOptions): void {
     if (this.channelName) {

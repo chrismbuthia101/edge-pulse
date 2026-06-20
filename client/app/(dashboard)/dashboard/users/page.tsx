@@ -44,6 +44,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
+import { InviteAnalystDialog } from "@/components/dashboard/invite-analyst-dialog";
 
 const roleColors: Record<string, string> = {
   ORG_ADMIN: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -78,6 +79,7 @@ export default function UsersPage() {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -137,9 +139,9 @@ export default function UsersPage() {
             Manage analyst users and permissions
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setInviteDialogOpen(true)}>
           <UserPlus className="h-4 w-4 mr-2" />
-          Add User
+          Invite Analyst
         </Button>
       </motion.div>
 
@@ -408,10 +410,7 @@ export default function UsersPage() {
               variant="destructive"
               onClick={() => {
                 if (selectedUserId) {
-                  rejectUser(
-                    selectedUserId,
-                    rejectionReason || "No reason provided",
-                  );
+                  rejectUser(selectedUserId);
                 }
                 setRejectDialogOpen(false);
                 setSelectedUserId(null);
@@ -423,6 +422,11 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <InviteAnalystDialog
+        open={inviteDialogOpen}
+        onOpenChange={setInviteDialogOpen}
+      />
     </div>
   );
 }

@@ -13,7 +13,7 @@ interface TokenSecret {
 
 interface DeviceEnrollmentStore {
   tokens: EnrollmentTokenRow[];
-  tokenSecrets: Map<string, string>; // token_id -> secret token (only for newly created)
+  tokenSecrets: Map<string, string>;
   loading: boolean;
   creating: boolean;
   error: string | null;
@@ -81,8 +81,7 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>(
 
       try {
         const userData = await authService.getCurrentUser();
-        const metadata = userData?.app_metadata ?? {};
-        const organizationId = (metadata.organization_id as string) || "";
+        const organizationId = userData?.organization_id ?? "";
         const result = await deviceEnrollmentService.createToken({
           name,
           maxUses,

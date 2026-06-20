@@ -86,11 +86,11 @@ export function DeviceAssignmentManager() {
   }, [deviceAssignmentRepository]);
 
   useEffect(() => {
-    if (!hasRole(["ADMINISTRATOR"])) return;
+    if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) return;
     loadData();
   }, [hasRole, loadData]);
 
-  if (!hasRole(["ADMINISTRATOR"])) {
+  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -170,7 +170,7 @@ export function DeviceAssignmentManager() {
       assignment.user_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  if (!hasRole(["ADMINISTRATOR"])) {
+  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

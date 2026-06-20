@@ -3,6 +3,7 @@ import { SyncQueueRepository } from "@/lib/repositories";
 import { SyncQueueService } from "@/lib/services/sync-queue-service";
 import type { DeviceSyncQueueSummary } from "@/lib/supabase/types";
 import type { SyncQueueItem } from "@/lib/repositories/sync-queue-repository";
+import { errorMessage } from "@/lib/utils/error";
 
 interface SyncQueueStore {
   summaries: DeviceSyncQueueSummary[];
@@ -10,12 +11,10 @@ interface SyncQueueStore {
   loading: boolean;
   error: string | null;
 
-  // Metrics
   totalPending: number;
   totalFailed: number;
   devicesWithIssues: number;
 
-  // Actions
   initialize: () => Promise<void>;
   refreshSummaries: () => Promise<void>;
   refreshItems: () => Promise<void>;
@@ -28,7 +27,6 @@ interface SyncQueueStore {
   setItems: (items: SyncQueueItem[]) => void;
   clearError: () => void;
 
-  // Queries
   getItemsByDevice: (deviceId: string) => Promise<SyncQueueItem[]>;
   getPendingItems: () => Promise<SyncQueueItem[]>;
   getFailedItems: () => Promise<SyncQueueItem[]>;
@@ -39,15 +37,12 @@ interface SyncQueueStore {
     oldestPendingAge: number | null;
   }>;
 
-  // Realtime
   subscribeToSyncQueue: () => void;
   unsubscribeFromSyncQueue: () => void;
 }
 
 const syncQueueRepository = new SyncQueueRepository();
 const syncQueueService = new SyncQueueService(syncQueueRepository);
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function deriveMetrics(
   summaries: DeviceSyncQueueSummary[],
@@ -65,12 +60,8 @@ function deriveMetrics(
   };
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
-
 export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
+  
   summaries: [],
   items: [],
   loading: false,
@@ -78,8 +69,6 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
   totalPending: 0,
   totalFailed: 0,
   devicesWithIssues: 0,
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   initialize: async () => {
     try {
@@ -115,8 +104,6 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
       set({ error: errorMessage(err), loading: false });
     }
   },
-
-  // ── Local mutations (optimistic / realtime) ────────────────────────────────
 
   addSummary: (summary) => {
     set((state) => {
@@ -158,8 +145,6 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  // ── Queries (return data, not stored) ─────────────────────────────────────
-
   getItemsByDevice: async (deviceId) => {
     try {
       return await syncQueueService.getSyncQueueByDevice(deviceId);
@@ -200,8 +185,6 @@ export const useSyncQueueStore = create<SyncQueueStore>((set, get) => ({
       };
     }
   },
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToSyncQueue: () => {
     syncQueueService.subscribeToSyncQueue({

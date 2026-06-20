@@ -1,12 +1,16 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
 } from "@/lib/repositories/base-repository";
+import { escapeWildcards } from "@/lib/repositories/query-utils";
 import type {
   Device,
   DeviceStatus,
+  DeviceRisk,
+  DeviceType,
   RealtimeDevicePayload,
 } from "@/lib/supabase/types";
 
@@ -38,16 +42,13 @@ const DEFAULT_DEVICE_SELECT = `
   actively_reporting
 `.trim();
 
-const METRICS_SELECT =
-  "status,type,risk,cpu_percent,ram_percent,alerts_count,sync_queue_depth,agent_version";
-
 const TRIAGE_SELECT =
   "id,name,status,risk,cpu_percent,ram_percent,sync_queue_depth";
 
 export interface DeviceQueryOptions extends QueryOptions {
   status?: DeviceStatus | DeviceStatus[];
-  type?: string | string[];
-  risk?: string | string[];
+  type?: DeviceType | DeviceType[];
+  risk?: DeviceRisk | DeviceRisk[];
   search?: string;
   onlineOnly?: boolean;
   minCpuUsage?: number;
@@ -100,7 +101,7 @@ export class DeviceRepository extends BaseRepository<Device> {
   }
 
   private buildDeviceQuery(options: DeviceQueryOptions) {
-    const standardFilters: Record<string, unknown> = {};
+    const standardFilters: Record<string, FilterValue> = {};
 
     if (options.onlineOnly) {
       standardFilters.status = ["online", "gone_silent", "unsynced"];
@@ -122,7 +123,7 @@ export class DeviceRepository extends BaseRepository<Device> {
     });
 
     if (options.search) {
-      const s = options.search.replace(/[%_]/g, "\\$&");
+      const s = escapeWildcards(options.search);
       query = query.or(
         `name.ilike.%${s}%,ip.ilike.%${s}%,os.ilike.%${s}%,type.ilike.%${s}%`,
       );
@@ -155,7 +156,7 @@ export class DeviceRepository extends BaseRepository<Device> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as Device[];
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -164,7 +165,7 @@ export class DeviceRepository extends BaseRepository<Device> {
   ): Promise<PaginatedResult<Device>> {
     const { page, limit, search, ...queryOptions } = options;
 
-    const filters: Record<string, unknown> = {};
+    const filters: Record<string, FilterValue> = {};
 
     if (queryOptions.onlineOnly) {
       filters.status = ["online", "gone_silent", "unsynced"];
@@ -238,7 +239,7 @@ export class DeviceRepository extends BaseRepository<Device> {
     });
   }
 
-  async getDevicesByRisk(risk: string): Promise<Device[]> {
+  async getDevicesByRisk(risk: DeviceRisk): Promise<Device[]> {
     return this.findDevices({
       risk,
       orderBy: { column: "last_seen", ascending: false },
@@ -347,74 +348,82 @@ export class DeviceRepository extends BaseRepository<Device> {
     return this.cachedQuery(
       "device_metrics",
       async () => {
-        const devices = await this.findDevices({ select: METRICS_SELECT });
+        // Head-only count queries for status buckets (cheap, no data transfer)
+        const [
+          total,
+          online,
+          offline,
+          isolated,
+          gone_silent,
+          unsynced,
+        ] = await Promise.all([
+          this.countWhere(),
+          this.countWhere({ status: "online" }),
+          this.countWhere({ status: "offline" }),
+          this.countWhere({ status: "isolated" }),
+          this.countWhere({ status: "gone_silent" }),
+          this.countWhere({ status: "unsynced" }),
+        ]);
 
-        const metrics: DeviceMetrics = {
-          total: devices.length,
-          online: 0,
-          offline: 0,
-          isolated: 0,
-          gone_silent: 0,
-          unsynced: 0,
-          byType: {},
-          byRisk: {},
-          avgCpuUsage: 0,
-          avgRamUsage: 0,
-          totalAlerts: 0,
-          criticalDevices: 0,
-          highRiskDevices: 0,
-          outdatedAgents: 0,
-          totalSyncQueueDepth: 0,
-        };
+        // For aggregations that need data, select minimal columns
+        const aggregations = await this.findMany({
+          select: "type,risk,alerts_count,sync_queue_depth,agent_version,cpu_percent,ram_percent,status",
+          limit: 10000,
+          cacheTTL: 0,
+        });
 
-        let onlineCount = 0;
+        const byType: Record<string, number> = {};
+        const byRisk: Record<string, number> = {};
+        let totalAlerts = 0;
+        let totalSyncQueueDepth = 0;
+        let criticalDevices = 0;
+        let highRiskDevices = 0;
+        let outdatedAgents = 0;
         let totalCpu = 0;
         let totalRam = 0;
+        let onlineCount = 0;
 
-        for (const d of devices) {
-          switch (d.status) {
-            case "online":
-              metrics.online++;
-              onlineCount++;
-              totalCpu += d.cpu_percent ?? 0;
-              totalRam += d.ram_percent ?? 0;
-              break;
-            case "offline":
-              metrics.offline++;
-              break;
-            case "isolated":
-              metrics.isolated++;
-              break;
-            case "gone_silent":
-              metrics.gone_silent++;
-              break;
-            case "unsynced":
-              metrics.unsynced++;
-              break;
+        for (const d of aggregations) {
+          const rec = d as unknown as Record<string, unknown>;
+          const type = (rec.type as string) ?? "unknown";
+          const risk = (rec.risk as string) ?? "none";
+
+          byType[type] = (byType[type] ?? 0) + 1;
+          byRisk[risk] = (byRisk[risk] ?? 0) + 1;
+
+          totalAlerts += (rec.alerts_count as number) ?? 0;
+          totalSyncQueueDepth += (rec.sync_queue_depth as number) ?? 0;
+
+          if (risk === "critical") criticalDevices++;
+          if (risk === "critical" || risk === "high") highRiskDevices++;
+          if (rec.agent_version) outdatedAgents++;
+
+          if (rec.status === "online") {
+            onlineCount++;
+            totalCpu += (rec.cpu_percent as number) ?? 0;
+            totalRam += (rec.ram_percent as number) ?? 0;
           }
-
-          const type = d.type ?? "unknown";
-          metrics.byType[type] = (metrics.byType[type] ?? 0) + 1;
-
-          const risk = d.risk ?? "none";
-          metrics.byRisk[risk] = (metrics.byRisk[risk] ?? 0) + 1;
-
-          metrics.totalAlerts += d.alerts_count ?? 0;
-          metrics.totalSyncQueueDepth += d.sync_queue_depth ?? 0;
-
-          if (risk === "critical") metrics.criticalDevices++;
-          if (risk === "critical" || risk === "high") metrics.highRiskDevices++;
-          if (d.agent_version) metrics.outdatedAgents++;
         }
 
-        if (onlineCount > 0) {
-          metrics.avgCpuUsage = totalCpu / onlineCount;
-          metrics.avgRamUsage = totalRam / onlineCount;
-        }
-
-        return metrics;
+        return {
+          total,
+          online,
+          offline,
+          isolated,
+          gone_silent,
+          unsynced,
+          byType,
+          byRisk,
+          avgCpuUsage: onlineCount > 0 ? totalCpu / onlineCount : 0,
+          avgRamUsage: onlineCount > 0 ? totalRam / onlineCount : 0,
+          totalAlerts,
+          criticalDevices,
+          highRiskDevices,
+          outdatedAgents,
+          totalSyncQueueDepth,
+        };
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 
@@ -450,7 +459,7 @@ export class DeviceRepository extends BaseRepository<Device> {
 
         return { byType, byStatus };
       },
-      5 * 60 * 1000,
+      { ttl: 5 * 60 * 1000 },
     );
   }
 
@@ -461,15 +470,18 @@ export class DeviceRepository extends BaseRepository<Device> {
         const devices = await this.findDevices();
         return devices.map(buildHealthStatus);
       },
-      2 * 60 * 1000,
+      { ttl: 2 * 60 * 1000 },
     );
   }
 
   subscribeToDeviceUpdates(
-    filters: Partial<DeviceQueryOptions> = {},
+    filters: Record<string, FilterValue> = {},
     callbacks: DeviceSubscriptionCallbacks = {},
   ): string {
-    const channelName = `realtime-devices-${Date.now()}`;
+    const channelName = "realtime-devices";
+
+    // Unsubscribe old channel before creating new one (avoids leaks)
+    this.unsubscribe(channelName);
 
     this.subscribe(channelName, filters, (payload) => {
       try {
@@ -493,8 +505,8 @@ export class DeviceRepository extends BaseRepository<Device> {
     return channelName;
   }
 
-  unsubscribeFromDeviceUpdates(channelName: string): void {
-    this.unsubscribe(channelName);
+  unsubscribeFromDeviceUpdates(channelName?: string): void {
+    this.unsubscribe(channelName ?? "realtime-devices");
   }
 }
 

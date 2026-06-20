@@ -1,9 +1,11 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
 } from "@/lib/repositories/base-repository";
+import type { AnomalyScore } from "@/lib/supabase/types";
 import {
   buildCacheKey,
   parseSearchQuery,
@@ -23,24 +25,11 @@ const DEFAULT_ANOMALY_SELECT = `
   above_threshold,
   inference_latency_ms,
   connectivity_state,
+  organization_id,
+  integrity_hash,
   created_at,
   scored_at
 `.trim();
-
-export interface AnomalyScore {
-  id: string;
-  feature_vector_id: string | null;
-  device_id: string;
-  model_id: string;
-  score: number;
-  label?: string;
-  threshold_applied: number;
-  above_threshold: boolean;
-  inference_latency_ms: number;
-  connectivity_state: "online" | "offline";
-  created_at: string;
-  scored_at: string;
-}
 
 export interface GetAnomalyScoresOptions extends QueryOptions {
   deviceId: string;
@@ -121,7 +110,7 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as AnomalyScore[];
       },
-      optimizedQuery.cacheTTL,
+      { ttl: optimizedQuery.cacheTTL },
     );
   }
 
@@ -323,24 +312,25 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     deviceIds: string[],
     options: Omit<GetAnomalyScoresOptions, "deviceId"> = {},
   ): Promise<Record<string, AnomalyScore[]>> {
+    if (deviceIds.length === 0) return {};
+
+    const ids = [...new Set(deviceIds)];
+
+    const { data, error } = await this.buildQuery({
+      select: DEFAULT_ANOMALY_SELECT,
+      filters: { device_id: { in: ids } },
+      orderBy: options.orderBy ?? { column: "created_at", ascending: false },
+      limit: options.limit ?? 20,
+    });
+
+    if (error) throw this.handleError(error);
+
+    const scores = (data ?? []) as unknown as AnomalyScore[];
     const results: Record<string, AnomalyScore[]> = {};
 
-    await Promise.all(
-      deviceIds.map(async (deviceId) => {
-        try {
-          results[deviceId] = await this.getAnomalyScores({
-            deviceId,
-            ...options,
-          });
-        } catch (error) {
-          console.error(
-            `Failed to fetch anomaly scores for device ${deviceId}:`,
-            error,
-          );
-          results[deviceId] = [];
-        }
-      }),
-    );
+    for (const id of ids) {
+      results[id] = scores.filter((s) => s.device_id === id);
+    }
 
     return results;
   }
@@ -363,39 +353,28 @@ export class AnomalyRepository extends BaseRepository<AnomalyScore> {
     return data?.length || 0;
   }
 
-  // ── Helper methods ───────────────────────────────────────────────────────────
-  private convertFilters(filters?: FilterOption[]): Record<string, unknown> {
+  private convertFilters(filters?: FilterOption[]): Record<string, FilterValue> {
     if (!filters) return {};
 
-    const result: Record<string, unknown> = {};
+    const result: Record<string, FilterValue> = {};
 
     for (const filter of filters) {
-      switch (filter.operator) {
+      const { field, operator, value } = filter;
+      switch (operator) {
         case "eq":
-          result[filter.field] = filter.value;
+          result[field] = value;
           break;
         case "ne":
-          // Handle neq by using not filter - this would need base repository extension
-          result[filter.field] = filter.value;
-          break;
         case "gt":
-          result[`${filter.field}_gt`] = filter.value;
-          break;
         case "gte":
-          result[`${filter.field}_gte`] = filter.value;
-          break;
         case "lt":
-          result[`${filter.field}_lt`] = filter.value;
-          break;
         case "lte":
-          result[`${filter.field}_lte`] = filter.value;
-          break;
-        case "in":
-          result[filter.field] = filter.value;
-          break;
         case "like":
         case "ilike":
-          result[filter.field] = filter.value;
+          result[field] = { [operator]: value };
+          break;
+        case "in":
+          result[field] = { in: value };
           break;
       }
     }

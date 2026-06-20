@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 import {
   User,
   Bell,
@@ -22,14 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { createClient } from "@/lib/supabase/client";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
-import { OrganizationRepository } from "@/lib/repositories";
-import type { OrganizationRow } from "@/lib/supabase/types/database";
+import { authService } from "@/lib/services/auth-service";
+import { organizationService } from "@/lib/services/organization-service";
 
 type Tab =
   | "profile"
@@ -98,19 +98,17 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
   useEffect(() => {
     document.title = "Settings - EdgePulse";
   }, []);
 
-  const supabase = createClient();
-  const supabaseRef = useRef(supabase);
   const { setTheme, theme } = useTheme();
 
   const availableTabs = tabs.filter((tab) => {
     const adminOnlyTabs = ["agents", "enrollment", "topology", "organization"];
-    return !adminOnlyTabs.includes(tab.id) || hasRole(["ADMINISTRATOR"]);
+    return !adminOnlyTabs.includes(tab.id) || hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]);
   });
 
   const [activeTab, setActiveTab] = useState<Tab>("profile");
@@ -120,7 +118,7 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [email, setEmail] = useState("");
-  const [org, setOrg] = useState("EdgePulse Enterprise");
+  const [org, setOrg] = useState("");
 
   const [notifToggles, setNotifToggles] = useState<Record<string, boolean>>(
     Object.fromEntries(notificationSettings.map((n) => [n.id, n.defaultOn])),
@@ -138,48 +136,43 @@ export default function SettingsPage() {
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [orgDomain, setOrgDomain] = useState("");
+  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
   const [planTier, setPlanTier] = useState("");
   const [billingCycle, setBillingCycle] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
 
   // Load current user
   useEffect(() => {
-    supabaseRef.current = supabase;
-  }, [supabase]);
-
-  useEffect(() => {
     const loadUser = async () => {
-      const { data } = await supabaseRef.current.auth.getUser();
+      try {
+        const currentUser = await authService.getCurrentUser();
+        if (!currentUser) return;
 
-      if (data.user) {
-        setEmail(data.user.email ?? "");
-        setFullName(data.user.user_metadata?.full_name ?? "");
+        setEmail(currentUser.email ?? "");
+        setFullName(currentUser.full_name ?? "");
         setJobTitle(
-          data.user.user_metadata?.job_title ?? "Security Operations Lead",
+          (currentUser.user_metadata?.job_title as string) ??
+            "Security Operations Lead",
         );
 
-        // Load organization data
-        const { data: profile } = (await supabaseRef.current
-          .from("users")
-          .select("organization_id")
-          .eq("id", data.user.id)
-          .single()) as unknown as { data: { organization_id: string } | null };
-
-        if (profile?.organization_id) {
-          const orgRepo = new OrganizationRepository();
-          const org = await orgRepo.findById(profile.organization_id);
+        const orgId = currentUser.organization_id;
+        if (orgId) {
+          const org = await organizationService.findById(orgId);
           if (org) {
             setOrgName(org.name);
             setOrgSlug(org.slug);
             setOrgDomain(org.domain ?? "");
+            setOrgLogoUrl(org.logo_url ?? null);
           }
-          const billing = await orgRepo.getBilling(profile.organization_id);
+          const billing = await organizationService.getBilling(orgId);
           if (billing) {
             setPlanTier(billing.plan_tier);
             setBillingCycle(billing.billing_cycle ?? "");
             setBillingEmail(billing.billing_email ?? "");
           }
         }
+      } catch (error) {
+        console.error("Failed to load user settings:", error);
       }
     };
 
@@ -190,14 +183,13 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       if (activeTab === "profile") {
-        const { error } = await supabase.auth.updateUser({
+        const { success, error } = await authService.updateCurrentUser({
           email: email !== "" ? email : undefined,
-          data: {
-            full_name: fullName,
-            job_title: jobTitle,
-          },
+          user_metadata: { full_name: fullName, job_title: jobTitle },
         });
-        if (error) throw error;
+        if (!success || error) {
+          throw new Error(error ?? "Failed to update profile");
+        }
         toast.success("Profile updated successfully");
       } else if (activeTab === "security") {
         if (!newPassword) {
@@ -205,46 +197,43 @@ export default function SettingsPage() {
           setSaving(false);
           return;
         }
-        const { error } = await supabase.auth.updateUser({
-          password: newPassword,
-        });
-        if (error) throw error;
+        const { success, error } = await authService.updateUserPassword(
+          newPassword,
+        );
+        if (!success || error) {
+          throw new Error(error ?? "Failed to update password");
+        }
         setCurrentPassword("");
         setNewPassword("");
         toast.success("Password updated successfully");
       } else if (activeTab === "notifications") {
-        // Persist notification prefs to user metadata
-        const { error } = await supabase.auth.updateUser({
-          data: { notification_prefs: notifToggles },
+        const { success, error } = await authService.updateCurrentUser({
+          user_metadata: { notification_prefs: notifToggles },
         });
-        if (error) throw error;
+        if (!success || error) {
+          throw new Error(error ?? "Failed to save notification preferences");
+        }
         toast.success("Notification preferences saved");
       } else if (activeTab === "agents") {
-        const { error } = await supabase.auth.updateUser({
-          data: { agent_telemetry_interval: parseInt(telemetryInterval) },
+        const { success, error } = await authService.updateCurrentUser({
+          user_metadata: { agent_telemetry_interval: parseInt(telemetryInterval) },
         });
-        if (error) throw error;
+        if (!success || error) {
+          throw new Error(error ?? "Failed to save agent configuration");
+        }
         toast.success("Agent configuration saved");
       } else if (activeTab === "organization") {
-        const { data: userData } = await supabaseRef.current.auth.getUser();
-        if (userData.user) {
-          const { data: profile } = (await supabaseRef.current
-            .from("users")
-            .select("organization_id")
-            .eq("id", userData.user.id)
-            .single()) as unknown as {
-            data: { organization_id: string } | null;
-          };
-          if (profile?.organization_id) {
-            const orgRepo = new OrganizationRepository();
-            await orgRepo.update(profile.organization_id, {
-              name: orgName,
-              slug: orgSlug,
-              domain: orgDomain || null,
-            } as Partial<OrganizationRow>);
-            toast.success("Organization settings saved");
-          }
+        const orgId = user?.organization_id;
+        if (!orgId) {
+          throw new Error("Unable to determine organization");
         }
+
+        await organizationService.updateOrganization(orgId, {
+          name: orgName,
+          slug: orgSlug,
+          domain: orgDomain || null,
+        });
+        toast.success("Organization settings saved");
       } else {
         toast.success("Settings saved");
       }
@@ -362,7 +351,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 <Label>Role</Label>
                 <div className="h-9 px-3 flex items-center bg-muted/50 border border-border rounded-md text-sm text-muted-foreground">
-                  Administrator (read-only)
+                  {user?.role || "—"}
                 </div>
               </div>
             </div>
@@ -586,7 +575,7 @@ export default function SettingsPage() {
           )}
 
           {/* ── Agent Config ── */}
-          {activeTab === "agents" && hasRole(["ADMINISTRATOR"]) && (
+          {activeTab === "agents" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -664,7 +653,7 @@ export default function SettingsPage() {
           )}
 
           {/* ── Device Enrollment ── */}
-          {activeTab === "enrollment" && hasRole(["ADMINISTRATOR"]) && (
+          {activeTab === "enrollment" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -679,7 +668,7 @@ export default function SettingsPage() {
           )}
 
           {/* ── Network Topology ── */}
-          {activeTab === "topology" && hasRole(["ADMINISTRATOR"]) && (
+          {activeTab === "topology" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -694,7 +683,7 @@ export default function SettingsPage() {
           )}
 
           {/* ── Organization ── */}
-          {activeTab === "organization" && hasRole(["ADMINISTRATOR"]) && (
+          {activeTab === "organization" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -733,6 +722,28 @@ export default function SettingsPage() {
                     placeholder="example.com"
                   />
                 </div>
+                {orgLogoUrl && (
+                  <div className="space-y-1.5">
+                    <Label>Logo</Label>
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                      <div className="w-12 h-12 rounded-md overflow-hidden bg-background flex items-center justify-center border border-border/50">
+                        <Image
+                          src={orgLogoUrl}
+                          alt={`${orgName} logo`}
+                          className="w-full h-full object-contain"
+                          width={48}
+                          height={48}
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">
+                          {orgName} Logo
+                        </p>
+                        <p>Uploaded during organization setup</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="pt-4 border-t border-border space-y-4">
                 <div>

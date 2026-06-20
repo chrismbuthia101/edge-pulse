@@ -5,15 +5,14 @@ import type {
   PrivacySettings,
   PrivacySettingsUpdate,
 } from "@/lib/supabase/types/privacy-settings";
+import { errorMessage } from "@/lib/utils/error";
 import { toast } from "sonner";
 
 interface PrivacyStore {
-  // State
   settings: PrivacySettings | null;
   loading: boolean;
   error: string | null;
 
-  // Actions
   initialize: (deviceId?: string) => Promise<void>;
   refreshSettings: (deviceId?: string) => Promise<void>;
   updateSettings: (
@@ -24,7 +23,6 @@ interface PrivacyStore {
   setSettings: (settings: PrivacySettings) => void;
   clearError: () => void;
 
-  // Realtime
   subscribeToSettings: (deviceId?: string) => void;
   unsubscribeFromSettings: (deviceId?: string) => void;
 }
@@ -32,21 +30,10 @@ interface PrivacyStore {
 const privacyRepository = new PrivacyRepository();
 const privacyService = new PrivacyService(privacyRepository);
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
-
-// ─── Store ─────────────────────────────────────────────────────────────────────
-
 export const usePrivacyStore = create<PrivacyStore>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
   settings: null,
   loading: false,
   error: null,
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   initialize: async (deviceId?: string) => {
     try {
@@ -68,8 +55,6 @@ export const usePrivacyStore = create<PrivacyStore>((set, get) => ({
       set({ error: errorMessage(err), loading: false });
     }
   },
-
-  // ── Mutations ───────────────────────────────────────────────────────────────
 
   updateSettings: async (updates, deviceId) => {
     const previous = get().settings;
@@ -138,8 +123,6 @@ export const usePrivacyStore = create<PrivacyStore>((set, get) => ({
   setSettings: (settings) => set({ settings }),
 
   clearError: () => set({ error: null }),
-
-  // ── Realtime ───────────────────────────────────────────────────────────────
 
   subscribeToSettings: (deviceId) => {
     privacyService.subscribeToPrivacySettings(deviceId || null, {

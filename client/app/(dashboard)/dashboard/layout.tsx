@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopBar } from "@/components/dashboard/topbar";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -11,6 +12,7 @@ export default function DashboardLayout({
     children: React.ReactNode;
 }) {
     const { user, loading, isApproved } = useAuth();
+    const router = useRouter();
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== "undefined") {
@@ -24,6 +26,18 @@ export default function DashboardLayout({
     useEffect(() => {
         localStorage.setItem("sidebar-collapsed", JSON.stringify(sidebarCollapsed));
     }, [sidebarCollapsed]);
+
+    useEffect(() => {
+        if (!loading && user && !isApproved) {
+            if (user.profiles.some((p) => p.account_status === "PENDING")) {
+                router.push("/auth/setup-profile");
+            }
+            return;
+        }
+        if (!loading && isApproved && user && !user.organization_id && user.role !== "PLATFORM_ADMIN") {
+            router.push("/auth/setup-organization");
+        }
+    }, [loading, isApproved, user, router]);
 
     // Show loading state while checking authentication
     if (loading) {
@@ -108,7 +122,7 @@ export default function DashboardLayout({
                 onMobileClose={() => setMobileSidebarOpen(false)}
             />
             <div
-                className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-[240px]"
+                className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? "lg:ml-17" : "lg:ml-60"
                     } ml-0 ${mobileSidebarOpen ? "lg:backdrop-blur-none backdrop-blur-sm" : ""}`}
             >
                 <TopBar onMobileMenuToggle={() => setMobileSidebarOpen(!mobileSidebarOpen)} />

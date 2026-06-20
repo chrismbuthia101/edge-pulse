@@ -290,7 +290,7 @@ export default function AlertDetailPage() {
           </div>
         </div>
         {alert.alert_status === "PENDING" &&
-          hasRole(["ANALYST", "ADMINISTRATOR"]) && (
+          hasRole(["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"]) && (
             <Button onClick={handleAcknowledge} disabled={acknowledging}>
               {acknowledging ? "Acknowledging..." : "Acknowledge Alert"}
             </Button>

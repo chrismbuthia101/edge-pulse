@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { ReportRepository } from "@/lib/repositories";
 import { ReportService } from "@/lib/services/report-service";
 import type { ReportMetrics } from "@/lib/repositories/report-repository";
+import { errorMessage } from "@/lib/utils/error";
 import { toast } from "sonner";
 
 interface ReportStore {
@@ -20,22 +21,11 @@ interface ReportStore {
 const reportRepository = new ReportRepository();
 const reportService = new ReportService(reportRepository);
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
-
-// ─── Store ─────────────────────────────────────────────────────────────────────
-
 export const useReportStore = create<ReportStore>((set, get) => ({
-  // ── Initial state ──────────────────────────────────────────────────────────
   reportData: null,
   loading: false,
   error: null,
   dateRange: "7d",
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   initialize: async () => {
     try {
@@ -61,11 +51,8 @@ export const useReportStore = create<ReportStore>((set, get) => ({
     }
   },
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-
   setDateRange: (dateRange: string) => {
     set({ dateRange });
-    // Auto-refresh when date range changes
     get().refreshReportData();
   },
 

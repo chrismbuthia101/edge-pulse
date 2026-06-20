@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import { LogsRepository, AuditLogRepository } from "@/lib/repositories";
+import { LogsRepository } from "@/lib/repositories";
 import { LogsService } from "@/lib/services/logs-service";
 import type { AuditLogEntry } from "@/lib/supabase/types";
 import type { AuditLogQueryOptions } from "@/lib/repositories/logs-repository";
+import { errorMessage } from "@/lib/utils/error";
 
 interface LogsStore {
   logs: AuditLogEntry[];
@@ -19,15 +20,9 @@ interface LogsStore {
 }
 
 const logsRepository = new LogsRepository();
-const auditLogRepository = new AuditLogRepository();
 const logsService = new LogsService({
   repository: logsRepository,
-  auditLogRepository,
 });
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "An unexpected error occurred";
-}
 
 export const useLogsStore = create<LogsStore>((set, get) => ({
   logs: [],

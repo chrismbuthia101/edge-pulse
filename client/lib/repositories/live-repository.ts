@@ -140,21 +140,13 @@ export class LiveRepository extends BaseRepository {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "telemetry", table: "events" },
-        async (payload) => {
+        (payload) => {
           try {
+            // NOTE: intentionally skip device name lookup — telemetry is
+            // high-frequency and a per-event DB query would be expensive.
+            // The UI displays device_id when device_name is absent.
             if (payload.new) {
-              const { data: device } = await this.supabase
-                .from("devices")
-                .select("name")
-                .eq("id", payload.new.device_id)
-                .single();
-
-              const telemetryWithDeviceName = {
-                ...payload.new,
-                device_name: device?.name,
-              } as unknown as TelemetryEvent;
-
-              onNewTelemetry?.(telemetryWithDeviceName);
+              onNewTelemetry?.(payload.new as TelemetryEvent);
             }
           } catch (error) {
             onError?.(

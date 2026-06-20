@@ -4,6 +4,8 @@ export type {
   AlertSeverity,
   TelemetrySource,
   DeviceStatus,
+  DeviceRisk,
+  DeviceType,
   SyncQueueStatus,
   ConnectivityState,
   UserRole,
@@ -11,40 +13,36 @@ export type {
   AccountStatus,
 } from "@/lib/supabase/types/shared";
 
-// Telemetry types
 export type {
   TelemetryEvent,
   FeatureVector,
   AnomalyScore,
+  FeatureType,
 } from "@/lib/supabase/types/telemetry";
 
-// Alert types
 export type {
   Alert,
   ShapExplanation,
   ShapFeature,
 } from "@/lib/supabase/types/alerts";
 
-// Device types
 export type { Device } from "@/lib/supabase/types/devices";
 
-// Sync types
 export type {
   SyncQueueEntry,
   DeviceSyncQueueSummary,
 } from "@/lib/supabase/types/sync";
 
-// Realtime types
 export type {
   RealtimeAlertPayload,
   RealtimeDevicePayload,
   RealtimeNotificationPayload,
 } from "@/lib/supabase/types/realtime";
 
-// Database types
 export type {
   Database,
   UserRow,
+  ProfileRow,
   DeviceHealthRow,
   EnrollmentTokenRow,
   DeviceConfigRow,
@@ -53,18 +51,18 @@ export type {
   NotificationRow,
   OrganizationRow,
   BillingRow,
+  RetentionSetting,
+  PrivacySettingsRow,
+  ModelRow,
 } from "@/lib/supabase/types/database";
 
-// Health types
 export type {
   DeviceHealthSnapshot,
   SystemHealth,
 } from "@/lib/supabase/types/health";
 
-// Audit log types
 export type { AuditLogEntry } from "@/lib/supabase/types/logs";
 
-// Privacy settings
 export type {
   PrivacySettings,
   PrivacySettingsUpdate,

@@ -233,7 +233,7 @@ export class ResilienceRepository extends BaseRepository {
 
         return metrics;
       },
-      30 * 1000,
+      { ttl: 30 * 1000 },
     );
   }
 
@@ -297,7 +297,7 @@ export class ResilienceRepository extends BaseRepository {
             Math.round((online / connectionMetrics.length) * 100) || 0,
         };
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 
@@ -426,7 +426,7 @@ export class ResilienceRepository extends BaseRepository {
 
         return metrics;
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 

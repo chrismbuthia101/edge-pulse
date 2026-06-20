@@ -20,6 +20,8 @@ import {
   Users,
   FileText,
   BarChart3,
+  Globe,
+  Database,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,7 @@ interface NavItem {
 
 interface NavGroup {
   group: string;
+  roles?: string[];
   items: NavItem[];
 }
 
@@ -77,13 +80,13 @@ const navItems: NavGroup[] = [
         icon: Brain,
         label: "ML Insights",
         href: "/dashboard/insights",
-        roles: ["ADMINISTRATOR"],
+        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
       },
       {
         icon: BarChart3,
         label: "Explainability",
         href: "/dashboard/explainability",
-        roles: ["ANALYST", "ADMINISTRATOR"],
+        roles: ["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"],
       },
     ],
   },
@@ -94,7 +97,7 @@ const navItems: NavGroup[] = [
         icon: Shield,
         label: "Audit Log",
         href: "/dashboard/audit-log",
-        roles: ["ANALYST", "ADMINISTRATOR"],
+        roles: ["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"],
       },
       {
         icon: Bell,
@@ -105,25 +108,51 @@ const navItems: NavGroup[] = [
     ],
   },
   {
+    group: "Platform",
+    roles: ["PLATFORM_ADMIN"],
+    items: [
+      {
+        icon: Globe,
+        label: "Organizations",
+        href: "/dashboard/admin/organizations",
+      },
+      {
+        icon: Users,
+        label: "All Users",
+        href: "/dashboard/admin/users",
+      },
+      {
+        icon: Database,
+        label: "Platform Overview",
+        href: "/dashboard/admin/overview",
+      },
+      {
+        icon: Shield,
+        label: "Audit Logs",
+        href: "/dashboard/admin/audit-log",
+      },
+    ],
+  },
+  {
     group: "Admin",
     items: [
       {
         icon: Users,
         label: "Users",
         href: "/dashboard/users",
-        roles: ["ADMINISTRATOR"],
+        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
       },
       {
         icon: MonitorSmartphone,
         label: "Assignments",
         href: "/dashboard/assignments",
-        roles: ["ADMINISTRATOR"],
+        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
       },
       {
         icon: FileText,
         label: "Reports",
         href: "/dashboard/reports",
-        roles: ["ADMINISTRATOR", "ANALYST"],
+        roles: ["ORG_ADMIN", "PLATFORM_ADMIN", "ORG_ANALYST"],
       },
       { icon: Settings, label: "Settings", href: "/dashboard/settings" },
     ],
@@ -257,125 +286,130 @@ export function Sidebar({
           className="flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-none"
           aria-label="Main navigation"
         >
-          {navItems.map((group) => (
-            <div key={group.group} className="mb-4">
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="px-3 pt-5 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50"
-                  >
-                    {group.group}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-
-              {group.items
-                .filter((item) => {
-                  // Check if item has role requirements
-                  if (!item.roles) return true;
-                  return hasRole(item.roles);
-                })
-                .map((item) => {
-                  const isActive = pathname === item.href;
-                  // Convert dynamic badge keys to actual counts
-                  let badgeCount = item.badge;
-                  if (badgeCount === "pending") {
-                    badgeCount =
-                      pendingAlertsCount > 0
-                        ? String(pendingAlertsCount)
-                        : undefined;
-                  } else if (badgeCount === "unread") {
-                    badgeCount =
-                      unreadCount > 0 ? String(unreadCount) : undefined;
-                  } else if (badgeCount === "LIVE") {
-                    badgeCount = "LIVE";
-                  }
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-all duration-200 group relative",
-                        isActive
-                          ? "bg-linear-to-r from-primary/15 to-primary/5 text-primary border-l-2 border-primary"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                      )}
-                      aria-current={isActive ? "page" : undefined}
-                      onClick={handleNavigation}
+          {navItems
+            .filter((group) => {
+              if (!group.roles) return true;
+              return hasRole(group.roles);
+            })
+            .map((group) => (
+              <div key={group.group} className="mb-4">
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="px-3 pt-5 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50"
                     >
-                      {isActive && (
-                        <motion.div
-                          layoutId="sidebar-active"
-                          className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-r-full"
-                        />
-                      )}
-                      <item.icon
+                      {group.group}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                {group.items
+                  .filter((item) => {
+                    // Check if item has role requirements
+                    if (!item.roles) return true;
+                    return hasRole(item.roles);
+                  })
+                  .map((item) => {
+                    const isActive = pathname === item.href;
+                    // Convert dynamic badge keys to actual counts
+                    let badgeCount = item.badge;
+                    if (badgeCount === "pending") {
+                      badgeCount =
+                        pendingAlertsCount > 0
+                          ? String(pendingAlertsCount)
+                          : undefined;
+                    } else if (badgeCount === "unread") {
+                      badgeCount =
+                        unreadCount > 0 ? String(unreadCount) : undefined;
+                    } else if (badgeCount === "LIVE") {
+                      badgeCount = "LIVE";
+                    }
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
                         className={cn(
-                          "h-4 w-4 shrink-0 transition-colors",
+                          "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-all duration-200 group relative",
                           isActive
-                            ? "text-primary"
-                            : "text-muted-foreground group-hover:text-foreground",
+                            ? "bg-linear-to-r from-primary/15 to-primary/5 text-primary border-l-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                         )}
-                      />
-                      <AnimatePresence>
-                        {!collapsed && (
+                        aria-current={isActive ? "page" : undefined}
+                        onClick={handleNavigation}
+                      >
+                        {isActive && (
+                          <motion.div
+                            layoutId="sidebar-active"
+                            className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-r-full"
+                          />
+                        )}
+                        <item.icon
+                          className={cn(
+                            "h-4 w-4 shrink-0 transition-colors",
+                            isActive
+                              ? "text-primary"
+                              : "text-muted-foreground group-hover:text-foreground",
+                          )}
+                        />
+                        <AnimatePresence>
+                          {!collapsed && (
+                            <motion.span
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: -8 }}
+                              transition={{ duration: 0.15 }}
+                              className="flex-1 whitespace-nowrap font-medium"
+                            >
+                              {item.label}
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                        {!collapsed && badgeCount && (
                           <motion.span
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -8 }}
-                            transition={{ duration: 0.15 }}
-                            className="flex-1 whitespace-nowrap font-medium"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className={cn(
+                              "text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse",
+                              badgeCount === "LIVE"
+                                ? "bg-green-500/15 text-green-500 border border-green-500/30"
+                                : "bg-destructive/15 text-destructive border border-destructive/30",
+                            )}
                           >
-                            {item.label}
+                            {badgeCount}
                           </motion.span>
                         )}
-                      </AnimatePresence>
-                      {!collapsed && badgeCount && (
-                        <motion.span
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.8 }}
-                          className={cn(
-                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse",
-                            badgeCount === "LIVE"
-                              ? "bg-green-500/15 text-green-500 border border-green-500/30"
-                              : "bg-destructive/15 text-destructive border border-destructive/30",
-                          )}
-                        >
-                          {badgeCount}
-                        </motion.span>
-                      )}
-                      {/* Collapsed state indicators */}
-                      {collapsed && badgeCount && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0 }}
-                          className={cn(
-                            "absolute -top-1 -right-1 w-2 h-2 rounded-full",
-                            badgeCount === "LIVE"
-                              ? "bg-green-500"
-                              : "bg-destructive",
-                          )}
-                        />
-                      )}
-                      {collapsed && isActive && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0 }}
-                          className="absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 pointer-events-none"
-                        />
-                      )}
-                    </Link>
-                  );
-                })}
-            </div>
-          ))}
+                        {/* Collapsed state indicators */}
+                        {collapsed && badgeCount && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className={cn(
+                              "absolute -top-1 -right-1 w-2 h-2 rounded-full",
+                              badgeCount === "LIVE"
+                                ? "bg-green-500"
+                                : "bg-destructive",
+                            )}
+                          />
+                        )}
+                        {collapsed && isActive && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className="absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 pointer-events-none"
+                          />
+                        )}
+                      </Link>
+                    );
+                  })}
+              </div>
+            ))}
         </nav>
 
         {/* Bottom actions */}

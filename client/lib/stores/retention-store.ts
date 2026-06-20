@@ -27,11 +27,11 @@ const retentionService = new RetentionService(retentionRepository);
 export const useRetentionStore = create<RetentionStore>((set, get) => ({
   retentionPeriod: 90,
   storageUsage: {
-    telemetry: 15.7,
-    alerts: 2.3,
-    features: 8.9,
-    health: 1.2,
-    total: 28.1,
+    telemetry: 0,
+    alerts: 0,
+    features: 0,
+    health: 0,
+    total: 0,
   },
   loading: false,
   error: null,
@@ -79,7 +79,6 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
 
       const storageUsage = await retentionService.refreshStorageUsage(
         deviceId || null,
-        days,
       );
 
       set({ storageUsage, loading: false });
@@ -118,7 +117,6 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
 
       const storageUsage = await retentionService.refreshStorageUsage(
         deviceId || null,
-        retentionPeriod,
       );
 
       set({ storageUsage, loading: false });
@@ -138,10 +136,8 @@ export const useRetentionStore = create<RetentionStore>((set, get) => ({
 
   refreshStorageUsage: async (deviceId?: string) => {
     try {
-      const { retentionPeriod } = get();
       const storageUsage = await retentionService.refreshStorageUsage(
         deviceId || null,
-        retentionPeriod,
       );
 
       set({ storageUsage });

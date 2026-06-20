@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Mail, ArrowLeft, CheckCircle2, ArrowRight } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,6 @@ import { Logo } from "@/components/ui/logo";
 import { toast } from "sonner";
 
 export default function ForgotPasswordPage() {
-  const supabase = createClient();
-
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -23,12 +21,10 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${location.origin}/auth/reset-password`,
-    });
+    const result = await useAuthStore.getState().resetPassword(email);
 
-    if (error) {
-      toast.error(error.message);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to send reset email");
       setIsLoading(false);
       return;
     }

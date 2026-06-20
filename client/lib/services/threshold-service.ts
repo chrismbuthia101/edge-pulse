@@ -31,8 +31,4 @@ export class ThresholdService {
       throw error;
     }
   }
-
-  async getModelThresholds(organizationId: string) {
-    return this.repository.getModelThresholds(organizationId);
-  }
 }

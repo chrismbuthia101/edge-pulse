@@ -46,11 +46,6 @@ export class LiveService {
     }
   }
 
-  isSubscribed(): boolean {
-    return this.repository.isSubscribed();
-  }
-
-  // Helper method to get initial data for the live feed
   async initializeLiveFeed(): Promise<{
     alerts: Alert[];
     telemetry: TelemetryEvent[];

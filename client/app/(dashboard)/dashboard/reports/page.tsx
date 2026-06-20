@@ -94,7 +94,7 @@ const reportCards: ReportCard[] = [
     border: "border-destructive/20",
     dotColor: "bg-destructive",
     href: "/dashboard/reports/alert-analysis",
-    roles: ["ADMINISTRATOR", "ANALYST"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN", "ORG_ANALYST"],
     category: "security",
     getStats: (alerts) => [
       { label: "Total alerts", value: alerts.length.toString() },
@@ -117,7 +117,7 @@ const reportCards: ReportCard[] = [
     border: "border-primary/20",
     dotColor: "bg-primary",
     href: "/dashboard/reports/device-fleet",
-    roles: ["ADMINISTRATOR", "ANALYST"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN", "ORG_ANALYST"],
     category: "operations",
     getStats: (_, devices) => [
       { label: "Devices", value: devices.length.toString() },
@@ -140,7 +140,7 @@ const reportCards: ReportCard[] = [
     border: "border-violet-500/20",
     dotColor: "bg-violet-500",
     href: "/dashboard/reports/executive-summary",
-    roles: ["ADMINISTRATOR"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
     category: "security",
     badge: "Admin Only",
     getStats: (alerts) => [
@@ -162,7 +162,7 @@ const reportCards: ReportCard[] = [
     border: "border-green-500/20",
     dotColor: "bg-green-500",
     href: "/dashboard/reports/ml-performance",
-    roles: ["ADMINISTRATOR"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
     category: "intelligence",
     badge: "Admin Only",
     getStats: (alerts) => [
@@ -187,7 +187,7 @@ const reportCards: ReportCard[] = [
     border: "border-sky-500/20",
     dotColor: "bg-sky-500",
     href: "/dashboard/reports/integrity-audit",
-    roles: ["ADMINISTRATOR", "ANALYST"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN", "ORG_ANALYST"],
     category: "compliance",
     getStats: (_, devices) => [
       { label: "Devices", value: devices.length.toString() },
@@ -210,7 +210,7 @@ const reportCards: ReportCard[] = [
     border: "border-purple-500/20",
     dotColor: "bg-purple-500",
     href: "/dashboard/reports/user-management",
-    roles: ["ADMINISTRATOR"],
+    roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
     category: "operations",
     badge: "Admin Only",
   },
@@ -622,9 +622,9 @@ export default function ReportsPage() {
                         <card.icon className={cn("h-6 w-6", card.color)} />
                       </div>
                       <div className="flex items-center gap-2">
-                        {!hasRole(["ADMINISTRATOR"]) &&
+                        {!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) &&
                           card.roles.length === 1 &&
-                          card.roles[0] === "ADMINISTRATOR" && (
+                          (card.roles[0] === "ORG_ADMIN" || card.roles[0] === "PLATFORM_ADMIN") && (
                             <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
                           )}
                         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -666,7 +666,7 @@ export default function ReportsPage() {
                           key={role}
                           className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground"
                         >
-                          {role === "ADMINISTRATOR" ? "Admin" : "Analyst"}
+                          {role === "ORG_ADMIN" || role === "PLATFORM_ADMIN" ? "Admin" : "Analyst"}
                         </span>
                       ))}
                     </div>

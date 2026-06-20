@@ -2,6 +2,7 @@ import {
   BaseRepository,
   type QueryOptions,
 } from "@/lib/repositories/base-repository";
+import type { Alert } from "@/lib/supabase/types";
 
 export interface ReportMetrics {
   totalAlerts: number;
@@ -25,7 +26,7 @@ export interface ReportQueryOptions extends QueryOptions {
   endDate?: string;
 }
 
-export class ReportRepository extends BaseRepository {
+export class ReportRepository extends BaseRepository<Alert> {
   constructor() {
     super("alerts");
   }
@@ -118,7 +119,7 @@ export class ReportRepository extends BaseRepository {
           recentAlerts,
         };
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 

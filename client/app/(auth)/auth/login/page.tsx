@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +32,6 @@ const securityQuotes = [
 ];
 
 export function LoginPage() {
-  const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -58,13 +57,10 @@ export function LoginPage() {
     const email = form.get("email") as string;
     const password = form.get("password") as string;
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await useAuthStore.getState().signIn(email, password);
 
-    if (error) {
-      toast.error(error.message);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to sign in");
       setIsLoading(false);
       return;
     }
@@ -78,15 +74,11 @@ export function LoginPage() {
     setIsLoading(true);
 
     const next = searchParams.get("next") ?? "/dashboard";
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    const result = await useAuthStore.getState().signInWithGoogle(redirectTo);
 
-    if (error) {
-      toast.error(error.message);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to sign in with Google");
       setIsLoading(false);
     }
   };

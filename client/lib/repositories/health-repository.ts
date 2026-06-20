@@ -1,6 +1,9 @@
 import { BaseRepository } from "@/lib/repositories/base-repository";
-import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
-import type { DeviceHealthRow } from "@/lib/supabase/types/database";
+import type {
+  DeviceHealthSnapshot,
+  SystemHealth,
+  DeviceHealthRow,
+} from "@/lib/supabase/types";
 
 export class HealthRepository extends BaseRepository<DeviceHealthRow> {
   constructor() {
@@ -233,7 +236,7 @@ export class HealthRepository extends BaseRepository<DeviceHealthRow> {
           last_updated: new Date().toISOString(),
         };
       },
-      30 * 1000,
+      { ttl: 30 * 1000 },
     );
   }
 }

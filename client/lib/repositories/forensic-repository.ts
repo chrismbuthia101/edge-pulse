@@ -1,10 +1,10 @@
-import { BaseRepository } from "./base-repository";
+import { BaseRepository } from "@/lib/repositories/base-repository";
 import type {
   TelemetryEvent,
   FeatureVector,
-} from "@/lib/supabase/types/telemetry";
-import type { Alert } from "@/lib/supabase/types/alerts";
-import type { AuditLogEntry } from "@/lib/supabase/types";
+  Alert,
+  AuditLogEntry,
+} from "@/lib/supabase/types";
 
 export interface ExportQuery {
   startDate: Date;

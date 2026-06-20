@@ -15,20 +15,6 @@ export {
   validateFilter,
   optimizeQuery,
   buildFilterString,
-  calculatePagination,
-  debounce,
-  throttle,
-  memoize,
-  formatBytes,
-  formatDuration,
-  safePercentage,
-  clamp,
-  getColorForValue,
-  getStatusColorClass,
-  getSeverityColorClass,
-  retry,
-  batchProcess,
-  QueryOptimizer,
 } from "@/lib/repositories/query-utils";
 export type {
   SortOption,
@@ -38,6 +24,32 @@ export type {
 
 // Domain repositories
 export { AlertRepository } from "@/lib/repositories/alert-repository";
+export { AnomalyRepository } from "@/lib/repositories/anomaly-repository";
+export type {
+  AnomalyAnalytics,
+  AnomalyTrend,
+  GetAnomalyScoresOptions,
+} from "@/lib/repositories/anomaly-repository";
+
+export { AuthRepository } from "@/lib/repositories/auth-repository";
+export type {
+  AuthUser,
+  AuthResponse,
+} from "@/lib/repositories/auth-repository";
+
+export { DeviceAssignmentRepository } from "@/lib/repositories/device-assignment-repository";
+export type {
+  DeviceAssignment,
+  DeviceAssignmentCreate,
+  DeviceAssignmentQueryOptions,
+  DeviceAssignmentSubscriptionCallbacks,
+} from "@/lib/repositories/device-assignment-repository";
+
+export { DeviceDataRepository } from "@/lib/repositories/device-data-repository";
+export type {
+  PurgeOptions,
+  PurgeResult,
+} from "@/lib/repositories/device-data-repository";
 export type {
   AlertQueryOptions,
   AlertMetrics,
@@ -118,3 +130,7 @@ export type {
 } from "@/lib/repositories/notification-repository";
 
 export { OrganizationRepository } from "@/lib/repositories/organization-repository";
+export { StorageRepository } from "@/lib/repositories/storage-repository";
+
+export { ThresholdRepository } from "@/lib/repositories/threshold-repository";
+export type { ModelThreshold } from "@/lib/repositories/threshold-repository";

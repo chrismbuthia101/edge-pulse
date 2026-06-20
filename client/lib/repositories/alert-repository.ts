@@ -1,9 +1,11 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
 } from "@/lib/repositories/base-repository";
+import { escapeWildcards } from "@/lib/repositories/query-utils";
 import type {
   Alert,
   AlertStatus,
@@ -62,9 +64,6 @@ const DEFAULT_ALERT_SELECT = `
   explanation_json
 `.trim();
 
-const METRICS_SELECT =
-  "id,status,severity,anomaly_score,confidence,inference_latency_ms,created_at,closed_at";
-
 export interface AlertQueryOptions extends QueryOptions {
   deviceId?: string;
   status?: AlertStatus | AlertStatus[];
@@ -107,7 +106,7 @@ export class AlertRepository extends BaseRepository<Alert> {
   }
 
   private buildAlertQuery(options: AlertQueryOptions) {
-    const standardFilters: Record<string, unknown> = {};
+    const standardFilters: Record<string, FilterValue> = {};
 
     if (options.deviceId) standardFilters.device_id = options.deviceId;
     if (options.status) standardFilters.status = options.status;
@@ -131,7 +130,7 @@ export class AlertRepository extends BaseRepository<Alert> {
       query = query.lte("anomaly_score", options.maxAnomalyScore);
 
     if (options.search) {
-      const s = options.search.replace(/[%_]/g, "\\$&");
+      const s = escapeWildcards(options.search);
       query = query.or(
         `title.ilike.%${s}%,description.ilike.%${s}%,category.ilike.%${s}%`,
       );
@@ -150,7 +149,7 @@ export class AlertRepository extends BaseRepository<Alert> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as Alert[];
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -159,7 +158,7 @@ export class AlertRepository extends BaseRepository<Alert> {
   ): Promise<PaginatedResult<Alert>> {
     const { page, limit, ...queryOptions } = options;
 
-    const filters: Record<string, unknown> = {};
+    const filters: Record<string, FilterValue> = {};
     if (queryOptions.deviceId) filters.device_id = queryOptions.deviceId;
     if (queryOptions.status) filters.status = queryOptions.status;
     if (queryOptions.severity) filters.severity = queryOptions.severity;
@@ -347,87 +346,88 @@ export class AlertRepository extends BaseRepository<Alert> {
     return this.cachedQuery(
       "alert_metrics",
       async () => {
-        const alerts = await this.findAlerts({ select: METRICS_SELECT });
-        const today = new Date().toDateString();
+        const today = new Date();
+        const todayStart = today.toISOString().slice(0, 10);
 
-        const metrics: AlertMetrics = {
-          total: alerts.length,
-          pending: 0,
-          acknowledged: 0,
-          investigated: 0,
-          closed: 0,
-          critical: 0,
-          high: 0,
-          medium: 0,
-          low: 0,
-          avgAnomalyScore: 0,
-          avgInferenceLatency: 0,
-          anomaliesResolved: 0,
-          resolvedToday: 0,
-        };
+        const [
+          total,
+          pending,
+          acknowledged,
+          investigated,
+          closed,
+          critical,
+          high,
+          medium,
+          low,
+          anomaliesResolved,
+          resolvedToday,
+        ] = await Promise.all([
+          this.countWhere(),
+          this.countWhere({ status: "PENDING" }),
+          this.countWhere({ status: "ACKNOWLEDGED" }),
+          this.countWhere({ status: "INVESTIGATED" }),
+          this.countWhere({ status: "CLOSED" }),
+          this.countWhere({ severity: "critical" }),
+          this.countWhere({ severity: "high" }),
+          this.countWhere({ severity: "medium" }),
+          this.countWhere({ severity: "low" }),
+          this.countWhere({
+            status: "CLOSED",
+            severity: { in: ["critical", "high"] },
+          }),
+          this.countWhere({
+            status: "CLOSED",
+            closed_at: { gte: todayStart },
+          }),
+        ]);
+
+        // For averages, select only the needed numeric columns from recent data
+        const avgData = await this.findMany({
+          select: "anomaly_score,confidence,inference_latency_ms",
+          limit: 10000,
+          orderBy: { column: "created_at", ascending: false },
+          cacheTTL: 0,
+        });
 
         let scoreSum = 0,
           scoreCount = 0,
           latencySum = 0,
           latencyCount = 0;
 
-        for (const a of alerts) {
-          switch (a.status) {
-            case "PENDING":
-              metrics.pending++;
-              break;
-            case "ACKNOWLEDGED":
-              metrics.acknowledged++;
-              break;
-            case "INVESTIGATED":
-              metrics.investigated++;
-              break;
-            case "CLOSED":
-              metrics.closed++;
-              break;
-          }
-          switch (a.severity) {
-            case "critical":
-              metrics.critical++;
-              break;
-            case "high":
-              metrics.high++;
-              break;
-            case "medium":
-              metrics.medium++;
-              break;
-            case "low":
-              metrics.low++;
-              break;
-          }
-          const score = a.anomaly_score ?? a.confidence ?? null;
-          if (score !== null) {
+        for (const a of avgData) {
+          const score =
+            (a as unknown as Record<string, unknown>).anomaly_score ??
+            (a as unknown as Record<string, unknown>).confidence ??
+            null;
+          if (score !== null && typeof score === "number") {
             scoreSum += score;
             scoreCount++;
           }
-          if ((a.inference_latency_ms ?? 0) > 0) {
-            latencySum += a.inference_latency_ms;
+          const lat = (a as unknown as Record<string, unknown>)
+            .inference_latency_ms;
+          if (typeof lat === "number" && lat > 0) {
+            latencySum += lat;
             latencyCount++;
           }
-          if (
-            a.status === "CLOSED" &&
-            (a.severity === "critical" || a.severity === "high")
-          )
-            metrics.anomaliesResolved++;
-          if (
-            a.status === "CLOSED" &&
-            a.closed_at &&
-            new Date(a.closed_at).toDateString() === today
-          )
-            metrics.resolvedToday++;
         }
 
-        if (scoreCount > 0) metrics.avgAnomalyScore = scoreSum / scoreCount;
-        if (latencyCount > 0)
-          metrics.avgInferenceLatency = latencySum / latencyCount;
-        return metrics;
+        return {
+          total,
+          pending,
+          acknowledged,
+          investigated,
+          closed,
+          critical,
+          high,
+          medium,
+          low,
+          avgAnomalyScore: scoreCount > 0 ? scoreSum / scoreCount : 0,
+          avgInferenceLatency: latencyCount > 0 ? latencySum / latencyCount : 0,
+          anomaliesResolved,
+          resolvedToday,
+        };
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 
@@ -473,7 +473,7 @@ export class AlertRepository extends BaseRepository<Alert> {
           .map(([timestamp, count]) => ({ timestamp, count }))
           .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       },
-      5 * 60 * 1000,
+      { ttl: 5 * 60 * 1000 },
     );
   }
 
@@ -494,15 +494,18 @@ export class AlertRepository extends BaseRepository<Alert> {
           .sort((a, b) => b.count - a.count)
           .slice(0, limit);
       },
-      10 * 60 * 1000,
+      { ttl: 10 * 60 * 1000 },
     );
   }
 
   subscribeToAlerts(
-    filters: Partial<AlertQueryOptions> = {},
+    filters: Record<string, FilterValue> = {},
     callbacks: AlertSubscriptionCallbacks = {},
   ): string {
-    const channelName = `realtime-alerts-${Date.now()}`;
+    const channelName = "realtime-alerts";
+
+    this.unsubscribe(channelName);
+
     this.subscribe(channelName, filters, (payload) => {
       try {
         const p = payload as RealtimeAlertPayload;
@@ -524,8 +527,8 @@ export class AlertRepository extends BaseRepository<Alert> {
     return channelName;
   }
 
-  unsubscribeFromAlerts(channelName: string): void {
-    this.unsubscribe(channelName);
+  unsubscribeFromAlerts(channelName?: string): void {
+    this.unsubscribe(channelName ?? "realtime-alerts");
   }
 }
 

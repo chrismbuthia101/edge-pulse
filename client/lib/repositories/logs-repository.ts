@@ -1,5 +1,6 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
@@ -24,7 +25,7 @@ export class LogsRepository extends BaseRepository<AuditLogEntry> {
   }
 
   private buildAuditLogQuery(options: AuditLogQueryOptions) {
-    const standardFilters: Record<string, unknown> = {};
+    const standardFilters: Record<string, FilterValue> = {};
 
     if (options.userId) standardFilters.user_id = options.userId;
     if (options.deviceId) standardFilters.device_id = options.deviceId;
@@ -62,7 +63,7 @@ export class LogsRepository extends BaseRepository<AuditLogEntry> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as AuditLogEntry[];
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -71,7 +72,7 @@ export class LogsRepository extends BaseRepository<AuditLogEntry> {
   ): Promise<PaginatedResult<AuditLogEntry>> {
     const { page, limit, ...queryOptions } = options;
 
-    const filters: Record<string, unknown> = {};
+    const filters: Record<string, FilterValue> = {};
     if (queryOptions.userId) filters.user_id = queryOptions.userId;
     if (queryOptions.deviceId) filters.device_id = queryOptions.deviceId;
     if (queryOptions.action) filters.action = queryOptions.action;

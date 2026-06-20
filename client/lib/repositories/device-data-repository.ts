@@ -14,6 +14,7 @@ export interface PurgeResult {
 export class DeviceDataRepository extends BaseRepository {
   constructor() {
     super("events");
+    this.schema = "telemetry";
   }
 
   async purgeDeviceData(options: PurgeOptions): Promise<PurgeResult[]> {

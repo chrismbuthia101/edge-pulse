@@ -1,5 +1,6 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
 } from "@/lib/repositories/base-repository";
 import type {
@@ -31,7 +32,7 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
   }
 
   private buildSyncQueueQuery(options: SyncQueueQueryOptions) {
-    const standardFilters: Record<string, unknown> = {};
+    const standardFilters: Record<string, FilterValue> = {};
 
     if (options.deviceId) standardFilters.device_id = options.deviceId;
     if (options.status) standardFilters.status = options.status;
@@ -65,7 +66,7 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as SyncQueueEntry[];
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -122,7 +123,7 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
         }
         return Array.from(map.values());
       },
-      30 * 1000,
+      { ttl: 30 * 1000 },
     );
   }
 
@@ -195,12 +196,12 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
               : Math.floor(oldestPendingAge / 60000),
         };
       },
-      60 * 1000,
+      { ttl: 60 * 1000 },
     );
   }
 
   subscribeToSyncQueue(
-    filters: Partial<SyncQueueQueryOptions> = {},
+    filters: Record<string, FilterValue> = {},
     callbacks: SyncQueueSubscriptionCallbacks = {},
   ): string {
     const channelName = `realtime-sync-queue-${Date.now()}`;

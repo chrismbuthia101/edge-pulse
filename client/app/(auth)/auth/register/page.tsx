@@ -14,7 +14,7 @@ import {
   Circle,
   ArrowRight,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,25 +64,7 @@ const strengthTextColors = [
   "text-primary",
 ];
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    const dummy = "\x00".repeat(b.length);
-    let result = 0;
-    for (let i = 0; i < b.length; i++) {
-      result |= dummy.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    void result;
-    return false;
-  }
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
-
 export default function RegisterPage() {
-  const supabase = createClient();
   const router = useRouter();
 
   const [showPassword, setShowPassword] = useState(false);
@@ -98,9 +80,9 @@ export default function RegisterPage() {
   const metRequirements = passwordRequirements.filter((r) => r.test(password));
   const passwordStrength = metRequirements.length;
   const passwordsMatch =
-    confirmPassword.length > 0 && timingSafeEqual(password, confirmPassword);
+    confirmPassword.length > 0 && password === confirmPassword;
   const passwordsMismatch =
-    confirmPassword.length > 0 && !timingSafeEqual(password, confirmPassword);
+    confirmPassword.length > 0 && password !== confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -125,7 +107,7 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!timingSafeEqual(password, confirmPassword)) {
+    if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
       return;
     }
@@ -139,22 +121,14 @@ export default function RegisterPage() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
+    const result = await useAuthStore.getState().signUp(email, password, fullName);
 
     setIsLoading(false);
 
-    if (error) {
-      const errorMsg = error.message.toLowerCase();
-      const statusCode =
-        (error as { status?: number; statusCode?: number }).status ||
-        (error as { status?: number; statusCode?: number }).statusCode;
+    if (!result.success) {
+      const errorMsg = (result.error ?? "").toLowerCase();
 
       if (
-        statusCode === 429 ||
         errorMsg.includes("rate limit") ||
         errorMsg.includes("over_email_send_rate_limit")
       ) {
@@ -175,16 +149,16 @@ export default function RegisterPage() {
       }
 
       if (errorMsg.includes("email") && !errorMsg.includes("already")) {
-        setEmailError(error.message);
+        setEmailError(result.error ?? "Invalid email");
       } else if (errorMsg.includes("password")) {
-        setPasswordError(error.message);
+        setPasswordError(result.error ?? "Invalid password");
       } else {
-        toast.error(error.message);
+        toast.error(result.error ?? "Failed to sign up");
       }
       return;
     }
 
-    toast.success("Account created successfully! Redirecting to login page...");
+    toast.success("Account created successfully! Please check your email to verify your account, then sign in.");
     setTimeout(() => {
       router.push("/auth/login");
       router.refresh();

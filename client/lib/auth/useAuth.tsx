@@ -19,6 +19,9 @@ interface AuthContextType {
   isAnalyst: boolean;
   isApproved: boolean;
   approvalStatus: string | null;
+  activeOrganizationId: string | null;
+  hasMultipleOrganizations: boolean;
+  switchOrganization: (organizationId: string) => Promise<void>;
 }
 
 export function useAuth(): AuthContextType {
@@ -36,21 +39,34 @@ export function useAuth(): AuthContextType {
     initializeAuth();
   }, []);
 
-  const isApproved = authStore.user?.account_status === "ACTIVE";
-  const approvalStatus = authStore.user?.account_status || null;
+  const profile = authStore.activeOrganizationId
+    ? authStore.user?.profiles.find(
+        (p) => p.organization_id === authStore.activeOrganizationId,
+      )
+    : authStore.user?.profiles.find(
+        (p) => p.account_status === "ACTIVE" && p.organization_id !== null,
+      ) ?? authStore.user?.profiles.find((p) => p.organization_id === null) ?? null;
+
+  const isApproved = profile?.account_status === "ACTIVE";
+  const approvalStatus = profile?.account_status ?? null;
+
+  const role = authStore.role;
 
   return {
     user: authStore.user,
     session: authStore.session,
-    role: authStore.role,
+    role,
     loading: authStore.loading,
     signOut: authStore.signOut,
     refreshSession: authStore.refreshSession,
     hasRole: authStore.hasRole,
-    isAdmin: authStore.isAdmin,
-    isAnalyst: authStore.isAnalyst,
+    isAdmin: role === "ORG_ADMIN" || role === "PLATFORM_ADMIN",
+    isAnalyst: role === "ORG_ANALYST",
     isApproved,
     approvalStatus,
+    activeOrganizationId: authStore.activeOrganizationId,
+    hasMultipleOrganizations: authStore.hasMultipleOrganizations(),
+    switchOrganization: authStore.switchOrganization,
   };
 }
 
@@ -78,7 +94,7 @@ export function withRole<T extends object>(
     }
 
     if (!hasRole(requiredRoles)) {
-      return null; // Will redirect
+      return null;
     }
 
     return <Component {...props} />;

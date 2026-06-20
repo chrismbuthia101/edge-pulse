@@ -46,6 +46,19 @@ export class OrganizationRepository extends BaseRepository<OrganizationRow> {
     }
   }
 
+  async findByIds(ids: string[]): Promise<OrganizationRow[]> {
+    try {
+      const { data, error } = await this.getClient()
+        .from(this.tableName)
+        .select("*")
+        .in("id", ids);
+      if (error) throw error;
+      return data ?? [];
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async getBilling(organizationId: string): Promise<BillingRow | null> {
     try {
       const { data, error } = await this.supabase

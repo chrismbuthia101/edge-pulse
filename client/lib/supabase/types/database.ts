@@ -12,10 +12,20 @@ import type { AuditLogEntry } from "@/lib/supabase/types/logs";
 export interface UserRow {
   id: string;
   full_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileRow {
+  id: string;
+  user_id: string;
+  organization_id: string | null;
   role: UserRole;
   account_status: AccountStatus;
-  organization_id: string | null;
-  created_at: string;
+  job_title: string | null;
+  joined_at: string;
   updated_at: string;
 }
 
@@ -125,11 +135,26 @@ export interface NotificationRow {
   created_at: string;
 }
 
+export interface ModelRow {
+  id: string;
+  organization_id: string;
+  model_id: string;
+  name: string;
+  version: string;
+  threshold: number;
+  detector_type: string | null;
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrganizationRow {
   id: string;
   name: string;
   slug: string;
   domain: string | null;
+  logo_url: string | null;
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -154,7 +179,7 @@ export interface Database {
     Tables: {
       users: {
         Row: UserRow;
-        Insert: Omit<UserRow, "created_at" | "updated_at">;
+        Insert: Pick<UserRow, "id" | "full_name"> & Partial<Pick<UserRow, "username" | "avatar_url">>;
         Update: Partial<Omit<UserRow, "id">>;
       };
       devices: {
@@ -255,6 +280,11 @@ export interface Database {
         Insert: Omit<AuditLogEntry, "id" | "timestamp">;
         Update: never;
       };
+      models: {
+        Row: ModelRow;
+        Insert: Omit<ModelRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<ModelRow, "id">>;
+      };
     };
   };
   organization: {
@@ -268,6 +298,11 @@ export interface Database {
         Row: BillingRow;
         Insert: Omit<BillingRow, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<BillingRow, "id" | "created_at">>;
+      };
+      profiles: {
+        Row: ProfileRow;
+        Insert: Omit<ProfileRow, "id" | "joined_at" | "updated_at">;
+        Update: Partial<Omit<ProfileRow, "id">>;
       };
     };
   };

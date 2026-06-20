@@ -260,7 +260,7 @@ export default function ExecutiveSummaryReport() {
       .slice(0, 5);
   }, [periodAlerts]);
 
-  if (!hasRole(["ADMINISTRATOR"])) {
+  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

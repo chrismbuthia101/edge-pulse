@@ -56,7 +56,7 @@ export interface Alert {
   detector_type: string | null;
   detection_window_start: string | null;
   detection_window_end: string | null;
-  explanation_json: ShapExplanation | null;
+  explanation_json: ShapExplanation;
   tags: string[] | null;
   source_ip: string | null;
   mitre_technique_id: string | null;

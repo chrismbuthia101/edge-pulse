@@ -74,10 +74,6 @@ export class AlertService {
     return this.repository.findById(id);
   }
 
-  async getRecentAlerts(limit = 50): Promise<Alert[]> {
-    return this.repository.getRecentAlerts(limit);
-  }
-
   async getAlertsPaginated(
     options: GetAlertsOptions & { page: number; limit: number },
   ): Promise<{
@@ -114,20 +110,8 @@ export class AlertService {
     };
   }
 
-  async getActiveAlerts(limit = 100): Promise<Alert[]> {
-    return this.repository.getActiveAlerts(limit);
-  }
-
-  async getPendingAlerts(): Promise<Alert[]> {
-    return this.repository.getPendingAlerts();
-  }
-
   async getCriticalAlerts(): Promise<Alert[]> {
     return this.repository.getCriticalAlerts();
-  }
-
-  async getAlertsNeedingAttention(): Promise<Alert[]> {
-    return this.repository.getAlertsNeedingAttention();
   }
 
   async searchAlerts(
@@ -170,20 +154,6 @@ export class AlertService {
 
   async getMetrics(): Promise<AlertMetrics> {
     return this.repository.getAlertMetrics();
-  }
-
-  async getAlertsByTimeRange(
-    startDate: string,
-    endDate: string,
-    groupBy: "hour" | "day" | "week" = "day",
-  ): Promise<{ timestamp: string; count: number }[]> {
-    return this.repository.getAlertsByTimeRange(startDate, endDate, groupBy);
-  }
-
-  async getTopCategories(
-    limit = 10,
-  ): Promise<{ category: string; count: number }[]> {
-    return this.repository.getTopCategories(limit);
   }
 
   subscribeToAlerts(callbacks: AlertSubscriptionOptions): void {

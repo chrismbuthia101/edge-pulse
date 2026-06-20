@@ -312,7 +312,7 @@ export default function DeviceDetailPage() {
           anomData.reverse().map((a) => ({
             created_at: a.created_at,
             score: a.score ?? 0,
-            label: a.label,
+            label: a.label ?? undefined,
           })),
         );
       } else {

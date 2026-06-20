@@ -1,3 +1,5 @@
+import type { ConnectivityState } from "@/lib/supabase/types/shared";
+
 export type FeatureType =
   | "statistical"
   | "temporal"
@@ -44,7 +46,7 @@ export interface AnomalyScore {
   threshold_applied: number;
   above_threshold: boolean;
   inference_latency_ms: number;
-  connectivity_state: "online" | "offline";
+  connectivity_state: ConnectivityState;
   organization_id: string;
   integrity_hash: string | null;
   created_at: string;

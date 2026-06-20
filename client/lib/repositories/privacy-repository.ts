@@ -2,7 +2,7 @@ import { BaseRepository } from "@/lib/repositories/base-repository";
 import type {
   PrivacySettings,
   PrivacySettingsUpdate,
-} from "@/lib/supabase/types/privacy-settings";
+} from "@/lib/supabase/types";
 
 export class PrivacyRepository extends BaseRepository<PrivacySettings> {
   constructor() {

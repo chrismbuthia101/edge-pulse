@@ -1,10 +1,11 @@
 import {
   BaseRepository,
+  type FilterValue,
   type QueryOptions,
   type PaginatedResult,
   type PaginationOptions,
 } from "@/lib/repositories/base-repository";
-import type { NotificationRow } from "@/lib/supabase/types/database";
+import type { NotificationRow } from "@/lib/supabase/types";
 
 export interface NotificationQueryOptions extends QueryOptions {
   userId?: string;
@@ -28,7 +29,7 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
   }
 
   private buildNotificationQuery(options: NotificationQueryOptions) {
-    const standardFilters: Record<string, unknown> = {};
+    const standardFilters: Record<string, FilterValue> = {};
 
     if (options.userId) standardFilters.user_id = options.userId;
     if (options.organizationId)
@@ -64,7 +65,7 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
         if (error) throw this.handleError(error);
         return (data ?? []) as unknown as NotificationRow[];
       },
-      options.cacheTTL,
+      { ttl: options.cacheTTL },
     );
   }
 
@@ -73,7 +74,7 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
   ): Promise<PaginatedResult<NotificationRow>> {
     const { page, limit, ...queryOptions } = options;
 
-    const filters: Record<string, unknown> = {};
+    const filters: Record<string, FilterValue> = {};
     if (queryOptions.userId) filters.user_id = queryOptions.userId;
     if (queryOptions.organizationId)
       filters.organization_id = queryOptions.organizationId;
@@ -127,7 +128,7 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
         if (error) throw this.handleError(error);
         return count ?? 0;
       },
-      15 * 1000,
+      { ttl: 15 * 1000 },
     );
   }
 
@@ -155,7 +156,7 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
   }
 
   subscribeToNotifications(
-    filters: Partial<NotificationQueryOptions> = {},
+    filters: Record<string, FilterValue> = {},
     callbacks: NotificationSubscriptionCallbacks = {},
   ): string {
     const channelName = `realtime-notifications-${Date.now()}`;

@@ -106,7 +106,7 @@ export default function InsightsPage() {
   }, []);
 
   useEffect(() => {
-    if (!initializedRef.current && hasRole(["ADMINISTRATOR"])) {
+    if (!initializedRef.current && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
       initializedRef.current = true;
       initAlerts();
       initDevices();
@@ -114,7 +114,7 @@ export default function InsightsPage() {
   }, [initAlerts, initDevices, hasRole]);
 
   useEffect(() => {
-    if (!loading && !hasRole(["ADMINISTRATOR"])) {
+    if (!loading && !hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
       router.push("/dashboard");
     }
   }, [hasRole, loading, router]);
@@ -240,7 +240,7 @@ export default function InsightsPage() {
     );
   }
 
-  if (!hasRole(["ADMINISTRATOR"])) {
+  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
     return (
       <div className="max-w-300 space-y-6">
         <div className="flex items-center justify-center h-64">

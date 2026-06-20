@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useUserStore } from "@/lib/stores/user-store";
-import { withRole } from "@/lib/auth/useAuth";
+import { useAuth } from "@/lib/auth/useAuth";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -31,7 +32,9 @@ const statusColors: Record<string, string> = {
     inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 };
 
-function UserManagementReport() {
+export default function UserManagementReport() {
+    const { hasRole, loading: authLoading } = useAuth();
+    const router = useRouter();
     const {
         users,
         loading,
@@ -47,8 +50,16 @@ function UserManagementReport() {
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
     useEffect(() => {
-        initialize();
-    }, [initialize]);
+        if (!authLoading && !hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+            router.push("/dashboard/reports");
+        }
+    }, [authLoading, hasRole, router]);
+
+    useEffect(() => {
+        if (hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+            initialize();
+        }
+    }, [initialize, hasRole]);
 
     const filteredUsers = users.filter((user) => {
         const matchesSearch =
@@ -344,4 +355,4 @@ function UserManagementReport() {
     );
 }
 
-export default withRole(UserManagementReport, ["ORG_ADMIN", "PLATFORM_ADMIN"]);
+
