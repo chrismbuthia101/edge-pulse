@@ -1,5 +1,5 @@
 -- ============================================================
--- EdgePulse Initial Administrator Setup
+-- EdgePulse Schema v3.1.0 — Platform Administrator Bootstrap
 -- Description: Bootstrap the first platform administrator.
 --   Platform admins oversee the entire infrastructure and are
 --   not associated with any single organization.
@@ -15,7 +15,8 @@ DECLARE
 BEGIN
     SELECT COUNT(*) INTO existing_admin_count
     FROM organization.profiles
-    WHERE role = 'PLATFORM_ADMIN' AND account_status = 'ACTIVE'
+    WHERE role = 'PLATFORM_ADMIN'::user_role 
+      AND account_status = 'ACTIVE'::account_status
       AND organization_id IS NULL;
 
     IF existing_admin_count > 0 THEN
@@ -41,10 +42,10 @@ BEGIN
     ON CONFLICT (id) DO NOTHING;
 
     INSERT INTO organization.profiles (user_id, organization_id, role, account_status)
-    VALUES (admin_user_id, NULL, 'PLATFORM_ADMIN', 'ACTIVE')
+    VALUES (admin_user_id, NULL, 'PLATFORM_ADMIN'::user_role, 'ACTIVE'::account_status)
     ON CONFLICT (user_id, organization_id) DO UPDATE
-        SET role = 'PLATFORM_ADMIN',
-            account_status = 'ACTIVE';
+        SET role = 'PLATFORM_ADMIN'::user_role,
+            account_status = 'ACTIVE'::account_status;
 
     RAISE NOTICE 'Administrator bootstrap completed for email: %', admin_email;
     RAISE NOTICE 'User ID: %', admin_user_id;
