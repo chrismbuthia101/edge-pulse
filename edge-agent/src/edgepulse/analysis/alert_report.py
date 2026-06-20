@@ -1,6 +1,6 @@
 from edgepulse.utils.log_handler import get_logger
 import uuid
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from datetime import datetime
 
 from edgepulse.models import SeverityLevel
@@ -43,7 +43,7 @@ class AlertReportBuilder:
             severity, anomaly_type, top_features
         )
 
-        report = {
+        report: Dict[str, Any] = {
             "alert_id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat(),
             "device_id": self.device_id,

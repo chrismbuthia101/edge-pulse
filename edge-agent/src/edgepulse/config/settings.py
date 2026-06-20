@@ -75,6 +75,7 @@ class AgentSettings(BaseSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     device_id: str = Field(

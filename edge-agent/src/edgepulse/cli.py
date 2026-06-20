@@ -36,16 +36,20 @@ def _init_environment() -> None:
 def _get_service_installer() -> Optional[ServiceManager]:
     if is_windows():
         try:
-            from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+            from edgepulse.platform.windows.windows_service.installer import (
+                ServiceInstaller as WindowsServiceInstaller,
+            )
 
-            return ServiceInstaller()
+            return WindowsServiceInstaller()
         except ImportError:
             return None
     if is_linux():
         try:
-            from edgepulse.platform.linux.linux_service.installer import ServiceInstaller
+            from edgepulse.platform.linux.linux_service.installer import (
+                ServiceInstaller as LinuxServiceInstaller,
+            )
 
-            return ServiceInstaller()
+            return LinuxServiceInstaller()
         except ImportError:
             return None
     return None
@@ -150,7 +154,7 @@ def _handle_run(args: argparse.Namespace) -> int:
     config_path = Path(args.config) if getattr(args, "config", None) else None
 
     try:
-        settings = AgentSettings(config_path=config_path)
+        settings = AgentSettings.model_validate({"config_path": config_path})
 
         if not enrolled and not settings.should_enable_sync():
             logging.getLogger(__name__).warning(

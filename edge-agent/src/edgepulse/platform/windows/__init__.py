@@ -1,4 +1,5 @@
 import sys
+from typing import Optional, Type
 
 WINDOWS_AVAILABLE = sys.platform == "win32"
 
@@ -11,16 +12,22 @@ if WINDOWS_AVAILABLE:
     except ImportError:
         WINDOWS_AVAILABLE = False
 
+EdgePulseWindowsService: Optional[Type[object]] = None
+ServiceInstaller: Optional[Type[object]] = None
+
 if WINDOWS_AVAILABLE:
     try:
-        from edgepulse.platform.windows.windows_service.service import EdgePulseWindowsService
-        from edgepulse.platform.windows.windows_service.installer import ServiceInstaller
+        from edgepulse.platform.windows.windows_service.service import (
+            EdgePulseWindowsService as _EdgePulseWindowsService,
+        )
+        from edgepulse.platform.windows.windows_service.installer import (
+            ServiceInstaller as _ServiceInstaller,
+        )
+
+        EdgePulseWindowsService = _EdgePulseWindowsService
+        ServiceInstaller = _ServiceInstaller
     except ImportError:
-        EdgePulseWindowsService = None
-        ServiceInstaller = None
-else:
-    EdgePulseWindowsService = None
-    ServiceInstaller = None
+        pass
 
 __all__ = [
     "EdgePulseWindowsService",
