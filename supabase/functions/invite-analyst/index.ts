@@ -65,27 +65,28 @@ serve(async (req: Request) => {
       );
     }
 
-    const { data: inviter, error: userError } = await supabase
-      .from("users")
-      .select("id, organization_id, role, account_status")
-      .eq("id", user.id)
-      .single();
+    const { data: inviterProfile, error: userError } = await supabase
+      .schema("organization")
+      .from("profiles")
+      .select("user_id, organization_id, role, account_status")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    if (userError || !inviter) {
+    if (userError || !inviterProfile) {
       return new Response(
         JSON.stringify({ success: false, error: "User not found" }),
         { status: 404, headers: corsHeaders },
       );
     }
 
-    if (inviter.role !== "ORG_ADMIN" || inviter.account_status !== "ACTIVE") {
+    if (inviterProfile.role !== "ORG_ADMIN" || inviterProfile.account_status !== "ACTIVE") {
       return new Response(
         JSON.stringify({ success: false, error: "Insufficient permissions" }),
         { status: 403, headers: corsHeaders },
       );
     }
 
-    if (!inviter.organization_id) {
+    if (!inviterProfile.organization_id) {
       return new Response(
         JSON.stringify({ success: false, error: "No organization associated" }),
         { status: 400, headers: corsHeaders },
@@ -133,7 +134,7 @@ serve(async (req: Request) => {
             redirectTo: `${appUrl}/accept-invite`,
             data: {
               invited_by: user.id,
-              organization_id: inviter.organization_id,
+              organization_id: inviterProfile.organization_id,
             },
           },
         });
@@ -188,19 +189,34 @@ serve(async (req: Request) => {
 
     const profileResults = await Promise.allSettled(
       authSucceeded.map(async (entry) => {
-        const { error: profileError } = await supabase.from("users").insert({
+        const { error: userInsertError } = await supabase.from("users").insert({
           id: entry.userId,
           full_name: entry.full_name,
-          role: "ORG_ANALYST",
-          account_status: "PENDING",
-          organization_id: inviter.organization_id,
         });
-        if (profileError) {
+        if (userInsertError) {
           await supabase.auth.admin.deleteUser(entry.userId).catch(() => {});
           return {
             email: entry.email,
             success: false as const,
-            error: "Failed to create user profile",
+            error: "Failed to create user identity",
+          };
+        }
+        const { error: profileInsertError } = await supabase
+          .schema("organization")
+          .from("profiles")
+          .insert({
+            user_id: entry.userId,
+            organization_id: inviterProfile.organization_id,
+            role: "ORG_ANALYST",
+            account_status: "PENDING",
+          });
+        if (profileInsertError) {
+          await supabase.from("users").delete().eq("id", entry.userId).catch(() => {});
+          await supabase.auth.admin.deleteUser(entry.userId).catch(() => {});
+          return {
+            email: entry.email,
+            success: false as const,
+            error: "Failed to create organization profile",
           };
         }
         return {
@@ -254,7 +270,7 @@ serve(async (req: Request) => {
             resource_id: entry.userId,
             new_values: { email: entry.email, role: "ORG_ANALYST" },
             severity: "INFO",
-            organization_id: inviter.organization_id,
+            organization_id: inviterProfile.organization_id,
           }),
       ),
     );

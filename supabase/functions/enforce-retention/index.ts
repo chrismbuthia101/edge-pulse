@@ -78,16 +78,17 @@ serve(async (req: Request) => {
       } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
       if (!authError && user) {
         const { data: caller } = await supabase
-          .from("users")
-          .select("id, role, organization_id")
-          .eq("id", user.id)
-          .single();
+          .schema("organization")
+          .from("profiles")
+          .select("user_id, role, organization_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
         if (
           caller &&
           (caller.role === "ORG_ADMIN" || caller.role === "PLATFORM_ADMIN")
         ) {
-          effectiveUserId = caller.id;
+          effectiveUserId = caller.user_id;
           effectiveOrgId = caller.organization_id;
         } else {
           return new Response(

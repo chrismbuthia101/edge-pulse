@@ -14,8 +14,9 @@ DECLARE
     existing_admin_count INTEGER;
 BEGIN
     SELECT COUNT(*) INTO existing_admin_count
-    FROM public.users
-    WHERE role = 'PLATFORM_ADMIN' AND account_status = 'ACTIVE';
+    FROM organization.profiles
+    WHERE role = 'PLATFORM_ADMIN' AND account_status = 'ACTIVE'
+      AND organization_id IS NULL;
 
     IF existing_admin_count > 0 THEN
         RAISE NOTICE 'Platform administrators already exist (%). Skipping bootstrap.', existing_admin_count;
@@ -31,19 +32,19 @@ BEGIN
     END IF;
 
     -- Platform admin has no organization_id — they oversee all orgs.
-    INSERT INTO public.users (id, full_name, role, account_status, organization_id)
+    INSERT INTO public.users (id, full_name)
     SELECT
         admin_user_id,
-        COALESCE(raw_user_meta_data->>'full_name', email),
-        'PLATFORM_ADMIN',
-        'ACTIVE',
-        NULL
+        COALESCE(raw_user_meta_data->>'full_name', email)
     FROM auth.users
     WHERE id = admin_user_id
-    ON CONFLICT (id) DO UPDATE
+    ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO organization.profiles (user_id, organization_id, role, account_status)
+    VALUES (admin_user_id, NULL, 'PLATFORM_ADMIN', 'ACTIVE')
+    ON CONFLICT (user_id, organization_id) DO UPDATE
         SET role = 'PLATFORM_ADMIN',
-            account_status = 'ACTIVE',
-            organization_id = NULL;
+            account_status = 'ACTIVE';
 
     RAISE NOTICE 'Administrator bootstrap completed for email: %', admin_email;
     RAISE NOTICE 'User ID: %', admin_user_id;
@@ -53,9 +54,10 @@ END $$;
 SELECT
     u.id,
     u.full_name,
-    u.role::TEXT,
-    u.account_status::TEXT,
-    u.organization_id
+    p.role::TEXT,
+    p.account_status::TEXT,
+    p.organization_id
 FROM public.users u
-WHERE u.role = 'PLATFORM_ADMIN'
+JOIN organization.profiles p ON p.user_id = u.id
+WHERE p.role = 'PLATFORM_ADMIN' AND p.organization_id IS NULL
 ORDER BY u.created_at;

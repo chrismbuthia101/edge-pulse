@@ -54,20 +54,21 @@ serve(async (req: Request) => {
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .select("id, role, account_status, organization_id")
-      .eq("id", user.id)
-      .single();
+    const { data: existingProfile, error: profileError } = await supabase
+      .schema("organization")
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    if (profileError || !profile) {
+    if (profileError) {
       return new Response(
         JSON.stringify({ success: false, error: "User not found" }),
         { status: 404, headers: corsHeaders },
       );
     }
 
-    if (profile.organization_id) {
+    if (existingProfile?.organization_id) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -168,22 +169,30 @@ serve(async (req: Request) => {
       }
     }
 
-    const { error: updateError } = await supabase
+    await supabase
       .from("users")
-      .update({
+      .insert({ id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" })
+      .onConflict("id")
+      .ignore()
+      .then();
+
+    const { error: profileInsertError } = await supabase
+      .schema("organization")
+      .from("profiles")
+      .insert({
+        user_id: user.id,
         organization_id: org.id,
         role: "ORG_ADMIN",
         account_status: "ACTIVE",
-      })
-      .eq("id", user.id);
+      });
 
-    if (updateError) {
+    if (profileInsertError) {
       await supabase
         .schema("organization")
         .from("organizations")
         .delete()
         .eq("id", org.id);
-      console.error("User update error:", updateError);
+      console.error("Profile insert error:", profileInsertError);
       return new Response(
         JSON.stringify({
           success: false,

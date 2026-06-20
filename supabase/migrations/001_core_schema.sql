@@ -77,20 +77,33 @@ CREATE TABLE organization.billing (
 
 CREATE INDEX idx_billing_org ON organization.billing (organization_id);
 
--- ─── Users (public) ────────────────────────────────────────────────────────────
 CREATE TABLE public.users (
     id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
-    role user_role NOT NULL DEFAULT 'ORG_ANALYST',
-    account_status account_status NOT NULL DEFAULT 'PENDING',
-    organization_id UUID REFERENCES organization.organizations (id) ON DELETE CASCADE,
+    username TEXT UNIQUE,
+    avatar_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW ()
 );
 
-CREATE INDEX idx_users_org_role ON public.users (organization_id, role);
+-- ─── Organization Profiles — per-org role, status, and job title ────────────
+CREATE TABLE organization.profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    organization_id UUID REFERENCES organization.organizations (id) ON DELETE CASCADE,
+    role user_role NOT NULL DEFAULT 'ORG_ANALYST',
+    account_status account_status NOT NULL DEFAULT 'PENDING',
+    job_title TEXT,
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
+    UNIQUE (user_id, organization_id)
+);
 
-CREATE INDEX idx_users_status ON public.users (account_status);
+CREATE INDEX idx_profiles_user ON organization.profiles (user_id);
+
+CREATE INDEX idx_profiles_org_role ON organization.profiles (organization_id, role);
+
+CREATE INDEX idx_profiles_status ON organization.profiles (account_status);
 
 -- ─── Devices (public) ──────────────────────────────────────────────────────────
 CREATE TABLE public.devices (
@@ -626,7 +639,7 @@ AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$;
 
--- Sync organization_id into auth.users raw_app_meta_data for JWT claims
+-- Sync active organization_id into auth.users raw_app_meta_data for JWT claims
 CREATE OR REPLACE FUNCTION internal.sync_organization_to_jwt()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = ''
@@ -636,13 +649,13 @@ BEGIN
     SET raw_app_meta_data =
         COALESCE(raw_app_meta_data, '{}'::jsonb) ||
         jsonb_build_object('organization_id', NEW.organization_id::TEXT)
-    WHERE id = NEW.id;
+    WHERE id = NEW.user_id;
     RETURN NEW;
 END;
 $$;
 
 CREATE TRIGGER tr_sync_organization_to_jwt
-    AFTER INSERT OR UPDATE OF organization_id ON public.users
+    AFTER INSERT OR UPDATE OF organization_id ON organization.profiles
     FOR EACH ROW EXECUTE FUNCTION internal.sync_organization_to_jwt();
 
 -- ─── updated_at triggers ────────────────────────────────────────────────────────
@@ -653,6 +666,10 @@ CREATE TRIGGER tr_organizations_updated
 
 CREATE TRIGGER tr_billing_updated
     BEFORE UPDATE ON organization.billing
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER tr_profiles_updated
+    BEFORE UPDATE ON organization.profiles
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 CREATE TRIGGER tr_users_updated

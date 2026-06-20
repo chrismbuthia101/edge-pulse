@@ -41,6 +41,8 @@ ALTER TABLE public.retention_settings ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE internal.models ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE organization.profiles ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- ─── Schema usage grants ───────────────────────────────────────────────────────
@@ -61,7 +63,7 @@ GRANT USAGE ON SCHEMA organization TO authenticated, service_role;
 CREATE OR REPLACE FUNCTION internal.current_organization_id()
 RETURNS UUID
 LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public, internal
+SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE
     v_org_id TEXT;
@@ -76,8 +78,9 @@ BEGIN
         NULL;
     END;
     SELECT organization_id::TEXT INTO v_org_id
-    FROM public.users
-    WHERE id = auth.uid() AND account_status = 'ACTIVE';
+    FROM organization.profiles
+    WHERE user_id = auth.uid() AND account_status = 'ACTIVE'
+    LIMIT 1;
     IF v_org_id IS NOT NULL THEN
         RETURN v_org_id::UUID;
     END IF;
@@ -88,16 +91,17 @@ $$;
 CREATE OR REPLACE FUNCTION internal.is_platform_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-SET search_path = pg_catalog, public, internal
+SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
 BEGIN
     SET LOCAL row_security = off;
     SELECT EXISTS (
-        SELECT 1 FROM public.users
-        WHERE id             = (SELECT auth.uid())
-          AND role           = 'PLATFORM_ADMIN'
-          AND account_status = 'ACTIVE'
+        SELECT 1 FROM organization.profiles
+        WHERE user_id          = (SELECT auth.uid())
+          AND role             = 'PLATFORM_ADMIN'
+          AND account_status   = 'ACTIVE'
+          AND organization_id IS NULL
     ) INTO result;
     RETURN result;
 END;
@@ -106,14 +110,14 @@ $$;
 CREATE OR REPLACE FUNCTION internal.is_org_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-SET search_path = pg_catalog, public, internal
+SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
 BEGIN
     SET LOCAL row_security = off;
     SELECT EXISTS (
-        SELECT 1 FROM public.users
-        WHERE id             = (SELECT auth.uid())
+        SELECT 1 FROM organization.profiles
+        WHERE user_id        = (SELECT auth.uid())
           AND role           = 'ORG_ADMIN'
           AND account_status = 'ACTIVE'
     ) INTO result;
@@ -145,16 +149,16 @@ GROUP BY o.id, o.name;
 
 CREATE VIEW internal.platform_user_summary AS
 SELECT
-    organization_id,
+    p.organization_id,
     COUNT(*)::INTEGER AS total_users,
-    COUNT(*) FILTER (WHERE role = 'ORG_ADMIN')::INTEGER       AS admins,
-    COUNT(*) FILTER (WHERE role = 'ORG_ANALYST')::INTEGER     AS analysts,
-    COUNT(*) FILTER (WHERE account_status = 'ACTIVE')::INTEGER  AS active,
-    COUNT(*) FILTER (WHERE account_status = 'PENDING')::INTEGER AS pending,
-    COUNT(*) FILTER (WHERE account_status = 'SUSPENDED')::INTEGER AS suspended
-FROM public.users
+    COUNT(*) FILTER (WHERE p.role = 'ORG_ADMIN')::INTEGER       AS admins,
+    COUNT(*) FILTER (WHERE p.role = 'ORG_ANALYST')::INTEGER     AS analysts,
+    COUNT(*) FILTER (WHERE p.account_status = 'ACTIVE')::INTEGER  AS active,
+    COUNT(*) FILTER (WHERE p.account_status = 'PENDING')::INTEGER AS pending,
+    COUNT(*) FILTER (WHERE p.account_status = 'SUSPENDED')::INTEGER AS suspended
+FROM organization.profiles p
 WHERE (SELECT internal.is_platform_admin())
-GROUP BY organization_id;
+GROUP BY p.organization_id;
 
 CREATE VIEW internal.platform_event_volume AS
 SELECT
@@ -253,7 +257,7 @@ $$;
 CREATE OR REPLACE FUNCTION internal.user_has_device_access(p_device_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-SET search_path = pg_catalog, public, internal
+SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE
     v_user_role    user_role;
@@ -264,8 +268,9 @@ BEGIN
     SET LOCAL row_security = off;
 
     SELECT role, organization_id INTO v_user_role, v_user_org
-    FROM public.users
-    WHERE id = auth.uid() AND account_status = 'ACTIVE';
+    FROM organization.profiles
+    WHERE user_id = auth.uid() AND account_status = 'ACTIVE'
+    LIMIT 1;
 
     IF v_user_role IS NULL THEN
         RETURN FALSE;
@@ -390,8 +395,14 @@ SELECT USING (
         (
             SELECT internal.is_org_admin ()
         )
-        AND organization_id = (
-            SELECT internal.current_organization_id ()
+        AND EXISTS (
+            SELECT 1
+            FROM organization.profiles
+            WHERE
+                user_id = public.users.id
+                AND organization_id = (
+                    SELECT internal.current_organization_id ()
+                )
         )
     );
 
@@ -399,17 +410,6 @@ CREATE POLICY "users: view self" ON public.users FOR
 SELECT USING (
         id = (
             SELECT auth.uid ()
-        )
-    );
-
-CREATE POLICY "org_admins: invite users" ON public.users FOR INSERT
-WITH
-    CHECK (
-        (
-            SELECT internal.is_org_admin ()
-        )
-        AND organization_id = (
-            SELECT internal.current_organization_id ()
         )
     );
 
@@ -426,8 +426,14 @@ UPDATE USING (
     (
         SELECT internal.is_org_admin ()
     )
-    AND organization_id = (
-        SELECT internal.current_organization_id ()
+    AND EXISTS (
+        SELECT 1
+        FROM organization.profiles
+        WHERE
+            user_id = public.users.id
+            AND organization_id = (
+                SELECT internal.current_organization_id ()
+            )
     )
 )
 WITH
@@ -435,8 +441,14 @@ WITH
         (
             SELECT internal.is_org_admin ()
         )
-        AND organization_id = (
-            SELECT internal.current_organization_id ()
+        AND EXISTS (
+            SELECT 1
+            FROM organization.profiles
+            WHERE
+                user_id = public.users.id
+                AND organization_id = (
+                    SELECT internal.current_organization_id ()
+                )
         )
     );
 
@@ -452,6 +464,30 @@ WITH
             SELECT auth.uid ()
         )
     );
+
+-- ── organization.profiles ──────────────────────────────────────────────────
+CREATE POLICY "users: view own profiles" ON organization.profiles FOR
+SELECT USING (
+        user_id = (
+            SELECT auth.uid ()
+        )
+    );
+
+CREATE POLICY "org_admins: view organization profiles" ON organization.profiles FOR
+SELECT USING (
+        (
+            SELECT internal.is_org_admin ()
+        )
+        AND organization_id = (
+            SELECT internal.current_organization_id ()
+        )
+    );
+
+CREATE POLICY "platform_admins: manage profiles" ON organization.profiles FOR ALL USING (
+    (
+        SELECT internal.is_platform_admin ()
+    )
+);
 
 -- ── devices ─────────────────────────────────────────────────────────────────
 CREATE POLICY "devices: read own" ON public.devices FOR
