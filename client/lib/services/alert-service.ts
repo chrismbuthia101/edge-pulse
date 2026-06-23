@@ -1,50 +1,9 @@
 import { AlertRepository } from "@/lib/repositories";
-import type {
-  AlertQueryOptions,
-  AlertMetrics,
-  AlertSubscriptionCallbacks,
-} from "@/lib/repositories/alert-repository";
-import type { Alert, AlertStatus } from "@/lib/supabase/types";
+import type { AlertQueryOptions, AlertMetrics } from "@/lib/types/alerts";
+import type { Alert, AlertStatus } from "@/lib/types/alerts";
+import type { Result } from "@/lib/types/shared";
 
-export interface GetAlertsOptions {
-  limit?: number;
-  deviceId?: string;
-  status?: AlertStatus | AlertStatus[];
-  severity?: string | string[];
-  category?: string;
-  search?: string;
-  startDate?: string;
-  endDate?: string;
-  unreadOnly?: boolean;
-}
-
-export interface UpdateAlertStatusOptions {
-  userId?: string;
-}
-
-export type BulkOperation =
-  | "acknowledge"
-  | "investigate"
-  | "close"
-  | "mark_read";
-
-export interface BulkUpdateAlertsOptions {
-  alertIds: string[];
-  operation: BulkOperation;
-  options?: { userId?: string };
-}
-
-export interface AlertSubscriptionOptions {
-  onNewAlert?: (alert: Alert) => void;
-  onAlertUpdated?: (alert: Alert) => void;
-  onAlertClosed?: (alert: Alert) => void;
-  onError?: (error: Error) => void;
-}
-
-const OPERATION_TO_STATUS: Record<
-  Exclude<BulkOperation, "mark_read">,
-  AlertStatus
-> = {
+const OPERATION_TO_STATUS: Record<string, AlertStatus> = {
   acknowledge: "ACKNOWLEDGED",
   investigate: "INVESTIGATED",
   close: "CLOSED",
@@ -55,28 +14,25 @@ export class AlertService {
 
   constructor(private readonly repository: AlertRepository) {}
 
-  async getAlerts(options: GetAlertsOptions = {}): Promise<Alert[]> {
-    return this.repository.findAlerts({
-      deviceId: options.deviceId,
-      status: options.status,
-      severity: options.severity as AlertQueryOptions["severity"],
-      category: options.category,
-      search: options.search,
-      startDate: options.startDate,
-      endDate: options.endDate,
-      unreadOnly: options.unreadOnly,
-      limit: options.limit,
+  public async getAlerts(options: AlertQueryOptions = {}): Promise<Result<Alert[]>> {
+    const { data, error } = await this.repository.findAlerts({
+      ...options,
       orderBy: { column: "created_at", ascending: false },
     });
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   }
 
-  async getAlertById(id: string): Promise<Alert | null> {
-    return this.repository.findById(id);
+  public async getAlertById(id: string): Promise<Result<Alert>> {
+    const { data, error } = await this.repository.findById(id);
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Alert not found" };
+    return { success: true, data };
   }
 
-  async getAlertsPaginated(
-    options: GetAlertsOptions & { page: number; limit: number },
-  ): Promise<{
+  public async getAlertsPaginated(
+    options: AlertQueryOptions & { page: number; limit: number },
+  ): Promise<Result<{
     alerts: Alert[];
     total: number;
     page: number;
@@ -84,84 +40,98 @@ export class AlertService {
     totalPages: number;
     hasNextPage: boolean;
     hasPreviousPage: boolean;
-  }> {
+  }>> {
     const result = await this.repository.findAlertsPaginated({
-      deviceId: options.deviceId,
-      status: options.status,
-      severity: options.severity as AlertQueryOptions["severity"],
-      category: options.category,
-      search: options.search,
-      startDate: options.startDate,
-      endDate: options.endDate,
-      unreadOnly: options.unreadOnly,
-      page: options.page,
-      limit: options.limit,
-      orderBy: { column: "created_at", ascending: false },
+      ...options,
+      orderBy: options.orderBy ?? { column: "created_at", ascending: false },
     });
+    if (result.error) return { success: false, error: result.error.message };
 
     return {
-      alerts: result.data,
-      total: result.count,
-      page: result.page,
-      limit: result.limit,
-      totalPages: result.totalPages,
-      hasNextPage: result.hasNextPage,
-      hasPreviousPage: result.hasPreviousPage,
+      success: true,
+      data: {
+        alerts: result.data,
+        total: result.count,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+        hasNextPage: result.hasNextPage,
+        hasPreviousPage: result.hasPreviousPage,
+      },
     };
   }
 
-  async getCriticalAlerts(): Promise<Alert[]> {
-    return this.repository.getCriticalAlerts();
+  public async getCriticalAlerts(): Promise<Result<Alert[]>> {
+    const { data, error } = await this.repository.getCriticalAlerts();
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   }
 
-  async searchAlerts(
-    query: string,
-    options: GetAlertsOptions = {},
-  ): Promise<Alert[]> {
-    return this.repository.searchAlerts(query, {
-      deviceId: options.deviceId,
-      status: options.status,
-      severity: options.severity as AlertQueryOptions["severity"],
-      limit: options.limit,
-      orderBy: { column: "created_at", ascending: false },
-    });
-  }
-
-  async updateAlertStatus(
+  public async updateAlertStatus(
     id: string,
     status: AlertStatus,
-    options: UpdateAlertStatusOptions = {},
-  ): Promise<Alert> {
-    return this.repository.updateAlertStatus(id, status, options.userId);
+    userId?: string,
+  ): Promise<Result<Alert>> {
+    const { data, error } = await this.repository.updateAlertStatus(id, status, userId);
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Alert not found" };
+    return { success: true, data };
   }
 
-  async markAlertRead(id: string): Promise<Alert> {
-    return this.repository.markAsRead(id);
+  public async markAlertRead(id: string): Promise<Result<Alert>> {
+    const { data, error } = await this.repository.markAsRead(id);
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Alert not found" };
+    return { success: true, data };
   }
 
-  async bulkUpdateAlerts(
-    params: BulkUpdateAlertsOptions,
-  ): Promise<Alert[] | void> {
-    const { alertIds, operation, options = {} } = params;
+  public async bulkMarkAlertsRead(ids: string[]): Promise<Result<void>> {
+    const { error } = await this.repository.markMultipleAsRead(ids);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: undefined };
+  }
 
+  public async bulkUpdateStatus(
+    ids: string[],
+    status: AlertStatus,
+    userId?: string,
+  ): Promise<Result<Alert[]>> {
+    const { data, error } = await this.repository.bulkUpdateStatus(ids, status, userId);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+  }
+
+  public async bulkUpdateAlerts(
+    alertIds: string[],
+    operation: "acknowledge" | "investigate" | "close" | "mark_read",
+    options?: { userId?: string },
+  ): Promise<Result<Alert[] | void>> {
     if (operation === "mark_read") {
-      return this.repository.markMultipleAsRead(alertIds);
+      return this.bulkMarkAlertsRead(alertIds);
     }
 
     const status = OPERATION_TO_STATUS[operation];
-    return this.repository.bulkUpdateStatus(alertIds, status, options.userId);
+    return this.bulkUpdateStatus(alertIds, status, options?.userId);
   }
 
-  async getMetrics(): Promise<AlertMetrics> {
-    return this.repository.getAlertMetrics();
+  public async getMetrics(): Promise<Result<AlertMetrics>> {
+    const { data, error } = await this.repository.getAlertMetrics();
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "No metrics available" };
+    return { success: true, data };
   }
 
-  subscribeToAlerts(callbacks: AlertSubscriptionOptions): void {
+  public subscribeToAlerts(callbacks: {
+    onNewAlert?: (alert: Alert) => void;
+    onAlertUpdated?: (alert: Alert) => void;
+    onAlertClosed?: (alert: Alert) => void;
+    onError?: (error: Error) => void;
+  }): () => void {
     if (this.channelName) {
       this.repository.unsubscribeFromAlerts(this.channelName);
     }
 
-    const repoCallbacks: AlertSubscriptionCallbacks = {
+    this.channelName = this.repository.subscribeToAlerts({}, {
       onInsert: (alert) => {
         callbacks.onNewAlert?.(alert);
       },
@@ -180,12 +150,18 @@ export class AlertService {
           err instanceof Error ? err : new Error(String(err)),
         );
       },
-    };
+    });
 
-    this.channelName = this.repository.subscribeToAlerts({}, repoCallbacks);
+    const currentChannel = this.channelName;
+    return () => {
+      if (this.channelName === currentChannel) {
+        this.repository.unsubscribeFromAlerts(this.channelName);
+        this.channelName = null;
+      }
+    };
   }
 
-  unsubscribeFromAlerts(): void {
+  public unsubscribeFromAlerts(): void {
     if (this.channelName) {
       this.repository.unsubscribeFromAlerts(this.channelName);
       this.channelName = null;

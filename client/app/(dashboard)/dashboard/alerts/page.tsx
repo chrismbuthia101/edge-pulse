@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { AlertStatus } from "@/lib/supabase/types";
+import type { AlertStatus } from "@/lib/types/alerts";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -111,7 +111,6 @@ const nextStatus: Record<AlertStatus, AlertStatus | null> = {
 type StatusFilter = "ALL" | "PENDING" | "IN_REVIEW" | "CLOSED";
 type SeverityFilter = "ALL" | "critical" | "high" | "medium" | "low";
 
-// Alert Rules modal content
 function AlertRulesModal({
   open,
   onClose,
@@ -203,7 +202,7 @@ export default function AlertsPage() {
     document.title = "Security Alerts - EdgePulse";
   }, []);
 
-  const { user, isAdmin } = useAuth();
+  const { user, hasRole } = useAuth();
   const { alerts, bulkAcknowledge } = useAlertStore();
   const { devices } = useDeviceStore();
   const initializedRef = useRef(false);
@@ -220,9 +219,9 @@ export default function AlertsPage() {
 
     initializedRef.current = true;
     lastUserIdRef.current = user.id;
-    const { refreshAlertsForUser } = useAlertStore.getState();
-    refreshAlertsForUser(user.id, isAdmin);
-  }, [user, isAdmin, alerts.length]);
+    const { fetchAlerts } = useAlertStore.getState();
+    fetchAlerts();
+  }, [user, alerts.length]);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("ALL");
@@ -409,7 +408,7 @@ export default function AlertsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && (
+          {hasRole(["ORG_ADMIN"]) && (
             <Button
               variant="outline"
               size="sm"
@@ -420,15 +419,17 @@ export default function AlertsPage() {
               Alert Rules
             </Button>
           )}
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={handleMarkAllReviewed}
-            disabled={bulkLoading || counts.PENDING === 0}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {bulkLoading ? "Updating..." : "Mark All Reviewed"}
-          </Button>
+          {hasRole(["ORG_ADMIN"]) && (
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={handleMarkAllReviewed}
+              disabled={bulkLoading || counts.PENDING === 0}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {bulkLoading ? "Updating..." : "Mark All Reviewed"}
+            </Button>
+          )}
         </div>
       </motion.div>
 
@@ -626,24 +627,26 @@ export default function AlertsPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button
-                        aria-label="Advance alert status"
-                        className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center hover:bg-green-500/20"
-                        onClick={(e) =>
-                          handleResolve(e, alert.id, alert.status)
-                        }
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      </button>
-                      <button
-                        aria-label="Dismiss alert"
-                        className="w-7 h-7 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-center hover:bg-destructive/20"
-                        onClick={(e) => handleDismiss(e, alert.id)}
-                      >
-                        <X className="h-3.5 w-3.5 text-destructive" />
-                      </button>
-                    </div>
+                    {hasRole(["ORG_ADMIN"]) && (
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          aria-label="Advance alert status"
+                          className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center hover:bg-green-500/20"
+                          onClick={(e) =>
+                            handleResolve(e, alert.id, alert.status)
+                          }
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        </button>
+                        <button
+                          aria-label="Dismiss alert"
+                          className="w-7 h-7 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-center hover:bg-destructive/20"
+                          onClick={(e) => handleDismiss(e, alert.id)}
+                        >
+                          <X className="h-3.5 w-3.5 text-destructive" />
+                        </button>
+                      </div>
+                    )}
                     <ChevronRight
                       className={cn(
                         "h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0",

@@ -33,18 +33,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
 import { InviteAnalystDialog } from "@/components/dashboard/invite-analyst-dialog";
+import { UserRole } from "@/lib/types/shared";
 
 const roleColors: Record<string, string> = {
   ORG_ADMIN: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -61,34 +53,25 @@ export default function UsersPage() {
   const { user: currentUser, hasRole } = useAuth();
   const {
     users,
-    pendingUsers,
-    loading,
     searchTerm,
     filterRole,
     filterStatus,
     initialize,
-    refreshPendingUsers,
     setSearchTerm,
     setFilterRole,
     setFilterStatus,
     toggleUserStatus,
-    approveUser,
-    rejectUser,
-    reapproveUser,
   } = useUserStore();
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState("");
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   useEffect(() => {
     initialize();
-    if (hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
-      refreshPendingUsers();
-    }
-  }, [initialize, refreshPendingUsers, hasRole]);
+  }, [initialize]);
 
-  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+  const status = useUserStore((s) => s.status);
+  const isLoading = status === "loading";
+
+  if (!hasRole(["ORG_ADMIN"])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -167,7 +150,7 @@ export default function UsersPage() {
               <div className="flex gap-2 flex-wrap">
                 <select
                   value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
+                  onChange={(e) => setFilterRole(e.target.value as UserRole | "all")}
                   className="px-3 py-2 border rounded-md bg-background text-sm"
                 >
                   <option value="all">All Roles</option>
@@ -176,7 +159,7 @@ export default function UsersPage() {
                 </select>
                 <select
                   value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
+                  onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "inactive")}
                   className="px-3 py-2 border rounded-md bg-background text-sm"
                 >
                   <option value="all">All Status</option>
@@ -188,63 +171,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* Pending Approvals Section */}
-      {pendingUsers.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-950/20 dark:border-orange-800/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-300">
-                <UserPlus className="h-5 w-5" />
-                Pending User Approvals ({pendingUsers.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {pendingUsers.map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-white dark:bg-orange-950/30 dark:border-orange-800/30"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-orange-900 dark:text-orange-200 truncate">
-                        {user.full_name}
-                      </div>
-                      <div className="text-xs text-orange-600 dark:text-orange-400">
-                        Applied {new Date(user.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={() => approveUser(user.id)}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        Approve as Analyst
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setSelectedUserId(user.id);
-                          setRejectionReason("");
-                          setRejectDialogOpen(true);
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -259,7 +185,7 @@ export default function UsersPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
               </div>
@@ -285,14 +211,12 @@ export default function UsersPage() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar>
-                            {/* No AvatarImage since we have no email/avatar URL */}
                             <AvatarFallback>
                               {getInitials(user.full_name)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
                             <div className="font-medium">{user.full_name}</div>
-                            {/* Show user_id truncated instead of email */}
                             <div className="text-xs text-muted-foreground font-mono">
                               {user.id.slice(0, 8)}…
                             </div>
@@ -355,14 +279,6 @@ export default function UsersPage() {
                                 </>
                               )}
                             </DropdownMenuItem>
-                            {user.account_status === "SUSPENDED" && (
-                              <DropdownMenuItem
-                                onClick={() => reapproveUser(user.id)}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                                Reactivate User
-                              </DropdownMenuItem>
-                            )}
                             {user.id !== currentUser?.id && (
                               <>
                                 <DropdownMenuSeparator />
@@ -383,45 +299,6 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* Rejection Reason Dialog */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject User</DialogTitle>
-            <DialogDescription>
-              Please provide a reason for rejecting this user.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="Enter rejection reason..."
-            value={rejectionReason}
-            onChange={(e) => setRejectionReason(e.target.value)}
-            rows={4}
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRejectDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (selectedUserId) {
-                  rejectUser(selectedUserId);
-                }
-                setRejectDialogOpen(false);
-                setSelectedUserId(null);
-                setRejectionReason("");
-              }}
-            >
-              Reject User
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <InviteAnalystDialog
         open={inviteDialogOpen}

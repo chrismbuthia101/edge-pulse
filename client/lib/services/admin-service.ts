@@ -1,8 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { OrganizationRepository } from "@/lib/repositories/organization-repository";
-import { DeviceRepository } from "@/lib/repositories/device-repository";
-import { UserRepository } from "@/lib/repositories/user-repository";
-import { AlertRepository } from "@/lib/repositories/alert-repository";
-import type { OrganizationRow } from "@/lib/supabase/types/database";
+import { AdminViewRepository } from "@/lib/repositories/admin-view-repository";
+import type { Organization } from "@/lib/types/organization";
 
 export interface PlatformOverview {
   totalOrganizations: number;
@@ -11,74 +10,112 @@ export interface PlatformOverview {
   totalAlerts: number;
 }
 
-export interface OrganizationWithCounts extends OrganizationRow {
+export interface OrganizationWithCounts extends Organization {
   user_count: number;
   device_count: number;
 }
 
 export class AdminService {
-  constructor(
-    private readonly organizationRepository: OrganizationRepository,
-    private readonly deviceRepository: DeviceRepository,
-    private readonly userRepository: UserRepository,
-    private readonly alertRepository: AlertRepository,
-  ) {}
+  private readonly organizationRepository: OrganizationRepository;
+  private readonly viewRepository: AdminViewRepository;
 
-  async getPlatformOverview(): Promise<PlatformOverview> {
-    const [totalOrganizations, totalDevices, totalUsers, totalAlerts] =
-      await Promise.all([
+  constructor(supabaseClient: SupabaseClient) {
+    this.organizationRepository = new OrganizationRepository(supabaseClient);
+    this.viewRepository = new AdminViewRepository(supabaseClient);
+  }
+
+  public async getPlatformOverview(): Promise<{
+    data: PlatformOverview | null;
+    error: Error | null;
+  }> {
+    try {
+      const [
+        { data: totalOrganizations },
+        deviceSummary,
+        userSummary,
+        alertSummary,
+      ] = await Promise.all([
         this.organizationRepository.countWhere(),
-        this.deviceRepository.countWhere(),
-        this.userRepository.countWhere(),
-        this.alertRepository.countWhere(),
+        this.viewRepository.getDeviceSummary(),
+        this.viewRepository.getUserSummary(),
+        this.viewRepository.getAlertSummary(),
       ]);
 
-    return { totalOrganizations, totalDevices, totalUsers, totalAlerts };
+      const totalDevices = deviceSummary.data.reduce(
+        (sum, o) => sum + o.total_devices,
+        0,
+      );
+      const totalUsers = userSummary.data.reduce(
+        (sum, o) => sum + o.total_users,
+        0,
+      );
+      const totalAlerts = alertSummary.data.reduce(
+        (sum, o) => sum + o.total_alerts,
+        0,
+      );
+
+      return {
+        data: {
+          totalOrganizations,
+          totalDevices,
+          totalUsers,
+          totalAlerts,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get platform overview"),
+      };
+    }
   }
 
-  async getOrganizationsWithCounts(): Promise<OrganizationWithCounts[]> {
-    const organizations =
-      await this.organizationRepository.findMany({
-        orderBy: { column: "created_at", ascending: false },
-      });
+  public async getOrganizationsWithCounts(): Promise<{
+    data: OrganizationWithCounts[] | null;
+    error: Error | null;
+  }> {
+    try {
+      const [orgResult, deviceSummary, userSummary] = await Promise.all([
+        this.organizationRepository.findMany({
+          orderBy: { column: "created_at", ascending: false },
+        }),
+        this.viewRepository.getDeviceSummary(),
+        this.viewRepository.getUserSummary(),
+      ]);
 
-    if (organizations.length === 0) return [];
+      const { data: organizations } = orgResult;
+      if (organizations.length === 0) return { data: [], error: null };
 
-    const orgIds = organizations.map((o) => o.id);
+      const deviceMap = new Map(
+        deviceSummary.data.map((o) => [o.organization_id, o.total_devices]),
+      );
+      const userMap = new Map(
+        userSummary.data.map((o) => [o.organization_id, o.total_users]),
+      );
 
-    const [userCounts, deviceCounts] = await Promise.all([
-      this.getCountsByOrg(this.userRepository, orgIds),
-      this.getCountsByOrg(this.deviceRepository, orgIds),
-    ]);
-
-    return organizations.map((org) => ({
-      ...org,
-      user_count: userCounts[org.id] ?? 0,
-      device_count: deviceCounts[org.id] ?? 0,
-    }));
-  }
-
-  private async getCountsByOrg(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    repo: any,
-    orgIds: string[],
-  ): Promise<Record<string, number>> {
-    const results: Record<string, number> = {};
-    const counts = await Promise.all(
-      orgIds.map((id) =>
-        repo.countWhere({ organization_id: id }).catch(() => 0),
-      ),
-    );
-    orgIds.forEach((id, i) => {
-      results[id] = counts[i];
-    });
-    return results;
+      return {
+        data: organizations.map((org) => ({
+          ...org,
+          device_count: deviceMap.get(org.id) ?? 0,
+          user_count: userMap.get(org.id) ?? 0,
+        })),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get organizations with counts"),
+      };
+    }
   }
 }
 
-export const adminService = new AdminService(
-  new OrganizationRepository(),
-  new DeviceRepository(),
-  new UserRepository(),
-  new AlertRepository(),
-);
+import { createClient } from "@/lib/config/client";
+export const adminService = new AdminService(createClient());

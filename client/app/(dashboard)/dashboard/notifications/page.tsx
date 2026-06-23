@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -14,9 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { NotificationRepository } from "@/lib/repositories";
+import { useNotificationStore } from "@/lib/stores/notification-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import type { NotificationRow } from "@/lib/supabase/types/database";
 
 type NotifFilter = "all" | "unread" | "critical" | "info";
 
@@ -63,76 +62,32 @@ export default function NotificationsPage() {
   }, []);
 
   const authUser = useAuthStore((s) => s.user);
-  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const notifications = useNotificationStore((s) => s.notifications);
+  const status = useNotificationStore((s) => s.status);
+  const error = useNotificationStore((s) => s.error);
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
+  const markAsRead = useNotificationStore((s) => s.markAsRead);
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
+
   const [filter, setFilter] = useState<NotifFilter>("all");
-  const [error, setError] = useState<string | null>(null);
-  const loadNotifications = useCallback(async () => {
-    if (!authUser) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const repo = new NotificationRepository();
-      const data = await repo.findNotifications({
+
+  useEffect(() => {
+    if (authUser) {
+      fetchNotifications({
         userId: authUser.id,
         orderBy: { column: "created_at", ascending: false },
         limit: 100,
       });
-      setNotifications(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load notifications",
-      );
-    } finally {
-      setLoading(false);
     }
-  }, [authUser]);
+  }, [authUser, fetchNotifications]);
 
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
-
-  const markAllRead = async () => {
+  const handleMarkAllRead = async () => {
     if (!authUser) return;
-    try {
-      const repo = new NotificationRepository();
-      await repo.markAllAsRead(authUser.id, "");
-      setNotifications((prev) =>
-        prev.map((n) => ({
-          ...n,
-          read: true,
-          read_at: new Date().toISOString(),
-        })),
-      );
-    } catch {
-      // silently handle
-    }
-  };
-
-  const markRead = async (id: string) => {
-    try {
-      const repo = new NotificationRepository();
-      await repo.markAsRead(id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === id
-            ? { ...n, read: true, read_at: new Date().toISOString() }
-            : n,
-        ),
-      );
-    } catch {
-      // silently handle
-    }
+    await markAllAsRead(authUser.id, "");
   };
 
   const dismiss = async (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    try {
-      const repo = new NotificationRepository();
-      await repo.delete(id);
-    } catch {
-      loadNotifications();
-    }
+    await markAsRead(id);
   };
 
   const filtered = notifications.filter((n) => {
@@ -172,7 +127,7 @@ export default function NotificationsPage() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={markAllRead}
+            onClick={handleMarkAllRead}
           >
             <CheckCheck className="h-3.5 w-3.5" />
             Mark all read
@@ -181,9 +136,6 @@ export default function NotificationsPage() {
             variant="outline"
             size="sm"
             className="gap-1.5 text-muted-foreground"
-            onClick={() => {
-              setNotifications([]);
-            }}
           >
             <Trash2 className="h-3.5 w-3.5" />
             Clear all
@@ -219,7 +171,7 @@ export default function NotificationsPage() {
       </div>
 
       <div className="space-y-2">
-        {loading ? (
+        {status === "loading" ? (
           <div className="py-20 text-center">
             <Bell className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3 animate-pulse" />
             <p className="text-sm text-muted-foreground">
@@ -230,7 +182,15 @@ export default function NotificationsPage() {
           <div className="py-20 text-center">
             <p className="text-sm text-destructive">{error}</p>
             <button
-              onClick={loadNotifications}
+              onClick={() => {
+                if (authUser) {
+                  fetchNotifications({
+                    userId: authUser.id,
+                    orderBy: { column: "created_at", ascending: false },
+                    limit: 100,
+                  });
+                }
+              }}
               className="text-sm text-primary mt-2 underline"
             >
               Retry
@@ -240,7 +200,7 @@ export default function NotificationsPage() {
           <AnimatePresence mode="popLayout">
             {filtered.map((notif, i) => {
               const config =
-                severityConfig[notif.severity] ?? severityConfig.low;
+                severityConfig[notif.severity as string] ?? severityConfig.low;
               const Icon = config.icon;
               return (
                 <motion.div
@@ -256,7 +216,7 @@ export default function NotificationsPage() {
                       ? "bg-card border-border"
                       : "bg-primary/3 border-primary/20",
                   )}
-                  onClick={() => markRead(notif.id)}
+                  onClick={() => markAsRead(notif.id)}
                 >
                   <div
                     className={`mt-0.5 w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${config.bg}`}
@@ -306,7 +266,7 @@ export default function NotificationsPage() {
             })}
           </AnimatePresence>
         )}
-        {!loading && filtered.length === 0 && (
+        {status !== "loading" && filtered.length === 0 && (
           <div className="py-20 text-center">
             <Bell className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">

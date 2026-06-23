@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   MonitorSmartphone,
@@ -24,73 +24,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth/useAuth";
-import { DeviceAssignmentRepository } from "@/lib/repositories/device-assignment-repository";
-import { toast } from "sonner";
-import type { DeviceAssignment } from "@/lib/repositories/device-assignment-repository";
-
-interface Device {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  ip: string;
-  is_active: boolean;
-}
-
-interface Analyst {
-  id: string;
-  full_name: string;
-  role: string;
-}
+import { useDeviceAssignmentStore } from "@/lib/stores/device-assignment-store";
 
 export function DeviceAssignmentManager() {
   const { hasRole, user } = useAuth();
-  const [assignments, setAssignments] = useState<DeviceAssignment[]>([]);
-  const [unassignedDevices, setUnassignedDevices] = useState<Device[]>([]);
-  const [analysts, setAnalysts] = useState<Analyst[]>([]);
-  const [loading, setLoading] = useState(true);
+  const assignments = useDeviceAssignmentStore((s) => s.assignments);
+  const unassignedDevices = useDeviceAssignmentStore((s) => s.unassignedDevices);
+  const analysts = useDeviceAssignmentStore((s) => s.analysts);
+  const assignmentStats = useDeviceAssignmentStore((s) => s.assignmentStats);
+  const loading = useDeviceAssignmentStore((s) => s.loading);
+  const loadData = useDeviceAssignmentStore((s) => s.loadData);
+  const assignDevice = useDeviceAssignmentStore((s) => s.assignDevice);
+  const removeAssignment = useDeviceAssignmentStore((s) => s.removeAssignment);
+  const reassignDevice = useDeviceAssignmentStore((s) => s.reassignDevice);
   const [searchTerm, setSearchTerm] = useState("");
-  const [assignmentStats, setAssignmentStats] = useState({
-    totalAssignments: 0,
-    activeAssignments: 0,
-    unassignedDevices: 0,
-    usersWithAssignments: 0,
-  });
 
-  const deviceAssignmentRepository = useMemo(
-    () => new DeviceAssignmentRepository(),
-    [],
-  );
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [assignmentsData, devicesData, analystsData, statsData] =
-        await Promise.all([
-          deviceAssignmentRepository.getAllActiveAssignments(),
-          deviceAssignmentRepository.getUnassignedDevices(),
-          deviceAssignmentRepository.getUsersForAssignment(),
-          deviceAssignmentRepository.getAssignmentStats(),
-        ]);
-
-      setAssignments(assignmentsData);
-      setUnassignedDevices(devicesData);
-      setAnalysts(analystsData);
-      setAssignmentStats(statsData);
-    } catch (error) {
-      console.error("Failed to load assignment data:", error);
-      toast.error("Failed to load device assignments");
-    } finally {
-      setLoading(false);
-    }
-  }, [deviceAssignmentRepository]);
+  const loadDataCallback = useCallback(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
-    if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) return;
-    loadData();
-  }, [hasRole, loadData]);
+    if (!hasRole(["ORG_ADMIN"])) return;
+    loadDataCallback();
+  }, [hasRole, loadDataCallback]);
 
-  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+  if (!hasRole(["ORG_ADMIN"])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -104,56 +62,22 @@ export function DeviceAssignmentManager() {
     );
   }
 
-  const assignDevice = async (deviceId: string, analystId: string) => {
+  const handleAssign = (deviceId: string, analystId: string) => {
     if (!user) return;
-    try {
-      await deviceAssignmentRepository.assignDeviceToUser(
-        deviceId,
-        analystId,
-        user.id,
-      );
-      toast.success("Device assigned successfully");
-      await loadData();
-    } catch (error) {
-      console.error("Failed to assign device:", error);
-      toast.error("Failed to assign device");
-    }
+    assignDevice(deviceId, analystId, user.id);
   };
 
-  const removeAssignment = async (deviceId: string, analystId: string) => {
-    if (!user) return;
-    try {
-      await deviceAssignmentRepository.removeDeviceAssignment(
-        deviceId,
-        analystId,
-      );
-      toast.success("Device assignment removed");
-      await loadData();
-    } catch (error) {
-      console.error("Failed to remove assignment:", error);
-      toast.error("Failed to remove assignment");
-    }
+  const handleRemove = (deviceId: string, analystId: string) => {
+    removeAssignment(deviceId, analystId);
   };
 
-  const reassignDevice = async (
+  const handleReassign = (
     deviceId: string,
     fromAnalystId: string,
     toAnalystId: string,
   ) => {
     if (!user) return;
-    try {
-      await deviceAssignmentRepository.reassignDevice(
-        deviceId,
-        fromAnalystId,
-        toAnalystId,
-        user.id,
-      );
-      toast.success("Device reassigned successfully");
-      await loadData();
-    } catch (error) {
-      console.error("Failed to reassign device:", error);
-      toast.error("Failed to reassign device");
-    }
+    reassignDevice(deviceId, fromAnalystId, toAnalystId, user.id);
   };
 
   const filteredUnassignedDevices = unassignedDevices.filter(
@@ -170,19 +94,12 @@ export function DeviceAssignmentManager() {
       assignment.user_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  if (!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold">Access Denied</h3>
-          <p className="text-muted-foreground">
-            You don&apos;t have permission to manage device assignments.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const stats = assignmentStats ?? {
+    totalAssignments: 0,
+    activeAssignments: 0,
+    unassignedDevices: 0,
+    usersWithAssignments: 0,
+  };
 
   if (loading) {
     return (
@@ -215,25 +132,25 @@ export function DeviceAssignmentManager() {
         {[
           {
             label: "Total Assignments",
-            value: assignmentStats.totalAssignments,
+            value: stats.totalAssignments,
             icon: MonitorSmartphone,
             color: "text-foreground",
           },
           {
             label: "Active Assignments",
-            value: assignmentStats.activeAssignments,
+            value: stats.activeAssignments,
             icon: CheckCircle,
             color: "text-green-600",
           },
           {
             label: "Unassigned Devices",
-            value: assignmentStats.unassignedDevices,
+            value: stats.unassignedDevices,
             icon: AlertCircle,
             color: "text-orange-600",
           },
           {
             label: "Users with Assignments",
-            value: assignmentStats.usersWithAssignments,
+            value: stats.usersWithAssignments,
             icon: User,
             color: "text-blue-600",
           },
@@ -281,7 +198,7 @@ export function DeviceAssignmentManager() {
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline" onClick={loadData}>
+              <Button variant="outline" onClick={loadDataCallback}>
                 <Filter className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
@@ -329,7 +246,7 @@ export function DeviceAssignmentManager() {
                       </div>
                       <Select
                         onValueChange={(analystId) => {
-                          if (analystId) assignDevice(device.id, analystId);
+                          if (analystId) handleAssign(device.id, analystId);
                         }}
                       >
                         <SelectTrigger className="w-36 shrink-0">
@@ -384,7 +301,6 @@ export function DeviceAssignmentManager() {
                           {assignment.device_name}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {/* show analyst_name only */}
                           Assigned to{" "}
                           {assignment.user_name || "Unknown analyst"}
                         </div>
@@ -400,7 +316,7 @@ export function DeviceAssignmentManager() {
                               newAnalystId &&
                               newAnalystId !== assignment.user_id
                             ) {
-                              reassignDevice(
+                              handleReassign(
                                 assignment.device_id,
                                 assignment.user_id,
                                 newAnalystId,
@@ -425,7 +341,7 @@ export function DeviceAssignmentManager() {
                           size="sm"
                           variant="destructive"
                           onClick={() =>
-                            removeAssignment(
+                            handleRemove(
                               assignment.device_id,
                               assignment.user_id,
                             )

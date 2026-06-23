@@ -1,13 +1,23 @@
-import {
-  BaseRepository,
-  type FilterValue,
-  type QueryOptions,
-  type PaginatedResult,
-  type PaginationOptions,
-} from "@/lib/repositories/base-repository";
-import type { NotificationRow } from "@/lib/supabase/types";
+import type { SupabaseClient, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { Notification } from "@/lib/types/notifications";
 
-export interface NotificationQueryOptions extends QueryOptions {
+type FilterValue = string | number | boolean | string[];
+
+export interface PaginatedResult<T> {
+  data: T[];
+  count: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface NotificationQueryOptions {
+  select?: string;
+  orderBy?: { column: string; ascending: boolean };
+  limit?: number;
+  offset?: number;
   userId?: string;
   organizationId?: string;
   read?: boolean;
@@ -18,130 +28,164 @@ export interface NotificationQueryOptions extends QueryOptions {
 }
 
 export interface NotificationSubscriptionCallbacks {
-  onInsert?: (notification: NotificationRow) => void;
-  onUpdate?: (notification: NotificationRow) => void;
+  onInsert?: (notification: Notification) => void;
+  onUpdate?: (notification: Notification) => void;
   onError?: (error: unknown) => void;
 }
 
-export class NotificationRepository extends BaseRepository<NotificationRow> {
-  constructor() {
-    super("notifications");
-  }
+export class NotificationRepository {
+  private readonly schema = "public";
+  private readonly tableName = "notifications";
 
-  private buildNotificationQuery(options: NotificationQueryOptions) {
-    const standardFilters: Record<string, FilterValue> = {};
-
-    if (options.userId) standardFilters.user_id = options.userId;
-    if (options.organizationId)
-      standardFilters.organization_id = options.organizationId;
-    if (options.read !== undefined) standardFilters.read = options.read;
-    if (options.severity) standardFilters.severity = options.severity;
-    if (options.category) standardFilters.category = options.category;
-
-    let query = this.buildQuery({
-      select: options.select ?? "*",
-      filters: standardFilters,
-      orderBy: options.orderBy ?? { column: "created_at", ascending: false },
-      limit: options.limit,
-      offset: options.offset,
-    });
-
-    if (options.startDate) query = query.gte("created_at", options.startDate);
-    if (options.endDate) query = query.lte("created_at", options.endDate);
-
-    return query;
-  }
+  constructor(private readonly supabaseClient: SupabaseClient) {}
 
   async findNotifications(
     options: NotificationQueryOptions = {},
-  ): Promise<NotificationRow[]> {
-    const cacheKey =
-      options.cacheKey ?? `notifications_${JSON.stringify(options)}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { data, error } = await this.buildNotificationQuery(options);
-        if (error) throw this.handleError(error);
-        return (data ?? []) as unknown as NotificationRow[];
-      },
-      { ttl: options.cacheTTL },
-    );
+  ): Promise<{ data: Notification[] | null; error: Error | null }> {
+    try {
+      const query = this.buildNotificationQuery(options);
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: (data ?? []) as unknown as Notification[], error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to find notifications"),
+      };
+    }
   }
 
-  async findNotificationsPaginated(
-    options: NotificationQueryOptions & PaginationOptions,
-  ): Promise<PaginatedResult<NotificationRow>> {
-    const { page, limit, ...queryOptions } = options;
+  public async findNotificationsPaginated(
+    options: NotificationQueryOptions & { page: number; limit: number },
+  ): Promise<{ data: PaginatedResult<Notification> | null; error: Error | null }> {
+    try {
+      const { page, limit, ...queryOptions } = options;
+      const offset = (page - 1) * limit;
 
-    const filters: Record<string, FilterValue> = {};
-    if (queryOptions.userId) filters.user_id = queryOptions.userId;
-    if (queryOptions.organizationId)
-      filters.organization_id = queryOptions.organizationId;
-    if (queryOptions.read !== undefined) filters.read = queryOptions.read;
-    if (queryOptions.severity) filters.severity = queryOptions.severity;
-    if (queryOptions.category) filters.category = queryOptions.category;
+      let countQuery = this.supabaseClient
+        .from(this.tableName)
+        .select("*", { count: "exact", head: true });
 
-    return this.findPaginated({
-      page,
-      limit,
-      select: queryOptions.select ?? "*",
-      filters,
-      orderBy: queryOptions.orderBy ?? {
-        column: "created_at",
-        ascending: false,
-      },
-      cacheTTL: queryOptions.cacheTTL,
-    });
+      if (queryOptions.userId) countQuery = countQuery.eq("user_id", queryOptions.userId);
+      if (queryOptions.organizationId) countQuery = countQuery.eq("organization_id", queryOptions.organizationId);
+      if (queryOptions.read !== undefined) countQuery = countQuery.eq("read", queryOptions.read);
+      if (queryOptions.severity) countQuery = countQuery.eq("severity", queryOptions.severity);
+      if (queryOptions.category) countQuery = countQuery.eq("category", queryOptions.category);
+
+      const { count, error: countError } = await countQuery;
+      if (countError) throw countError;
+
+      const filters: Record<string, FilterValue> = {};
+      if (queryOptions.userId) filters.user_id = queryOptions.userId;
+      if (queryOptions.organizationId) filters.organization_id = queryOptions.organizationId;
+      if (queryOptions.read !== undefined) filters.read = queryOptions.read;
+      if (queryOptions.severity) filters.severity = queryOptions.severity;
+      if (queryOptions.category) filters.category = queryOptions.category;
+
+      let query = this.supabaseClient
+        .from(this.tableName)
+        .select(queryOptions.select ?? "*")
+        .order(queryOptions.orderBy?.column ?? "created_at", {
+          ascending: queryOptions.orderBy?.ascending ?? false,
+        });
+
+      for (const [key, value] of Object.entries(filters)) {
+        if (Array.isArray(value)) {
+          query = query.in(key, value);
+        } else {
+          query = query.eq(key, value as string | number | boolean);
+        }
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const totalPages = Math.ceil((count ?? 0) / limit);
+
+      return {
+        data: {
+          data: (data ?? []) as unknown as Notification[],
+          count: count ?? 0,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to find notifications paginated"),
+      };
+    }
   }
 
-  async getUnreadNotifications(
+  public async getUnreadNotifications(
     userId: string,
     organizationId: string,
-  ): Promise<NotificationRow[]> {
+  ): Promise<{ data: Notification[] | null; error: Error | null }> {
     return this.findNotifications({
       userId,
       organizationId,
       read: false,
       orderBy: { column: "created_at", ascending: false },
       limit: 50,
-      cacheTTL: 30 * 1000,
     });
   }
 
-  async getUnreadCount(
+  public async getUnreadCount(
     userId: string,
     organizationId: string,
-  ): Promise<number> {
-    const cacheKey = `unread_count_${userId}_${organizationId}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { count, error } = await this.getClient()
-          .from(this.tableName)
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", userId)
-          .eq("organization_id", organizationId)
-          .eq("read", false);
-
-        if (error) throw this.handleError(error);
-        return count ?? 0;
-      },
-      { ttl: 15 * 1000 },
-    );
-  }
-
-  async markAsRead(id: string): Promise<NotificationRow> {
-    return this.update(id, {
-      read: true,
-      read_at: new Date().toISOString(),
-    } as Partial<NotificationRow>);
-  }
-
-  async markAllAsRead(userId: string, organizationId: string): Promise<void> {
+  ): Promise<{ data: number | null; error: Error | null }> {
     try {
-      const { error } = await this.getClient()
+      const { count, error } = await this.supabaseClient
+        .from(this.tableName)
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("organization_id", organizationId)
+        .eq("read", false);
+
+      if (error) throw error;
+      return { data: count ?? 0, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to get unread count"),
+      };
+    }
+  }
+
+  public async markAsRead(
+    id: string,
+  ): Promise<{ data: Notification | null; error: Error | null }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as unknown as Notification, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to mark as read"),
+      };
+    }
+  }
+
+  public async markAllAsRead(
+    userId: string,
+    organizationId: string,
+  ): Promise<{ data: null; error: Error | null }> {
+    try {
+      const { error } = await this.supabaseClient
         .from(this.tableName)
         .update({ read: true, read_at: new Date().toISOString() })
         .eq("user_id", userId)
@@ -149,42 +193,125 @@ export class NotificationRepository extends BaseRepository<NotificationRow> {
         .eq("read", false);
 
       if (error) throw error;
-      this.invalidateCache();
+      return { data: null, error: null };
     } catch (error) {
-      throw this.handleError(error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to mark all as read"),
+      };
     }
   }
 
-  subscribeToNotifications(
+  public subscribeToNotifications(
     filters: Record<string, FilterValue> = {},
     callbacks: NotificationSubscriptionCallbacks = {},
-  ): string {
-    const channelName = `realtime-notifications-${Date.now()}`;
+  ): { data: string | null; error: Error | null } {
+    try {
+      const channelName = `realtime-notifications-${Date.now()}`;
+      const filterString = this.buildFilterString(filters);
 
-    this.subscribe(channelName, filters, (payload) => {
-      try {
-        const p = payload as {
-          eventType: string;
-          new?: NotificationRow;
-          old?: NotificationRow;
-        };
-        switch (p.eventType) {
-          case "INSERT":
-            callbacks.onInsert?.(p.new!);
-            break;
-          case "UPDATE":
-            callbacks.onUpdate?.(p.new!);
-            break;
-        }
-      } catch (error) {
-        callbacks.onError?.(error);
-      }
-    });
+      this.supabaseClient
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: this.schema,
+            table: this.tableName,
+            filter: filterString,
+          },
+          (payload: RealtimePostgresChangesPayload<Notification>) => {
+            try {
+              const p = payload as {
+                eventType: string;
+                new?: Notification;
+                old?: Notification;
+              };
+              switch (p.eventType) {
+                case "INSERT":
+                  callbacks.onInsert?.(p.new!);
+                  break;
+                case "UPDATE":
+                  callbacks.onUpdate?.(p.new!);
+                  break;
+              }
+            } catch (error) {
+              callbacks.onError?.(error);
+            }
+          },
+        )
+        .subscribe();
 
-    return channelName;
+      return { data: channelName, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to subscribe to notifications"),
+      };
+    }
   }
 
-  unsubscribeFromNotifications(channelName: string): void {
-    this.unsubscribe(channelName);
+  public unsubscribeFromNotifications(
+    channelName: string,
+  ): { data: null; error: Error | null } {
+    try {
+      const channel = this.supabaseClient
+        .getChannels()
+        .find((c) => c.topic === channelName);
+      if (channel) {
+        this.supabaseClient.removeChannel(channel);
+      }
+      return { data: null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error("Failed to unsubscribe from notifications"),
+      };
+    }
+  }
+
+  private buildNotificationQuery(options: NotificationQueryOptions) {
+    const standardFilters: Record<string, FilterValue> = {};
+
+    if (options.userId) standardFilters.user_id = options.userId;
+    if (options.organizationId) standardFilters.organization_id = options.organizationId;
+    if (options.read !== undefined) standardFilters.read = options.read;
+    if (options.severity) standardFilters.severity = options.severity;
+    if (options.category) standardFilters.category = options.category;
+
+    let query = this.supabaseClient
+      .from(this.tableName)
+      .select(options.select ?? "*")
+      .order(options.orderBy?.column ?? "created_at", {
+        ascending: options.orderBy?.ascending ?? false,
+      });
+
+    for (const [key, value] of Object.entries(standardFilters)) {
+      if (Array.isArray(value)) {
+        query = query.in(key, value);
+      } else {
+        query = query.eq(key, value as string | number | boolean);
+      }
+    }
+
+    if (options.limit) query = query.limit(options.limit);
+    if (options.offset) query = query.range(options.offset, options.offset + (options.limit ?? 20) - 1);
+
+    if (options.startDate) query = query.gte("created_at", options.startDate);
+    if (options.endDate) query = query.lte("created_at", options.endDate);
+
+    return query;
+  }
+
+  private buildFilterString(filters: Record<string, FilterValue>): string {
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(filters)) {
+      if (Array.isArray(value)) {
+        parts.push(`${key}=in.(${value.join(",")})`);
+      } else {
+        parts.push(`${key}=eq.${value}`);
+      }
+    }
+    return parts.join(" and ");
   }
 }

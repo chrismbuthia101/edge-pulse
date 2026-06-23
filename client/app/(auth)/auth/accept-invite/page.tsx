@@ -59,7 +59,7 @@ export default function AcceptInvitePage() {
       }
 
       toast.success("Password set successfully! Redirecting to setup...");
-      setTimeout(() => router.push("/auth/setup-profile"), 1500);
+      setTimeout(() => router.push("/onboarding/setup-profile"), 1500);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to set password",

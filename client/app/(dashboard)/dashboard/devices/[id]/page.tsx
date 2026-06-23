@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -39,13 +39,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAlertStore } from "@/lib/stores/alert-store";
-import { TelemetryService } from "@/lib/services/telemetry-service";
-import {
-  AnomalyService,
-  anomalyRepository,
-} from "@/lib/services/anomaly-service";
-import { ResilienceService } from "@/lib/services/resilience-service";
-import { ResilienceRepository } from "@/lib/repositories/resilience-repository";
+import { useAnomalyStore } from "@/lib/stores/anomaly-store";
+import { useHealthStore } from "@/lib/stores/health-store";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -55,33 +50,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Device } from "@/lib/supabase/types";
-
-interface TelemetrySample {
-  collected_at: string;
-  cpu_percent: number;
-  ram_percent: number;
-}
+import type { Device } from "@/lib/types/devices";
+import type { TelemetrySample } from "@/lib/services/telemetry-service";
+import type { ConnectionMetrics } from "@/lib/repositories/resilience-repository";
 
 interface AnomalyPoint {
   created_at: string;
   score: number;
   label?: string;
-}
-
-interface ConnectionMetrics {
-  device_id: string;
-  device_name: string;
-  connection_state: "ONLINE" | "DEGRADED" | "OFFLINE" | "RECONNECTING";
-  signal_strength: number;
-  latency_ms: number;
-  packet_loss: number;
-  bandwidth_up: number;
-  bandwidth_down: number;
-  last_seen: string;
-  uptime_percentage: number;
-  reconnect_attempts: number;
-  queue_depth: number;
 }
 
 type DeviceState =
@@ -170,7 +146,6 @@ function DeviceTypeIcon({ type }: { type: string }) {
   return <MonitorSmartphone className="h-5 w-5" />;
 }
 
-// Mini sparkline using SVG
 function Sparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2)
     return <div className="h-12 bg-muted/30 rounded animate-pulse" />;
@@ -201,8 +176,6 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
     </svg>
   );
 }
-
-// ── IsolateModal ──────────────────────────────────────────────────────────────
 
 function IsolateModal({
   deviceName,
@@ -254,21 +227,15 @@ export default function DeviceDetailPage() {
   const [isolateOpen, setIsolateOpen] = useState(false);
   const [resilienceLoading, setResilienceLoading] = useState(false);
 
-  const resilienceService = useMemo(() => {
-    const resilienceRepository = new ResilienceRepository();
-    return new ResilienceService(resilienceRepository);
-  }, []);
-
   const [connectionMetrics, setConnectionMetrics] =
     useState<ConnectionMetrics | null>(null);
 
-  // Device alerts
   const deviceAlerts = useMemo(
     () => alerts.filter((a) => a.device_id === deviceId).slice(0, 10),
     [alerts, deviceId],
   );
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setSyncing(true);
     try {
       const storeDevice = storeDevices.find((d) => d.id === deviceId);
@@ -282,13 +249,13 @@ export default function DeviceDetailPage() {
         if (refreshedDevice) setDevice(refreshedDevice);
       }
 
-      const telemetryService = new TelemetryService();
-      const telData = await telemetryService.getLatestTelemetry(deviceId, 48);
+      const healthStore = useHealthStore.getState();
+      await healthStore.fetchTelemetry(deviceId, 48);
+      const deviceTelemetry = useHealthStore.getState().telemetry[deviceId];
 
-      if (telData && telData.length > 0) {
-        setTelemetry(telData.reverse());
+      if (deviceTelemetry && deviceTelemetry.length > 0) {
+        setTelemetry([...deviceTelemetry].reverse());
       } else {
-        // Fallback synthetic data so the chart is always meaningful
         const now = Date.now();
         setTelemetry(
           Array.from({ length: 24 }, (_, i) => ({
@@ -301,22 +268,19 @@ export default function DeviceDetailPage() {
         );
       }
 
-      const anomalyService = new AnomalyService(anomalyRepository);
-      const anomData = await anomalyService.getDeviceAnomalyHistory(
-        deviceId,
-        20,
-      );
+      const anomalyStore = useAnomalyStore.getState();
+      await anomalyStore.refreshScores(deviceId, 20);
+      const scores = useAnomalyStore.getState().scores;
 
-      if (anomData && anomData.length > 0) {
+      if (scores.length > 0) {
         setAnomalyPoints(
-          anomData.reverse().map((a) => ({
+          [...scores].reverse().map((a) => ({
             created_at: a.created_at,
             score: a.score ?? 0,
             label: a.label ?? undefined,
           })),
         );
       } else {
-        // Fallback synthetic data
         const now = Date.now();
         setAnomalyPoints(
           Array.from({ length: 12 }, (_, i) => ({
@@ -332,18 +296,15 @@ export default function DeviceDetailPage() {
       setLoading(false);
       setSyncing(false);
     }
-  };
+  }, [deviceId, storeDevices]);
 
   const fetchResilienceData = async () => {
     setResilienceLoading(true);
     try {
-      const metrics = await resilienceService.getConnectionMetrics({
-        timeRange: "1h" as const,
-      });
-      const deviceMetrics = metrics.find(
-        (m: ConnectionMetrics) => m.device_id === deviceId,
-      );
-      setConnectionMetrics(deviceMetrics || null);
+      const healthStore = useHealthStore.getState();
+      await healthStore.fetchConnectionMetrics(deviceId);
+      const metrics = useHealthStore.getState().connectionMetrics[deviceId];
+      setConnectionMetrics(metrics ?? null);
     } catch (err) {
       console.error("Error loading resilience data:", err);
     } finally {
@@ -353,8 +314,7 @@ export default function DeviceDetailPage() {
 
   useEffect(() => {
     if (deviceId) fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+  }, [deviceId, fetchData]);
 
   useEffect(() => {
     const storeDevice = storeDevices.find((d) => d.id === deviceId);
@@ -373,7 +333,6 @@ export default function DeviceDetailPage() {
     }
   };
 
-  // Derived values
   const syncQueueDepth = device?.sync_queue_depth ?? 0;
   const hashChainValid = true;
   const agentVersion = device?.agent_version ?? "—";
@@ -457,7 +416,6 @@ export default function DeviceDetailPage() {
         onConfirm={handleIsolateConfirm}
       />
 
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -527,7 +485,6 @@ export default function DeviceDetailPage() {
         </div>
       </motion.div>
 
-      {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -535,9 +492,7 @@ export default function DeviceDetailPage() {
           <TabsTrigger value="network">Network Health</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          {/* ── Agent Health Panel ─────────────────────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -611,9 +566,7 @@ export default function DeviceDetailPage() {
             </div>
           </motion.div>
 
-          {/* ── Main Grid: Performance + Baseline + Alerts ────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Agent Performance Metrics */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -633,7 +586,6 @@ export default function DeviceDetailPage() {
               </div>
 
               <div className="p-5 space-y-5">
-                {/* CPU */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
@@ -689,7 +641,6 @@ export default function DeviceDetailPage() {
                   </div>
                 </div>
 
-                {/* RAM */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
@@ -742,7 +693,6 @@ export default function DeviceDetailPage() {
                   </div>
                 </div>
 
-                {/* Summary row */}
                 <div className="grid grid-cols-4 gap-3 pt-2 border-t border-border">
                   {[
                     {
@@ -779,7 +729,6 @@ export default function DeviceDetailPage() {
               </div>
             </motion.div>
 
-            {/* Behavioral Baseline */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -793,7 +742,6 @@ export default function DeviceDetailPage() {
                 </h2>
               </div>
               <div className="p-5 space-y-4">
-                {/* Current score */}
                 <div
                   className={cn(
                     "p-3 rounded-xl border",
@@ -836,7 +784,6 @@ export default function DeviceDetailPage() {
                   </div>
                 </div>
 
-                {/* Baseline comparison */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
@@ -866,7 +813,6 @@ export default function DeviceDetailPage() {
                   </div>
                 </div>
 
-                {/* Historical anomaly bars */}
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
                     Anomaly History
@@ -894,7 +840,6 @@ export default function DeviceDetailPage() {
                   </div>
                 </div>
 
-                {/* Baseline status */}
                 <div
                   className={cn(
                     "flex items-center gap-2 text-xs p-2 rounded-lg",
@@ -924,7 +869,6 @@ export default function DeviceDetailPage() {
             </motion.div>
           </div>
 
-          {/* ── Active Alerts for this Device ─────────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1021,7 +965,6 @@ export default function DeviceDetailPage() {
             </div>
           </motion.div>
 
-          {/* ── Device Info Footer ─────────────────────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1067,7 +1010,6 @@ export default function DeviceDetailPage() {
           </motion.div>
         </TabsContent>
 
-        {/* Agent Health Tab */}
         <TabsContent value="health" className="space-y-6">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -1176,7 +1118,6 @@ export default function DeviceDetailPage() {
           </motion.div>
         </TabsContent>
 
-        {/* Network Health Tab */}
         <TabsContent value="network" className="space-y-6">
           <motion.div
             initial={{ opacity: 0, y: 12 }}

@@ -50,13 +50,13 @@ export default function UserManagementReport() {
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
     useEffect(() => {
-        if (!authLoading && !hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+        if (!authLoading && !hasRole(["ORG_ADMIN"])) {
             router.push("/dashboard/reports");
         }
     }, [authLoading, hasRole, router]);
 
     useEffect(() => {
-        if (hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"])) {
+        if (hasRole(["ORG_ADMIN"])) {
             initialize();
         }
     }, [initialize, hasRole]);
@@ -268,12 +268,12 @@ export default function UserManagementReport() {
                         />
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                        <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
+                        <select value={filterRole} onChange={(e) => setFilterRole(e.target.value as import("@/lib/types/shared").UserRole | "all") } className="px-3 py-2 border rounded-md bg-background text-sm">
                             <option value="all">All Roles</option>
                             <option value="ORG_ADMIN">Administrators</option>
                             <option value="ORG_ANALYST">Analysts</option>
                         </select>
-                        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 border rounded-md bg-background text-sm">
+                        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "inactive") } className="px-3 py-2 border rounded-md bg-background text-sm">
                             <option value="all">All Status</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>

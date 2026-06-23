@@ -3,17 +3,10 @@
 import { motion } from "framer-motion";
 import { HeartPulse, Cpu, MemoryStick, Zap, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMemo, useEffect, useState } from "react";
-import { useAlertStore } from "@/lib/stores/alert-store";
+import { useMemo, useEffect } from "react";
+import { useHealthStore } from "@/lib/stores/health-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
-import { TelemetryService } from "@/lib/services/telemetry-service";
-import {
-  AnomalyService,
-  anomalyRepository,
-} from "@/lib/services/anomaly-service";
-
-const telemetryService = new TelemetryService();
-const anomalyService = new AnomalyService(anomalyRepository);
+import { useAnomalyStore } from "@/lib/stores/anomaly-store";
 
 const statusConfig = {
   operational: {
@@ -43,100 +36,90 @@ const statusConfig = {
 };
 
 export function SystemHealth() {
-  const alerts = useAlertStore((s) => s.alerts);
+  const systemHealth = useHealthStore((s) => s.systemHealth);
+  const healthDevices = useHealthStore((s) => s.devices);
+  const healthStatus = useHealthStore((s) => s.status);
+  const refreshHealthData = useHealthStore((s) => s.refreshHealthData);
   const devices = useDeviceStore((s) => s.devices);
-  const [services, setServices] = useState<
-    Array<{ name: string; status: string; latency: string }>
-  >([]);
-  const [agentMetrics, setAgentMetrics] = useState({
-    cpuUsage: 0,
-    memoryUsage: 0,
-    inferenceLatency: 0,
-    scoringCpuUsage: 0,
-    uptime: 0,
-    lastScored: "No data",
-    modelVersion: "—",
-  });
-  const [loading, setLoading] = useState(true);
+  const refreshDevices = useDeviceStore((s) => s.refreshDevices);
+  const analytics = useAnomalyStore((s) => s.analytics);
+  const refreshAnalytics = useAnomalyStore((s) => s.refreshAnalytics);
 
   useEffect(() => {
-    const loadHealthData = async () => {
-      try {
-        setLoading(true);
+    refreshHealthData();
+    refreshDevices();
+    if (devices.length > 0) {
+      refreshAnalytics(devices[0].id, "24h");
+    }
+  }, [devices, refreshAnalytics, refreshDevices, refreshHealthData]);
 
-        const avgLatency =
-          alerts.length > 0
-            ? alerts.reduce((sum, a) => sum + a.inference_latency_ms, 0) /
-              alerts.length
-            : 0;
+  const loading = healthStatus === "loading" && !systemHealth;
 
-        let telemetryData = { avgCpu: 0, avgRam: 0 };
-        if (devices.length > 0) {
-          telemetryData = await telemetryService.getTelemetryMetrics(
-            devices[0].id,
+  const agentMetrics = useMemo(() => {
+    const avgCpu = healthDevices.length > 0
+      ? Math.round(healthDevices.reduce((sum, d) => sum + (d.cpu_usage ?? 0), 0) / healthDevices.length)
+      : 0;
+    const avgMemory = healthDevices.length > 0
+      ? Math.round(healthDevices.reduce((sum, d) => sum + (d.memory_usage ?? 0), 0) / healthDevices.length)
+      : 0;
+    const avgLatency = healthDevices.length > 0
+      ? Math.round(healthDevices.reduce((sum, d) => sum + (d.response_time_ms ?? 0), 0) / healthDevices.length)
+      : 0;
+    const cpuUsage = systemHealth?.avg_cpu_usage ?? avgCpu;
+    const memoryUsage = systemHealth?.avg_memory_usage ?? avgMemory;
+    const inferenceLatency = avgLatency;
+
+    const lastScored = analytics?.history?.[analytics.history.length - 1];
+    const lastScoredStr = lastScored
+      ? (() => {
+          const diffMins = Math.floor(
+            (new Date().getTime() - new Date(lastScored.scored_at).getTime()) / 60000,
           );
-        }
+          return diffMins < 60 ? `${diffMins}m ago` : `${Math.floor(diffMins / 60)}h ago`;
+        })()
+      : "No data";
 
-        let lastScored = "No data";
-        if (devices.length > 0) {
-          const latestScore = await anomalyService.getLatestAnomalyScore(
-            devices[0].id,
-          );
-          if (latestScore) {
-            const now = new Date();
-            const scored = new Date(latestScore.scored_at);
-            const diffMins = Math.floor(
-              (now.getTime() - scored.getTime()) / 60000,
-            );
-            lastScored =
-              diffMins < 60
-                ? `${diffMins}m ago`
-                : `${Math.floor(diffMins / 60)}h ago`;
-          }
-        }
+    const uptime = systemHealth?.system_uptime ?? (devices.length > 0 ? 99.9 : 0);
 
-        const derivedServices = [
-          {
-            name: "ML Inference Engine",
-            status: alerts.length > 0 ? "operational" : "unknown",
-            latency: `${Math.round(avgLatency)}ms`,
-          },
-          {
-            name: "Alert Pipeline",
-            status: alerts.length > 0 ? "operational" : "unknown",
-            latency: "—",
-          },
-          {
-            name: "Device Sync Service",
-            status: devices.length > 0 ? "operational" : "unknown",
-            latency: "—",
-          },
-          {
-            name: "Database Cluster",
-            status: "operational",
-            latency: "—",
-          },
-        ];
-        setServices(derivedServices);
-
-        setAgentMetrics({
-          cpuUsage: telemetryData.avgCpu,
-          memoryUsage: telemetryData.avgRam,
-          inferenceLatency: Math.round(avgLatency),
-          scoringCpuUsage: Math.min(telemetryData.avgCpu * 2.5, 15), // Estimate scoring CPU
-          uptime: devices.length > 0 ? 99.9 : 0, // Simplified uptime calculation
-          lastScored,
-          modelVersion: "—",
-        });
-      } catch (error) {
-        console.error("Failed to load health data:", error);
-      } finally {
-        setLoading(false);
-      }
+    return {
+      cpuUsage: Math.round(cpuUsage),
+      memoryUsage: Math.round(memoryUsage),
+      inferenceLatency,
+      scoringCpuUsage: Math.min(Math.round(cpuUsage * 0.5), 15),
+      uptime,
+      lastScored: lastScoredStr,
+      modelVersion: "—",
     };
+  }, [systemHealth, healthDevices, analytics, devices.length]);
 
-    loadHealthData();
-  }, [alerts, devices]);
+  const services = useMemo(() => {
+    const hasHealth = healthDevices.length > 0;
+    const hasDevices = devices.length > 0;
+    const hasAlerts = (systemHealth?.total_alerts ?? 0) > 0;
+
+    return [
+      {
+        name: "ML Inference Engine",
+        status: hasHealth ? "operational" : "unknown",
+        latency: `${agentMetrics.inferenceLatency}ms`,
+      },
+      {
+        name: "Alert Pipeline",
+        status: hasAlerts ? "operational" : "unknown",
+        latency: "—",
+      },
+      {
+        name: "Device Sync Service",
+        status: hasDevices ? "operational" : "unknown",
+        latency: "—",
+      },
+      {
+        name: "Database Cluster",
+        status: "operational",
+        latency: "—",
+      },
+    ];
+  }, [healthDevices.length, devices.length, systemHealth?.total_alerts, agentMetrics.inferenceLatency]);
 
   const operational = useMemo(
     () => services.filter((s) => s.status === "operational").length,

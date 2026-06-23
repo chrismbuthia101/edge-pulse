@@ -26,10 +26,11 @@ import { Switch } from "@/components/ui/switch";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/useAuth";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { useOrganizationStore } from "@/lib/stores/organization-store";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
-import { authService } from "@/lib/services/auth-service";
-import { organizationService } from "@/lib/services/organization-service";
+import { createClient } from "@/lib/config/client";
 
 type Tab =
   | "profile"
@@ -99,6 +100,8 @@ const notificationSettings = [
 
 export default function SettingsPage() {
   const { hasRole, user } = useAuth();
+  const authUser = useAuthStore((s) => s.user);
+  const profiles = useAuthStore((s) => s.profiles);
 
   useEffect(() => {
     document.title = "Settings - EdgePulse";
@@ -108,16 +111,20 @@ export default function SettingsPage() {
 
   const availableTabs = tabs.filter((tab) => {
     const adminOnlyTabs = ["agents", "enrollment", "topology", "organization"];
-    return !adminOnlyTabs.includes(tab.id) || hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]);
+    return !adminOnlyTabs.includes(tab.id) || hasRole(["ORG_ADMIN"]);
   });
 
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const [fullName, setFullName] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
-  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState(
+    (authUser?.user_metadata?.full_name as string) ?? "",
+  );
+  const [jobTitle, setJobTitle] = useState(
+    (authUser?.user_metadata?.job_title as string) ?? "Security Operations Lead",
+  );
+  const [email, setEmail] = useState(authUser?.email ?? "");
   const [org, setOrg] = useState("");
 
   const [notifToggles, setNotifToggles] = useState<Record<string, boolean>>(
@@ -129,10 +136,8 @@ export default function SettingsPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // Agent config
   const [telemetryInterval, setTelemetryInterval] = useState("30");
 
-  // Organization
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [orgDomain, setOrgDomain] = useState("");
@@ -141,54 +146,43 @@ export default function SettingsPage() {
   const [billingCycle, setBillingCycle] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
 
-  // Load current user
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await authService.getCurrentUser();
-        if (!currentUser) return;
+    const loadOrgData = async () => {
+      const orgId = profiles[0]?.organization_id;
+      if (!orgId) return;
 
-        setEmail(currentUser.email ?? "");
-        setFullName(currentUser.full_name ?? "");
-        setJobTitle(
-          (currentUser.user_metadata?.job_title as string) ??
-            "Security Operations Lead",
-        );
+      const orgStore = useOrganizationStore.getState();
+      await orgStore.fetchOrganizationById(orgId);
+      const currentOrg = useOrganizationStore.getState().currentOrganization;
+      if (currentOrg) {
+        setOrgName(currentOrg.name);
+        setOrgSlug(currentOrg.slug);
+        setOrgDomain(currentOrg.domain ?? "");
+        setOrgLogoUrl(currentOrg.logo_url ?? null);
+      }
 
-        const orgId = currentUser.organization_id;
-        if (orgId) {
-          const org = await organizationService.findById(orgId);
-          if (org) {
-            setOrgName(org.name);
-            setOrgSlug(org.slug);
-            setOrgDomain(org.domain ?? "");
-            setOrgLogoUrl(org.logo_url ?? null);
-          }
-          const billing = await organizationService.getBilling(orgId);
-          if (billing) {
-            setPlanTier(billing.plan_tier);
-            setBillingCycle(billing.billing_cycle ?? "");
-            setBillingEmail(billing.billing_email ?? "");
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load user settings:", error);
+      await orgStore.fetchBilling(orgId);
+      const billing = useOrganizationStore.getState().billing;
+      if (billing) {
+        setPlanTier(billing.plan_tier);
+        setBillingCycle(billing.billing_cycle ?? "");
+        setBillingEmail(billing.billing_email ?? "");
       }
     };
 
-    loadUser();
-  }, []);
+    loadOrgData();
+  }, [ profiles]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       if (activeTab === "profile") {
-        const { success, error } = await authService.updateCurrentUser({
+        const { error } = await createClient().auth.updateUser({
           email: email !== "" ? email : undefined,
-          user_metadata: { full_name: fullName, job_title: jobTitle },
+          data: { full_name: fullName, job_title: jobTitle },
         });
-        if (!success || error) {
-          throw new Error(error ?? "Failed to update profile");
+        if (error) {
+          throw new Error(error.message ?? "Failed to update profile");
         }
         toast.success("Profile updated successfully");
       } else if (activeTab === "security") {
@@ -197,38 +191,38 @@ export default function SettingsPage() {
           setSaving(false);
           return;
         }
-        const { success, error } = await authService.updateUserPassword(
+        const result = await useAuthStore.getState().updatePassword(
           newPassword,
         );
-        if (!success || error) {
-          throw new Error(error ?? "Failed to update password");
+        if (!result.success) {
+          throw new Error(result.error ?? "Failed to update password");
         }
         setCurrentPassword("");
         setNewPassword("");
         toast.success("Password updated successfully");
       } else if (activeTab === "notifications") {
-        const { success, error } = await authService.updateCurrentUser({
-          user_metadata: { notification_prefs: notifToggles },
+        const { error } = await createClient().auth.updateUser({
+          data: { notification_prefs: notifToggles },
         });
-        if (!success || error) {
-          throw new Error(error ?? "Failed to save notification preferences");
+        if (error) {
+          throw new Error(error.message ?? "Failed to save notification preferences");
         }
         toast.success("Notification preferences saved");
       } else if (activeTab === "agents") {
-        const { success, error } = await authService.updateCurrentUser({
-          user_metadata: { agent_telemetry_interval: parseInt(telemetryInterval) },
+        const { error } = await createClient().auth.updateUser({
+          data: { agent_telemetry_interval: parseInt(telemetryInterval) },
         });
-        if (!success || error) {
-          throw new Error(error ?? "Failed to save agent configuration");
+        if (error) {
+          throw new Error(error.message ?? "Failed to save agent configuration");
         }
         toast.success("Agent configuration saved");
       } else if (activeTab === "organization") {
-        const orgId = user?.organization_id;
+        const orgId = profiles[0]?.organization_id;
         if (!orgId) {
           throw new Error("Unable to determine organization");
         }
 
-        await organizationService.updateOrganization(orgId, {
+        await useOrganizationStore.getState().updateOrganizationData(orgId, {
           name: orgName,
           slug: orgSlug,
           domain: orgDomain || null,
@@ -249,7 +243,6 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-250 space-y-6">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -263,7 +256,6 @@ export default function SettingsPage() {
       </motion.div>
 
       <div className="flex gap-6">
-        {/* Sidebar nav */}
         <motion.div
           initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
@@ -290,7 +282,6 @@ export default function SettingsPage() {
           </nav>
         </motion.div>
 
-        {/* Content panel */}
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 8 }}
@@ -298,7 +289,6 @@ export default function SettingsPage() {
           transition={{ duration: 0.2 }}
           className="flex-1 bg-card border border-border rounded-2xl p-6"
         >
-          {/* ── Profile ── */}
           {activeTab === "profile" && (
             <div className="space-y-6">
               <div>
@@ -357,7 +347,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Notifications ── */}
           {activeTab === "notifications" && (
             <div className="space-y-6">
               <div>
@@ -397,7 +386,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Security ── */}
           {activeTab === "security" && (
             <div className="space-y-6">
               <div>
@@ -500,7 +488,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Appearance ── */}
           {activeTab === "appearance" && (
             <div className="space-y-6">
               <div>
@@ -574,8 +561,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Agent Config ── */}
-          {activeTab === "agents" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
+          {activeTab === "agents" && hasRole(["ORG_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -652,8 +638,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Device Enrollment ── */}
-          {activeTab === "enrollment" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
+          {activeTab === "enrollment" && hasRole(["ORG_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -667,8 +652,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Network Topology ── */}
-          {activeTab === "topology" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
+          {activeTab === "topology" && hasRole(["ORG_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -682,8 +666,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Organization ── */}
-          {activeTab === "organization" && hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) && (
+          {activeTab === "organization" && hasRole(["ORG_ADMIN"]) && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
@@ -778,7 +761,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Save button */}
           <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               Changes are saved to your account

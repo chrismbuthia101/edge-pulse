@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth/useAuth";
-import { organizationService } from "@/lib/services/organization-service";
+import { useOrganizationStore } from "@/lib/stores/organization-store";
 import { toast } from "sonner";
 
 const MAX_INVITES = 100;
@@ -109,7 +109,7 @@ export function InviteAnalystDialog({
       return null;
     }
 
-    const { result, error } = await organizationService.inviteAnalyst(
+    const { result, error } = await useOrganizationStore.getState().inviteAnalyst(
       body,
       token,
     );

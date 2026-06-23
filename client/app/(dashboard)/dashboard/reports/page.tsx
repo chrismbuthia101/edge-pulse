@@ -26,7 +26,10 @@ import { useAuth } from "@/lib/auth/useAuth";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { cn } from "@/lib/utils";
-import type { Alert } from "@/lib/supabase/types";
+import { createClient } from "@/lib/config/client";
+import type { Alert } from "@/lib/types/alerts";
+import type { DateRange } from "@/lib/types/reports";
+import { RANGE_OPTS, cutoffFromDateRange } from "@/lib/utils/report-utils";
 
 interface ReportCard {
   id: string;
@@ -56,8 +59,6 @@ interface Device {
   cpu_percent?: number;
   ram_percent?: number;
 }
-
-type DateRange = "7d" | "30d" | "90d" | "all";
 
 const categoryConfig = {
   security: {
@@ -217,7 +218,7 @@ const reportCards: ReportCard[] = [
 ];
 
 export default function ReportsPage() {
-  const { hasRole, loading, isAdmin } = useAuth();
+  const { hasRole, loading } = useAuth();
   const { alerts, initialize: initAlerts } = useAlertStore();
   const { devices, initialize: initDevices } = useDeviceStore();
   const initialized = useRef(false);
@@ -230,8 +231,8 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
-      initAlerts();
-      initDevices();
+      initAlerts(createClient());
+      initDevices(createClient());
     }
   }, [initAlerts, initDevices]);
 
@@ -240,13 +241,7 @@ export default function ReportsPage() {
     ...Array.from(new Set(reportCards.map((r) => r.category))),
   ];
 
-  const cutoff = useMemo(() => {
-    if (dateRange === "all") return new Date(0);
-    const d = new Date();
-    const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
-    d.setDate(d.getDate() - days);
-    return d;
-  }, [dateRange]);
+  const cutoff = useMemo(() => cutoffFromDateRange(dateRange), [dateRange]);
 
   const filteredAlerts = useMemo(
     () => alerts.filter((a) => new Date(a.created_at) >= cutoff),
@@ -305,16 +300,9 @@ export default function ReportsPage() {
     },
   ];
 
-  const RANGE_OPTS: { label: string; value: DateRange }[] = [
-    { label: "7 days", value: "7d" },
-    { label: "30 days", value: "30d" },
-    { label: "90 days", value: "90d" },
-    { label: "All time", value: "all" },
-  ];
-
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([initAlerts(), initDevices()]);
+    await Promise.all([initAlerts(createClient()), initDevices(createClient())]);
     setLastUpdated(new Date());
     setRefreshing(false);
   };
@@ -386,7 +374,7 @@ export default function ReportsPage() {
             Reports & Analytics
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isAdmin
+            {hasRole(["ORG_ADMIN"])
               ? "Full access — all reports available"
               : "Analyst access — operational reports"}
           </p>
@@ -435,10 +423,10 @@ export default function ReportsPage() {
             <span
               className={cn(
                 "w-1.5 h-1.5 rounded-full",
-                isAdmin ? "bg-violet-500" : "bg-primary",
+                hasRole(["ORG_ADMIN"]) ? "bg-violet-500" : "bg-primary",
               )}
             />
-            {isAdmin ? "Administrator" : "Analyst"}
+            {hasRole(["ORG_ADMIN"]) ? "Administrator" : "Analyst"}
           </Badge>
         </div>
       </motion.div>
@@ -622,9 +610,9 @@ export default function ReportsPage() {
                         <card.icon className={cn("h-6 w-6", card.color)} />
                       </div>
                       <div className="flex items-center gap-2">
-                        {!hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]) &&
+                        {!hasRole(["ORG_ADMIN"]) &&
                           card.roles.length === 1 &&
-                          (card.roles[0] === "ORG_ADMIN" || card.roles[0] === "PLATFORM_ADMIN") && (
+                          card.roles[0] === "ORG_ADMIN" && (
                             <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
                           )}
                         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -692,7 +680,7 @@ export default function ReportsPage() {
         </motion.div>
       )}
 
-      {!isAdmin && (
+      {!hasRole(["ORG_ADMIN"]) && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

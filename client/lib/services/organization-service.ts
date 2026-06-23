@@ -1,6 +1,8 @@
-import { OrganizationRepository } from "@/lib/repositories/organization-repository";
+import { OrganizationRepository, type CreateOrganizationData } from "@/lib/repositories/organization-repository";
 import { StorageRepository } from "@/lib/repositories/storage-repository";
-import type { OrganizationRow, BillingRow } from "@/lib/supabase/types/database";
+import { createClient } from "@/lib/config/client";
+import type { Organization, Billing } from "@/lib/types/organization";
+import type { Result } from "@/lib/types/shared";
 
 export interface SetupOrganizationData {
   org_name: string;
@@ -16,37 +18,89 @@ export interface InviteAnalystData {
 }
 
 export class OrganizationService {
-  constructor(
+  public constructor(
     private readonly repository: OrganizationRepository,
-    private readonly storageRepository: StorageRepository,
+    private readonly storageRepo: StorageRepository,
   ) {}
 
-  async findById(id: string): Promise<OrganizationRow | null> {
-    return this.repository.findById(id);
+  public async findById(id: string): Promise<Organization | null> {
+    const { data } = await this.repository.findById(id);
+    return data;
   }
 
-  async findByIds(ids: string[]): Promise<OrganizationRow[]> {
-    return this.repository.findByIds(ids);
+  public async findByIds(ids: string[]): Promise<Organization[]> {
+    const { data } = await this.repository.findByIds(ids);
+    return data;
   }
 
-  async findBySlug(slug: string): Promise<OrganizationRow | null> {
-    return this.repository.findBySlug(slug);
+  public async findBySlug(slug: string): Promise<Organization | null> {
+    const { data } = await this.repository.findBySlug(slug);
+    return data;
   }
 
-  async getBilling(
+  public async getBilling(
     organizationId: string,
-  ): Promise<BillingRow | null> {
-    return this.repository.getBilling(organizationId);
+  ): Promise<Billing | null> {
+    const { data } = await this.repository.getBilling(organizationId);
+    return data;
   }
 
-  async updateOrganization(
+  public async createOrganization(
+    data: CreateOrganizationData,
+  ): Promise<Result<Organization>> {
+    const { data: org, error } = await this.repository.create(data);
+    if (error) return { success: false, error: error.message };
+    if (!org) return { success: false, error: "Failed to create organization" };
+    return { success: true, data: org };
+  }
+
+  public async updateOrganization(
     organizationId: string,
-    data: Partial<OrganizationRow>,
-  ): Promise<OrganizationRow> {
-    return this.repository.update(organizationId, data);
+    data: Partial<Organization>,
+  ): Promise<Organization | null> {
+    const { data: updated } = await this.repository.update(organizationId, data);
+    return updated;
   }
 
-  async setupOrganization(
+  public async deleteOrganization(
+    id: string,
+  ): Promise<Result<void>> {
+    const { error } = await this.repository.delete(id);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: undefined };
+  }
+
+  public async uploadLogo(
+    organizationId: string,
+    file: File,
+  ): Promise<Result<string>> {
+    const path = `orgs/${organizationId}/logo`;
+    const { path: filePath, error: uploadError } = await this.storageRepo.uploadFile("org-logos", path, file);
+    if (uploadError) return { success: false, error: uploadError.message };
+    if (!filePath) return { success: false, error: "Failed to upload logo" };
+
+    const logoUrl = this.storageRepo.getPublicUrl("org-logos", filePath);
+
+    const updated = await this.repository.update(organizationId, {
+      logo_url: logoUrl,
+    });
+
+    if (!updated) return { success: false, error: "Organization not found" };
+
+    return { success: true, data: logoUrl };
+  }
+
+  public async deleteLogo(organizationId: string): Promise<Result<void>> {
+    const path = `orgs/${organizationId}/logo`;
+    const { error: deleteError } = await this.storageRepo.deleteFile("org-logos", path);
+    if (deleteError) return { success: false, error: deleteError.message };
+
+    await this.repository.update(organizationId, { logo_url: null });
+
+    return { success: true, data: undefined };
+  }
+
+  public async setupOrganization(
     data: SetupOrganizationData,
     accessToken: string,
   ): Promise<{ orgId?: string; error: string | null }> {
@@ -87,7 +141,7 @@ export class OrganizationService {
     }
   }
 
-  async inviteAnalyst(
+  public async inviteAnalyst(
     data: InviteAnalystData,
     accessToken: string,
   ): Promise<{ result: unknown; error: string | null }> {
@@ -132,6 +186,6 @@ export class OrganizationService {
 }
 
 export const organizationService = new OrganizationService(
-  new OrganizationRepository(),
-  new StorageRepository(),
+  new OrganizationRepository(createClient()),
+  new StorageRepository(createClient()),
 );

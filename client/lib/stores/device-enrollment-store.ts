@@ -1,147 +1,135 @@
 import { create } from "zustand";
-import { DeviceEnrollmentRepository } from "@/lib/repositories";
+import { devtools } from "zustand/middleware";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { DeviceEnrollmentService } from "@/lib/services/device-enrollment-service";
-import { AuthService } from "@/lib/services/auth-service";
-import { AuthRepository } from "@/lib/repositories/auth-repository";
-import type { EnrollmentTokenRow } from "@/lib/supabase/types";
+import { DeviceEnrollmentRepository } from "@/lib/repositories/device-enrollment-repository";
+import type { EnrollmentToken } from "@/lib/types/enrollment";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { createClient } from "@/lib/config/client";
 import { toast } from "sonner";
+
+type Status = "idle" | "loading" | "success" | "error";
+
+let deviceEnrollmentService = new DeviceEnrollmentService(
+  new DeviceEnrollmentRepository(createClient()),
+);
 
 interface TokenSecret {
   tokenId: string;
   secret: string;
 }
 
-interface DeviceEnrollmentStore {
-  tokens: EnrollmentTokenRow[];
-  tokenSecrets: Map<string, string>;
-  loading: boolean;
-  creating: boolean;
-  error: string | null;
+const initialState = {
+  tokens: [] as EnrollmentToken[],
+  tokenSecrets: {} as Record<string, string>,
+  organizationId: null as string | null,
+  status: "idle" as Status,
+  creating: false,
+  error: null as string | null,
+};
 
-  initialize: () => Promise<void>;
+type DeviceEnrollmentStore = typeof initialState & {
+  initialize: (supabaseClient: SupabaseClient) => void;
   refreshTokens: () => Promise<void>;
   createToken: (name: string, maxUses: number) => Promise<TokenSecret | null>;
   deleteToken: (tokenId: string) => Promise<void>;
-  setTokens: (tokens: EnrollmentTokenRow[]) => void;
+  setTokens: (tokens: EnrollmentToken[]) => void;
   clearError: () => void;
   getTokenSecret: (tokenId: string) => string | undefined;
-}
+};
 
-const deviceEnrollmentRepository = new DeviceEnrollmentRepository();
-const authRepository = new AuthRepository();
-const authService = new AuthService(authRepository);
-const deviceEnrollmentService = new DeviceEnrollmentService(
-  deviceEnrollmentRepository,
-  authService,
-);
+export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>()(
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>(
-  (set, get) => ({
-    tokens: [],
-    tokenSecrets: new Map(),
-    loading: false,
-    creating: false,
-    error: null,
+      initialize: (supabaseClient: SupabaseClient) => {
+        deviceEnrollmentService = new DeviceEnrollmentService(
+          new DeviceEnrollmentRepository(supabaseClient),
+        );
+      },
 
-    initialize: async () => {
-      try {
-        set({ loading: true, error: null });
-        const tokens = await deviceEnrollmentService.getTokens();
-        set({ tokens, loading: false });
-      } catch (err) {
-        const error =
-          err instanceof Error
-            ? err.message
-            : "Failed to load enrollment tokens";
-        set({ error, loading: false });
-      }
-    },
+      refreshTokens: async () => {
+        set({ status: "loading" });
+        const result = await deviceEnrollmentService.getTokens();
+        if (!result.success) {
+          set({ error: result.error, status: "error" });
+        } else {
+          set({ tokens: result.data, status: "success" });
+        }
+      },
 
-    refreshTokens: async () => {
-      try {
-        set({ loading: true, error: null });
-        const tokens = await deviceEnrollmentService.getTokens();
-        set({ tokens, loading: false });
-      } catch (err) {
-        const error =
-          err instanceof Error
-            ? err.message
-            : "Failed to refresh enrollment tokens";
-        set({ error, loading: false });
-      }
-    },
+      createToken: async (name: string, maxUses: number) => {
+        if (!name.trim()) {
+          toast.error("Please enter a token name");
+          return null;
+        }
 
-    createToken: async (name: string, maxUses: number) => {
-      if (!name.trim()) {
-        toast.error("Please enter a token name");
-        return null;
-      }
+        const authUser = useAuthStore.getState().user;
+        if (!authUser) {
+          toast.error("You must be signed in to create a token");
+          set({ creating: false });
+          return null;
+        }
 
-      set({ creating: true, error: null });
+        set({ creating: true, error: null });
 
-      try {
-        const userData = await authService.getCurrentUser();
-        const organizationId = userData?.organization_id ?? "";
-        const result = await deviceEnrollmentService.createToken({
+        const result = await deviceEnrollmentService.createToken(authUser.id, {
           name,
           maxUses,
-          organizationId,
+          organizationId: get().organizationId ?? undefined,
         });
 
-        // Store the secret so it can be shown/copied later
+        if (!result.success) {
+          set({ error: result.error });
+          toast.error(result.error);
+          set({ creating: false });
+          return null;
+        }
+
+        set((state) => ({
+          tokenSecrets: {
+            ...state.tokenSecrets,
+            [result.data.enrollmentToken.id]: result.data.token,
+          },
+        }));
+
+        await get().refreshTokens();
+
+        toast.success(`Token "${name}" created`);
+        set({ creating: false });
+        return {
+          tokenId: result.data.enrollmentToken.id,
+          secret: result.data.token,
+        };
+      },
+
+      deleteToken: async (tokenId: string) => {
+        set({ error: null });
+
+        const result = await deviceEnrollmentService.deleteToken(tokenId);
+
+        if (!result.success) {
+          set({ error: result.error });
+          toast.error(result.error);
+          return;
+        }
+
         set((state) => {
-          const newSecrets = new Map(state.tokenSecrets);
-          newSecrets.set(result.enrollmentToken.id, result.token);
-          return { tokenSecrets: newSecrets };
+          const rest = { ...state.tokenSecrets };
+          delete rest[tokenId];
+          return { tokenSecrets: rest };
         });
 
         await get().refreshTokens();
 
-        toast.success(
-          `Token "${name}" created. Secret token copied to clipboard.`,
-        );
-        return { tokenId: result.enrollmentToken.id, secret: result.token };
-      } catch (err) {
-        const error =
-          err instanceof Error
-            ? err.message
-            : "Failed to create enrollment token";
-        set({ error });
-        toast.error(error);
-        return null;
-      } finally {
-        set({ creating: false });
-      }
-    },
-
-    deleteToken: async (tokenId: string) => {
-      try {
-        set({ error: null });
-        await deviceEnrollmentService.deleteToken(tokenId);
-
-        // Update local state optimistically
-        set((state) => {
-          const newSecrets = new Map(state.tokenSecrets);
-          newSecrets.delete(tokenId);
-          return {
-            tokens: state.tokens.filter((t) => t.id !== tokenId),
-            tokenSecrets: newSecrets,
-          };
-        });
-
         toast.success("Enrollment token deleted");
-      } catch (err) {
-        const error =
-          err instanceof Error ? err.message : "Failed to delete token";
-        set({ error });
-        toast.error(error);
-      }
-    },
+      },
 
-    setTokens: (tokens) => set({ tokens }),
-    clearError: () => set({ error: null }),
-    getTokenSecret: (tokenId: string) => get().tokenSecrets.get(tokenId),
-  }),
+      setTokens: (tokens) => set({ tokens }),
+      clearError: () => set({ error: null }),
+      getTokenSecret: (tokenId: string) => get().tokenSecrets[tokenId],
+    }),
+    { name: "DeviceEnrollmentStore" },
+  ),
 );
-
-export { deviceEnrollmentService, deviceEnrollmentRepository };

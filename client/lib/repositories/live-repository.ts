@@ -1,6 +1,6 @@
-import { BaseRepository } from "@/lib/repositories/base-repository";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { Alert, TelemetryEvent } from "@/lib/supabase/types";
+import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
+import type { Alert } from "@/lib/types/alerts";
+import type { TelemetryEvent } from "@/lib/types/telemetry";
 
 export interface LiveQueryOptions {
   startDate?: string;
@@ -20,168 +20,227 @@ export interface LiveStats {
   blocked: number;
 }
 
-export class LiveRepository extends BaseRepository {
-  private alertChannel: RealtimeChannel | null = null;
-  private telemetryChannel: RealtimeChannel | null = null;
+export interface LiveSubscriptionHandles {
+  alertsChannel: string;
+  telemetryChannel: string;
+}
 
-  constructor() {
-    super("alerts");
-  }
+export class LiveRepository {
+  private readonly alertsTable = "alerts";
+  private readonly eventsTable = "events";
+  private readonly alertsSchema = "public";
+  private readonly telemetrySchema = "telemetry";
 
-  async getRecentAlerts(options: LiveQueryOptions = {}): Promise<Alert[]> {
-    let query = this.supabase
-      .from("alerts")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
+  constructor(private readonly supabaseClient: SupabaseClient) {}
 
-    if (options.startDate) query = query.gte("created_at", options.startDate);
-    if (options.endDate) query = query.lte("created_at", options.endDate);
-
-    const { data, error } = await query;
-    if (error) throw this.handleError(error);
-    return (data ?? []) as unknown as Alert[];
-  }
-
-  async getTodayStats(): Promise<LiveStats> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const { data: alerts } = await this.supabase
-      .from("alerts")
-      .select("severity, status, created_at")
-      .gte("created_at", today.toISOString());
-
-    if (!alerts) {
-      return { total: 0, critical: 0, blocked: 0 };
-    }
-
-    const total = alerts.length;
-    const critical = alerts.filter(
-      (a: { severity: string }) => a.severity === "critical",
-    ).length;
-    const blocked = alerts.filter(
-      (a: { status: string }) => a.status === "CLOSED",
-    ).length;
-
-    return { total, critical, blocked };
-  }
-
-  async getRecentTelemetry(
+  public async getRecentAlerts(
     options: LiveQueryOptions = {},
-  ): Promise<TelemetryEvent[]> {
-    let query = this.supabase
-      .schema("telemetry")
-      .from("events")
-      .select("*")
-      .order("collected_at", { ascending: false })
-      .limit(50);
+  ): Promise<{ data: Alert[]; error: Error | null }> {
+    try {
+      let query = this.supabaseClient
+        .from(this.alertsTable)
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-    if (options.startDate) query = query.gte("collected_at", options.startDate);
-    if (options.endDate) query = query.lte("collected_at", options.endDate);
+      if (options.startDate)
+        query = query.gte("created_at", options.startDate);
+      if (options.endDate)
+        query = query.lte("created_at", options.endDate);
 
-    const { data, error } = await query;
-    if (error) throw this.handleError(error);
-
-    if (!data || !Array.isArray(data)) {
-      return [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: (data ?? []) as unknown as Alert[], error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get recent alerts"),
+      };
     }
-
-    const telemetryData = data as unknown as TelemetryEvent[];
-    const deviceIds = [...new Set(telemetryData.map((t) => t.device_id))];
-
-    const { data: devices } = await this.supabase
-      .from("devices")
-      .select("id, name")
-      .in("id", deviceIds);
-
-    const deviceMap = new Map(
-      (devices ?? []).map((d: { id: string; name: string }) => [d.id, d.name]),
-    );
-
-    return telemetryData.map((telemetry) => ({
-      ...telemetry,
-      device_name: deviceMap.get(telemetry.device_id),
-    })) as unknown as TelemetryEvent[];
   }
 
-  subscribeToLiveFeed(callbacks: LiveSubscriptionCallbacks = {}): () => void {
-    const { onNewAlert, onNewTelemetry, onError, onStatusChange } = callbacks;
+  public async getTodayStats(): Promise<{ data: LiveStats; error: Error | null }> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    const alertChannelName = "live-feed-alerts";
-    const alertChannel = this.supabase
-      .channel(alertChannelName)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "alerts" },
-        (payload) => {
-          try {
-            if (payload.new) {
-              onNewAlert?.(payload.new as Alert);
+      const { data: alerts, error } = await this.supabaseClient
+        .from(this.alertsTable)
+        .select("severity, status, created_at")
+        .gte("created_at", today.toISOString());
+
+      if (error) throw error;
+
+      if (!alerts) {
+        return { data: { total: 0, critical: 0, blocked: 0 }, error: null };
+      }
+
+      const total = alerts.length;
+      const critical = alerts.filter(
+        (a: { severity: string }) => a.severity === "critical",
+      ).length;
+      const blocked = alerts.filter(
+        (a: { status: string }) => a.status === "CLOSED",
+      ).length;
+
+      return { data: { total, critical, blocked }, error: null };
+    } catch (error) {
+      return {
+        data: { total: 0, critical: 0, blocked: 0 },
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get today stats"),
+      };
+    }
+  }
+
+  public async getRecentTelemetry(
+    options: LiveQueryOptions = {},
+  ): Promise<{ data: TelemetryEvent[]; error: Error | null }> {
+    try {
+      let query = this.supabaseClient
+        .schema(this.telemetrySchema)
+        .from(this.eventsTable)
+        .select("*")
+        .order("collected_at", { ascending: false })
+        .limit(50);
+
+      if (options.startDate)
+        query = query.gte("collected_at", options.startDate);
+      if (options.endDate)
+        query = query.lte("collected_at", options.endDate);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (!data || !Array.isArray(data)) {
+        return { data: [], error: null };
+      }
+
+      const telemetryData = data as unknown as TelemetryEvent[];
+      const deviceIds = [
+        ...new Set(telemetryData.map((t) => t.device_id)),
+      ];
+
+      const { data: devices } = await this.supabaseClient
+        .from("devices")
+        .select("id, name")
+        .in("id", deviceIds);
+
+      const deviceMap = new Map(
+        (devices ?? []).map(
+          (d: { id: string; name: string }) => [d.id, d.name],
+        ),
+      );
+
+      return {
+        data: telemetryData.map((telemetry) => ({
+          ...telemetry,
+          device_name: deviceMap.get(telemetry.device_id),
+        })) as unknown as TelemetryEvent[],
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get recent telemetry"),
+      };
+    }
+  }
+
+  public subscribeToLiveFeed(
+    callbacks: LiveSubscriptionCallbacks = {},
+  ): { data: LiveSubscriptionHandles | null; error: Error | null } {
+    const { onNewAlert, onNewTelemetry, onError, onStatusChange } =
+      callbacks;
+
+    try {
+      const alertChannelName = "live-feed-alerts";
+      const alertChannel: RealtimeChannel = this.supabaseClient
+        .channel(alertChannelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: this.alertsSchema,
+            table: this.alertsTable,
+          },
+          (payload) => {
+            try {
+              if (payload.new) {
+                onNewAlert?.(payload.new as Alert);
+              }
+            } catch (error) {
+              onError?.(
+                error instanceof Error
+                  ? error
+                  : new Error("Unknown error in alert subscription"),
+              );
             }
-          } catch (error) {
-            onError?.(
-              error instanceof Error
-                ? error
-                : new Error("Unknown error in alert subscription"),
-            );
+          },
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED" || status === "CLOSED") {
+            onStatusChange?.(status === "SUBSCRIBED");
           }
-        },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED" || status === "CLOSED") {
-          onStatusChange?.(status === "SUBSCRIBED");
-        }
-      });
+        });
 
-    const telemetryChannelName = "live-feed-telemetry";
-    const telemetryChannel = this.supabase
-      .channel(telemetryChannelName)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "telemetry", table: "events" },
-        (payload) => {
-          try {
-            // NOTE: intentionally skip device name lookup — telemetry is
-            // high-frequency and a per-event DB query would be expensive.
-            // The UI displays device_id when device_name is absent.
-            if (payload.new) {
-              onNewTelemetry?.(payload.new as TelemetryEvent);
+      const telemetryChannelName = "live-feed-telemetry";
+      const telemetryChannel: RealtimeChannel = this.supabaseClient
+        .channel(telemetryChannelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: this.telemetrySchema,
+            table: this.eventsTable,
+          },
+          (payload) => {
+            try {
+              if (payload.new) {
+                onNewTelemetry?.(payload.new as TelemetryEvent);
+              }
+            } catch (error) {
+              onError?.(
+                error instanceof Error
+                  ? error
+                  : new Error("Unknown error in telemetry subscription"),
+              );
             }
-          } catch (error) {
-            onError?.(
-              error instanceof Error
-                ? error
-                : new Error("Unknown error in telemetry subscription"),
-            );
-          }
+          },
+        )
+        .subscribe();
+
+      return {
+        data: {
+          alertsChannel: alertChannel.topic,
+          telemetryChannel: telemetryChannel.topic,
         },
-      )
-      .subscribe();
-
-    this.alertChannel = alertChannel;
-    this.telemetryChannel = telemetryChannel;
-
-    return () => {
-      this.supabase.removeChannel(alertChannel);
-      this.supabase.removeChannel(telemetryChannel);
-      this.alertChannel = null;
-      this.telemetryChannel = null;
-    };
-  }
-
-  unsubscribeFromLiveFeed(): void {
-    if (this.alertChannel) {
-      this.supabase.removeChannel(this.alertChannel);
-      this.alertChannel = null;
-    }
-    if (this.telemetryChannel) {
-      this.supabase.removeChannel(this.telemetryChannel);
-      this.telemetryChannel = null;
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to subscribe to live feed"),
+      };
     }
   }
 
-  isSubscribed(): boolean {
-    return !!(this.alertChannel && this.telemetryChannel);
+  public unsubscribeFromLiveFeed(handles: LiveSubscriptionHandles): void {
+    const channels = this.supabaseClient.getChannels();
+    for (const handle of Object.values(handles)) {
+      const channel = channels.find((c) => c.topic === handle);
+      if (channel) this.supabaseClient.removeChannel(channel);
+    }
   }
 }

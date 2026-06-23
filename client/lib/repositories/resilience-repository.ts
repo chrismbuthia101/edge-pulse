@@ -1,7 +1,4 @@
-import {
-  BaseRepository,
-  type QueryOptions,
-} from "@/lib/repositories/base-repository";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ConnectionMetrics {
   device_id: string;
@@ -46,14 +43,424 @@ export interface OfflineEfficiencyMetrics {
   };
 }
 
-export interface ResilienceQueryOptions extends QueryOptions {
+export interface ResilienceQueryOptions {
+  select?: string;
+  orderBy?: { column: string; ascending: boolean };
+  limit?: number;
+  offset?: number;
   deviceId?: string;
   timeRange?: "5m" | "1h" | "24h" | "7d";
 }
 
-export class ResilienceRepository extends BaseRepository {
-  constructor() {
-    super("devices");
+export class ResilienceRepository {
+  constructor(private readonly supabaseClient: SupabaseClient) {}
+
+  public async getConnectionMetrics(): Promise<{
+    data: ConnectionMetrics[] | null;
+    error: Error | null;
+  }> {
+    try {
+      const { data: devices, error: devicesError } = await this.supabaseClient
+        .from("devices")
+        .select(
+          "id, name, status, last_seen, sync_queue_depth, cpu_percent, ram_percent, actively_reporting",
+        )
+        .eq("is_active", true)
+        .order("last_seen", { ascending: false });
+
+      if (devicesError) throw devicesError;
+
+      const { data: syncQueueData, error: syncError } =
+        await this.supabaseClient
+          .schema("internal")
+          .from("sync_queue")
+          .select("device_id, status, created_at, attempts")
+          .in("status", ["PENDING", "FAILED"]);
+
+      if (syncError) throw syncError;
+
+      const { data: healthSnapshots, error: healthError } =
+        await this.supabaseClient
+          .schema("telemetry")
+          .from("device_health")
+          .select("device_id, uptime_percentage, response_time_ms, created_at")
+          .order("created_at", { ascending: false })
+          .limit(1000);
+
+      if (healthError) throw healthError;
+
+      const syncQueueByDevice = new Map<
+        string,
+        { pending: number; failed: number; attempts: number }
+      >();
+      for (const item of syncQueueData ?? []) {
+        const existing = syncQueueByDevice.get(item.device_id) ?? {
+          pending: 0,
+          failed: 0,
+          attempts: 0,
+        };
+        if (item.status === "PENDING") existing.pending++;
+        if (item.status === "FAILED") existing.failed++;
+        existing.attempts += item.attempts || 0;
+        syncQueueByDevice.set(item.device_id, existing);
+      }
+
+      const healthByDevice = new Map<
+        string,
+        { uptime: number; latency: number }
+      >();
+      for (const snapshot of healthSnapshots ?? []) {
+        const existing = healthByDevice.get(snapshot.device_id);
+        if (!existing) {
+          healthByDevice.set(snapshot.device_id, {
+            uptime: snapshot.uptime_percentage || 0,
+            latency: snapshot.response_time_ms || 0,
+          });
+        }
+      }
+
+      const now = new Date();
+      const metrics: ConnectionMetrics[] = (devices ?? []).map(
+        (device: {
+          id: string;
+          name: string;
+          status: string;
+          last_seen: string;
+          sync_queue_depth: number;
+          actively_reporting: boolean;
+        }) => {
+          const syncInfo = syncQueueByDevice.get(device.id) ?? {
+            pending: 0,
+            failed: 0,
+            attempts: 0,
+          };
+          const healthInfo = healthByDevice.get(device.id) ?? {
+            uptime: 95,
+            latency: 50,
+          };
+
+          const lastSeen = new Date(device.last_seen);
+          const minutesSinceLastSeen =
+            (now.getTime() - lastSeen.getTime()) / (1000 * 60);
+
+          let connectionState:
+            | "ONLINE"
+            | "DEGRADED"
+            | "OFFLINE"
+            | "RECONNECTING" = "ONLINE";
+          if (device.status === "offline" || device.status === "gone_silent") {
+            connectionState = "OFFLINE";
+          } else if (device.status === "isolated") {
+            connectionState = "OFFLINE";
+          } else if (minutesSinceLastSeen > 30) {
+            connectionState = "DEGRADED";
+          } else if (!device.actively_reporting && minutesSinceLastSeen > 5) {
+            connectionState = "DEGRADED";
+          }
+
+          const signalStrength =
+            connectionState === "ONLINE"
+              ? 85
+              : connectionState === "DEGRADED"
+                ? 60
+                : 0;
+
+          const latency =
+            healthInfo.latency || (connectionState === "ONLINE" ? 45 : 200);
+
+          const packetLoss =
+            connectionState === "ONLINE"
+              ? 0.5
+              : connectionState === "DEGRADED"
+                ? 2.5
+                : 0;
+
+          return {
+            device_id: device.id,
+            device_name: device.name,
+            connection_state: connectionState,
+            signal_strength: signalStrength,
+            latency_ms: latency,
+            packet_loss: packetLoss,
+            bandwidth_up: connectionState === "ONLINE" ? 50 : 0,
+            bandwidth_down: connectionState === "ONLINE" ? 250 : 0,
+            last_seen: device.last_seen,
+            uptime_percentage: healthInfo.uptime || 95,
+            reconnect_attempts: syncInfo.attempts,
+            queue_depth:
+              device.sync_queue_depth || syncInfo.pending + syncInfo.failed,
+          };
+        },
+      );
+
+      return { data: metrics, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get connection metrics"),
+      };
+    }
+  }
+
+  public async getResilienceMetrics(): Promise<{
+    data: ResilienceMetrics | null;
+    error: Error | null;
+  }> {
+    try {
+      const connectionResult = await this.getConnectionMetrics();
+      if (connectionResult.error) throw connectionResult.error;
+
+      const connectionMetrics = connectionResult.data ?? [];
+
+      const online = connectionMetrics.filter(
+        (d) => d.connection_state === "ONLINE",
+      ).length;
+      const degraded = connectionMetrics.filter(
+        (d) => d.connection_state === "DEGRADED",
+      ).length;
+      const offline = connectionMetrics.filter(
+        (d) => d.connection_state === "OFFLINE",
+      ).length;
+
+      const avgUptime =
+        connectionMetrics.reduce((sum, d) => sum + d.uptime_percentage, 0) /
+          connectionMetrics.length || 0;
+      const totalQueue = connectionMetrics.reduce(
+        (sum, d) => sum + d.queue_depth,
+        0,
+      );
+      const avgLatency =
+        connectionMetrics.reduce((sum, d) => sum + d.latency_ms, 0) /
+          connectionMetrics.length || 0;
+
+      const { data: syncStats, error: syncError } = await this.supabaseClient
+        .schema("internal")
+        .from("sync_queue")
+        .select("status")
+        .gte(
+          "created_at",
+          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        );
+
+      if (syncError) throw syncError;
+
+      const totalSyncs = syncStats?.length || 0;
+      const successfulSyncs =
+        syncStats?.filter((s: { status: string }) => s.status === "COMPLETED")
+          .length || 0;
+      const syncSuccessRate =
+        totalSyncs > 0 ? (successfulSyncs / totalSyncs) * 100 : 95;
+
+      return {
+        data: {
+          total_devices: connectionMetrics.length,
+          online_devices: online,
+          degraded_devices: degraded,
+          offline_devices: offline,
+          average_uptime: Math.round(avgUptime),
+          total_queue_depth: totalQueue,
+          sync_success_rate: Math.round(syncSuccessRate * 10) / 10,
+          average_latency: Math.round(avgLatency),
+          network_health_score:
+            Math.round((online / connectionMetrics.length) * 100) || 0,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get resilience metrics"),
+      };
+    }
+  }
+
+  public async getOfflineEfficiencyMetrics(timeRange: "24h" | "7d" = "24h"): Promise<{
+    data: OfflineEfficiencyMetrics[] | null;
+    error: Error | null;
+  }> {
+    try {
+      const { start, end } = this.getTimeRangeFilter(timeRange);
+
+      const { data: devices, error: devicesError } = await this.supabaseClient
+        .from("devices")
+        .select("id, name, status, last_seen")
+        .eq("is_active", true);
+
+      if (devicesError) throw devicesError;
+
+      const { data: syncHistory, error: syncError } = await this.supabaseClient
+        .schema("internal")
+        .from("sync_queue")
+        .select(
+          "device_id, status, created_at, synced_at, attempts, last_error",
+        )
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .order("created_at", { ascending: false });
+
+      if (syncError) throw syncError;
+
+      const { data: healthHistory, error: healthError } =
+        await this.supabaseClient
+          .schema("telemetry")
+          .from("device_health")
+          .select(
+            "device_id, status, uptime_percentage, response_time_ms, created_at",
+          )
+          .gte("created_at", start)
+          .lte("created_at", end)
+          .order("created_at", { ascending: false });
+
+      if (healthError) throw healthError;
+
+      const metrics: OfflineEfficiencyMetrics[] = [];
+
+      for (const device of devices ?? []) {
+        const deviceSyncHistory =
+          syncHistory?.filter(
+            (s: { device_id: string }) => s.device_id === device.id,
+          ) || [];
+        const deviceHealthHistory =
+          healthHistory?.filter(
+            (h: { device_id: string }) => h.device_id === device.id,
+          ) || [];
+
+        const offlinePeriods = deviceHealthHistory
+          .filter(
+            (h: { status: string }) =>
+              h.status === "OFFLINE" || h.status === "ERROR",
+          )
+          .map((h: { created_at: string }) => ({
+            start: h.created_at,
+            end: h.created_at,
+          }));
+
+        const totalOfflineDuration = offlinePeriods.reduce(
+          (sum: number, period: { start: string; end: string }) => {
+            const startT = new Date(period.start);
+            const endT = new Date(period.end);
+            return sum + (endT.getTime() - startT.getTime()) / (1000 * 60);
+          },
+          0,
+        );
+
+        const itemsQueued = deviceSyncHistory.filter(
+          (s: { status: string }) => s.status === "PENDING",
+        ).length;
+        const successfulSyncs = deviceSyncHistory.filter(
+          (s: { status: string }) => s.status === "COMPLETED",
+        ).length;
+        const totalSyncs = deviceSyncHistory.length;
+
+        const syncSuccessRate =
+          totalSyncs > 0 ? (successfulSyncs / totalSyncs) * 100 : 100;
+
+        const avgLatency =
+          deviceHealthHistory.length > 0
+            ? deviceHealthHistory.reduce(
+                (sum: number, h: { response_time_ms: number }) =>
+                  sum + (h.response_time_ms || 0),
+                0,
+              ) / deviceHealthHistory.length
+            : 0;
+
+        const lastOfflinePeriod =
+          offlinePeriods[offlinePeriods.length - 1] || null;
+
+        metrics.push({
+          device_id: device.id,
+          device_name: device.name,
+          offline_duration_minutes: Math.round(totalOfflineDuration),
+          items_queued_during_offline: itemsQueued,
+          sync_success_rate: Math.round(syncSuccessRate * 10) / 10,
+          average_sync_latency_ms: Math.round(avgLatency),
+          bandwidth_efficiency:
+            syncSuccessRate > 90 ? 95 : syncSuccessRate > 70 ? 75 : 50,
+          data_integrity_verified: true,
+          last_offline_period: lastOfflinePeriod
+            ? {
+                start: lastOfflinePeriod.start,
+                end: lastOfflinePeriod.end,
+                duration_minutes: Math.round(
+                  (new Date(lastOfflinePeriod.end).getTime() -
+                    new Date(lastOfflinePeriod.start).getTime()) /
+                    (1000 * 60),
+                ),
+              }
+            : {
+                start: "",
+                end: "",
+                duration_minutes: 0,
+              },
+        });
+      }
+
+      return { data: metrics, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get offline efficiency metrics"),
+      };
+    }
+  }
+
+  public async getDeviceConnectionHistory(
+    deviceId: string,
+    timeRange: "24h" | "7d" = "24h",
+  ): Promise<{
+    data:
+      | {
+          device_id: string;
+          status: string;
+          uptime_percentage: number;
+          response_time_ms: number;
+          created_at: string;
+        }[]
+      | null;
+    error: Error | null;
+  }> {
+    try {
+      const { start, end } = this.getTimeRangeFilter(timeRange);
+
+      const { data, error } = await this.supabaseClient
+        .schema("telemetry")
+        .from("device_health")
+        .select("*")
+        .eq("device_id", deviceId)
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      return {
+        data: (data ?? []) as {
+          device_id: string;
+          status: string;
+          uptime_percentage: number;
+          response_time_ms: number;
+          created_at: string;
+        }[],
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get device connection history"),
+      };
+    }
   }
 
   private getTimeRangeFilter(timeRange?: string): {
@@ -84,377 +491,5 @@ export class ResilienceRepository extends BaseRepository {
       start: start.toISOString(),
       end: now.toISOString(),
     };
-  }
-
-  async getConnectionMetrics(
-    options: ResilienceQueryOptions = {},
-  ): Promise<ConnectionMetrics[]> {
-    const cacheKey = `connection_metrics_${JSON.stringify(options)}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { data: devices, error: devicesError } = await this.supabase
-          .from("devices")
-          .select(
-            "id, name, status, last_seen, sync_queue_depth, cpu_percent, ram_percent, actively_reporting",
-          )
-          .eq("is_active", true)
-          .order("last_seen", { ascending: false });
-
-        if (devicesError) throw this.handleError(devicesError);
-
-        const { data: syncQueueData, error: syncError } = await this.supabase
-          .schema("internal")
-          .from("sync_queue")
-          .select("device_id, status, created_at, attempts")
-          .in("status", ["PENDING", "FAILED"]);
-
-        if (syncError) throw this.handleError(syncError);
-
-        const { data: healthSnapshots, error: healthError } =
-          await this.supabase
-            .schema("telemetry")
-            .from("device_health")
-            .select(
-              "device_id, uptime_percentage, response_time_ms, created_at",
-            )
-            .order("created_at", { ascending: false })
-            .limit(1000);
-
-        if (healthError) throw this.handleError(healthError);
-
-        const syncQueueByDevice = new Map<
-          string,
-          { pending: number; failed: number; attempts: number }
-        >();
-        for (const item of syncQueueData ?? []) {
-          const existing = syncQueueByDevice.get(item.device_id) ?? {
-            pending: 0,
-            failed: 0,
-            attempts: 0,
-          };
-          if (item.status === "PENDING") existing.pending++;
-          if (item.status === "FAILED") existing.failed++;
-          existing.attempts += item.attempts || 0;
-          syncQueueByDevice.set(item.device_id, existing);
-        }
-
-        const healthByDevice = new Map<
-          string,
-          { uptime: number; latency: number }
-        >();
-        for (const snapshot of healthSnapshots ?? []) {
-          const existing = healthByDevice.get(snapshot.device_id);
-          if (!existing) {
-            healthByDevice.set(snapshot.device_id, {
-              uptime: snapshot.uptime_percentage || 0,
-              latency: snapshot.response_time_ms || 0,
-            });
-          }
-        }
-
-        const now = new Date();
-        const metrics: ConnectionMetrics[] = (devices ?? []).map(
-          (device: {
-            id: string;
-            name: string;
-            status: string;
-            last_seen: string;
-            sync_queue_depth: number;
-            actively_reporting: boolean;
-          }) => {
-            const syncInfo = syncQueueByDevice.get(device.id) ?? {
-              pending: 0,
-              failed: 0,
-              attempts: 0,
-            };
-            const healthInfo = healthByDevice.get(device.id) ?? {
-              uptime: 95,
-              latency: 50,
-            };
-
-            const lastSeen = new Date(device.last_seen);
-            const minutesSinceLastSeen =
-              (now.getTime() - lastSeen.getTime()) / (1000 * 60);
-
-            let connectionState:
-              | "ONLINE"
-              | "DEGRADED"
-              | "OFFLINE"
-              | "RECONNECTING" = "ONLINE";
-            if (
-              device.status === "offline" ||
-              device.status === "gone_silent"
-            ) {
-              connectionState = "OFFLINE";
-            } else if (device.status === "isolated") {
-              connectionState = "OFFLINE";
-            } else if (minutesSinceLastSeen > 30) {
-              connectionState = "DEGRADED";
-            } else if (!device.actively_reporting && minutesSinceLastSeen > 5) {
-              connectionState = "DEGRADED";
-            }
-
-            const signalStrength =
-              connectionState === "ONLINE"
-                ? 85
-                : connectionState === "DEGRADED"
-                  ? 60
-                  : 0;
-
-            const latency =
-              healthInfo.latency || (connectionState === "ONLINE" ? 45 : 200);
-
-            const packetLoss =
-              connectionState === "ONLINE"
-                ? 0.5
-                : connectionState === "DEGRADED"
-                  ? 2.5
-                  : 0;
-
-            return {
-              device_id: device.id,
-              device_name: device.name,
-              connection_state: connectionState,
-              signal_strength: signalStrength,
-              latency_ms: latency,
-              packet_loss: packetLoss,
-              bandwidth_up: connectionState === "ONLINE" ? 50 : 0,
-              bandwidth_down: connectionState === "ONLINE" ? 250 : 0,
-              last_seen: device.last_seen,
-              uptime_percentage: healthInfo.uptime || 95,
-              reconnect_attempts: syncInfo.attempts,
-              queue_depth:
-                device.sync_queue_depth || syncInfo.pending + syncInfo.failed,
-            };
-          },
-        );
-
-        return metrics;
-      },
-      { ttl: 30 * 1000 },
-    );
-  }
-
-  async getResilienceMetrics(): Promise<ResilienceMetrics> {
-    const cacheKey = "resilience_metrics";
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const connectionMetrics = await this.getConnectionMetrics();
-
-        const online = connectionMetrics.filter(
-          (d) => d.connection_state === "ONLINE",
-        ).length;
-        const degraded = connectionMetrics.filter(
-          (d) => d.connection_state === "DEGRADED",
-        ).length;
-        const offline = connectionMetrics.filter(
-          (d) => d.connection_state === "OFFLINE",
-        ).length;
-
-        const avgUptime =
-          connectionMetrics.reduce((sum, d) => sum + d.uptime_percentage, 0) /
-            connectionMetrics.length || 0;
-        const totalQueue = connectionMetrics.reduce(
-          (sum, d) => sum + d.queue_depth,
-          0,
-        );
-        const avgLatency =
-          connectionMetrics.reduce((sum, d) => sum + d.latency_ms, 0) /
-            connectionMetrics.length || 0;
-
-        const { data: syncStats, error: syncError } = await this.supabase
-          .schema("internal")
-          .from("sync_queue")
-          .select("status")
-          .gte(
-            "created_at",
-            new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          );
-
-        if (syncError) throw this.handleError(syncError);
-
-        const totalSyncs = syncStats?.length || 0;
-        const successfulSyncs =
-          syncStats?.filter((s: { status: string }) => s.status === "COMPLETED")
-            .length || 0;
-        const syncSuccessRate =
-          totalSyncs > 0 ? (successfulSyncs / totalSyncs) * 100 : 95;
-
-        return {
-          total_devices: connectionMetrics.length,
-          online_devices: online,
-          degraded_devices: degraded,
-          offline_devices: offline,
-          average_uptime: Math.round(avgUptime),
-          total_queue_depth: totalQueue,
-          sync_success_rate: Math.round(syncSuccessRate * 10) / 10,
-          average_latency: Math.round(avgLatency),
-          network_health_score:
-            Math.round((online / connectionMetrics.length) * 100) || 0,
-        };
-      },
-      { ttl: 60 * 1000 },
-    );
-  }
-
-  async getOfflineEfficiencyMetrics(
-    timeRange: "24h" | "7d" = "24h",
-  ): Promise<OfflineEfficiencyMetrics[]> {
-    const cacheKey = `offline_efficiency_${timeRange}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { start, end } = this.getTimeRangeFilter(timeRange);
-
-        const { data: devices, error: devicesError } = await this.supabase
-          .from("devices")
-          .select("id, name, status, last_seen")
-          .eq("is_active", true);
-
-        if (devicesError) throw this.handleError(devicesError);
-
-        const { data: syncHistory, error: syncError } = await this.supabase
-          .schema("internal")
-          .from("sync_queue")
-          .select(
-            "device_id, status, created_at, synced_at, attempts, last_error",
-          )
-          .gte("created_at", start)
-          .lte("created_at", end)
-          .order("created_at", { ascending: false });
-
-        if (syncError) throw this.handleError(syncError);
-
-        const { data: healthHistory, error: healthError } = await this.supabase
-          .schema("telemetry")
-          .from("device_health")
-          .select(
-            "device_id, status, uptime_percentage, response_time_ms, created_at",
-          )
-          .gte("created_at", start)
-          .lte("created_at", end)
-          .order("created_at", { ascending: false });
-
-        if (healthError) throw this.handleError(healthError);
-
-        const metrics: OfflineEfficiencyMetrics[] = [];
-
-        for (const device of devices ?? []) {
-          const deviceSyncHistory =
-            syncHistory?.filter(
-              (s: { device_id: string }) => s.device_id === device.id,
-            ) || [];
-          const deviceHealthHistory =
-            healthHistory?.filter(
-              (h: { device_id: string }) => h.device_id === device.id,
-            ) || [];
-
-          const offlinePeriods = deviceHealthHistory
-            .filter(
-              (h: { status: string }) =>
-                h.status === "OFFLINE" || h.status === "ERROR",
-            )
-            .map((h: { created_at: string }) => ({
-              start: h.created_at,
-              end: h.created_at,
-            }));
-
-          const totalOfflineDuration = offlinePeriods.reduce(
-            (sum: number, period: { start: string; end: string }) => {
-              const startT = new Date(period.start);
-              const endT = new Date(period.end);
-              return sum + (endT.getTime() - startT.getTime()) / (1000 * 60);
-            },
-            0,
-          );
-
-          const itemsQueued = deviceSyncHistory.filter(
-            (s: { status: string }) => s.status === "PENDING",
-          ).length;
-          const successfulSyncs = deviceSyncHistory.filter(
-            (s: { status: string }) => s.status === "COMPLETED",
-          ).length;
-          const totalSyncs = deviceSyncHistory.length;
-
-          const syncSuccessRate =
-            totalSyncs > 0 ? (successfulSyncs / totalSyncs) * 100 : 100;
-
-          const avgLatency =
-            deviceHealthHistory.length > 0
-              ? deviceHealthHistory.reduce(
-                  (sum: number, h: { response_time_ms: number }) =>
-                    sum + (h.response_time_ms || 0),
-                  0,
-                ) / deviceHealthHistory.length
-              : 0;
-
-          const lastOfflinePeriod =
-            offlinePeriods[offlinePeriods.length - 1] || null;
-
-          metrics.push({
-            device_id: device.id,
-            device_name: device.name,
-            offline_duration_minutes: Math.round(totalOfflineDuration),
-            items_queued_during_offline: itemsQueued,
-            sync_success_rate: Math.round(syncSuccessRate * 10) / 10,
-            average_sync_latency_ms: Math.round(avgLatency),
-            bandwidth_efficiency:
-              syncSuccessRate > 90 ? 95 : syncSuccessRate > 70 ? 75 : 50,
-            data_integrity_verified: true,
-            last_offline_period: lastOfflinePeriod
-              ? {
-                  start: lastOfflinePeriod.start,
-                  end: lastOfflinePeriod.end,
-                  duration_minutes: Math.round(
-                    (new Date(lastOfflinePeriod.end).getTime() -
-                      new Date(lastOfflinePeriod.start).getTime()) /
-                      (1000 * 60),
-                  ),
-                }
-              : {
-                  start: "",
-                  end: "",
-                  duration_minutes: 0,
-                },
-          });
-        }
-
-        return metrics;
-      },
-      { ttl: 60 * 1000 },
-    );
-  }
-
-  async getDeviceConnectionHistory(
-    deviceId: string,
-    timeRange: "24h" | "7d" = "24h",
-  ): Promise<
-    {
-      device_id: string;
-      status: string;
-      uptime_percentage: number;
-      response_time_ms: number;
-      created_at: string;
-    }[]
-  > {
-    const { start, end } = this.getTimeRangeFilter(timeRange);
-
-    const { data, error } = await this.supabase
-      .schema("telemetry")
-      .from("device_health")
-      .select("*")
-      .eq("device_id", deviceId)
-      .gte("created_at", start)
-      .lte("created_at", end)
-      .order("created_at", { ascending: true });
-
-    if (error) throw this.handleError(error);
-
-    return data ?? [];
   }
 }

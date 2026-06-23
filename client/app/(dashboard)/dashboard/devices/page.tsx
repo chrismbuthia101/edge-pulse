@@ -52,7 +52,6 @@ const riskConfig = {
   none: { color: "text-green-500", bg: "bg-green-500/10", label: "Clean" },
 };
 
-// Device state derived from status + last_seen
 type DeviceState =
   | "reporting"
   | "silent"
@@ -176,8 +175,7 @@ function EnrollDeviceModal({
     const result = await createTokenFromStore(tokenName, maxUses);
     setLoading(false);
     if (result) {
-      const tokenSecret = (result as { tokenSecret?: string }).tokenSecret;
-      setCreatedToken(tokenSecret || result.tokenId || "");
+      setCreatedToken(result.secret);
       setStep("install");
     }
   };
@@ -548,7 +546,7 @@ export default function DevicesPage() {
   }, []);
 
   const { user, hasRole } = useAuth();
-  const isAdmin = hasRole(["ORG_ADMIN", "PLATFORM_ADMIN"]);
+  const isAdmin = hasRole(["ORG_ADMIN"]);
   const storeDevices = useDeviceStore((s) => s.devices);
   const router = useRouter();
   const initializedRef = useRef(false);
@@ -560,10 +558,7 @@ export default function DevicesPage() {
 
     initializedRef.current = true;
     lastUserIdRef.current = user.id;
-    const { initialize: initDevices, loading } = useDeviceStore.getState();
-    if (!loading) {
-      initDevices();
-    }
+    useDeviceStore.getState().initialize();
   }, [user]);
 
   const rawDevices = storeDevices.map((d) => ({

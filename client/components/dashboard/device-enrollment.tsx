@@ -17,13 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDeviceEnrollmentStore } from "@/lib/stores/device-enrollment-store";
+import { createClient } from "@/lib/config/client";
 import { toast } from "sonner";
-import type { EnrollmentTokenRow } from "@/lib/supabase/types";
+import type { EnrollmentToken } from "@/lib/types/enrollment";
 
 export function DeviceEnrollment() {
   const {
     tokens,
-    loading,
+    status,
     creating,
     initialize,
     refreshTokens,
@@ -39,7 +40,7 @@ export function DeviceEnrollment() {
   const [maxUses, setMaxUses] = useState(1);
 
   useEffect(() => {
-    initialize();
+    initialize(createClient());
   }, [initialize]);
 
   const createToken = async () => {
@@ -47,7 +48,6 @@ export function DeviceEnrollment() {
     if (result) {
       setNewTokenName("");
       setMaxUses(1);
-      // Show the newly created token's secret
       setShowTokenSecret((prev) => ({ ...prev, [result.tokenId]: true }));
     }
   };
@@ -70,10 +70,10 @@ export function DeviceEnrollment() {
 
   const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
 
-  const getUsagePercentage = (token: EnrollmentTokenRow) =>
+  const getUsagePercentage = (token: EnrollmentToken) =>
     (token.current_uses / token.max_uses) * 100;
 
-  const isTokenUsable = (token: EnrollmentTokenRow) =>
+  const isTokenUsable = (token: EnrollmentToken) =>
     !isExpired(token.expires_at) && token.current_uses < token.max_uses;
 
   return (
@@ -89,11 +89,11 @@ export function DeviceEnrollment() {
           variant="outline"
           size="sm"
           onClick={refreshTokens}
-          disabled={loading}
+          disabled={status === "loading"}
           className="gap-1.5"
         >
           <RefreshCw
-            className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
           />
           Refresh
         </Button>
@@ -156,7 +156,7 @@ export function DeviceEnrollment() {
             Active Tokens
           </h4>
 
-          {loading ? (
+          {status === "loading" ? (
             <div className="text-center py-8 text-muted-foreground">
               Loading enrollment tokens...
             </div>

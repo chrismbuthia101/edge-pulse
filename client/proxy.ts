@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 
 export const config = {
   matcher: [
+    "/admin/:path*",
     "/dashboard/:path*",
     "/auth/login",
     "/auth/register",
@@ -12,7 +13,12 @@ export const config = {
   ],
 };
 
-const ADMIN_ROUTES = ["/dashboard/users", "/dashboard/assignments"];
+const PLATFORM_ADMIN_ROUTES = ["/admin"];
+const ORG_ADMIN_ROUTES = ["/dashboard/users", "/dashboard/assignments"];
+
+function matchesRoute(pathname: string, route: string): boolean {
+  return pathname === route || pathname.startsWith(route + "/");
+}
 
 export async function proxy(req: NextRequest) {
   const res = NextResponse.next();
@@ -43,40 +49,69 @@ export async function proxy(req: NextRequest) {
   ].includes(pathname);
   const isResetPage = pathname === "/auth/reset-password";
 
-  if (!user && pathname.startsWith("/dashboard")) {
+  if (!user && (pathname.startsWith("/dashboard") || isResetPage)) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
     redirectUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isAuthPage) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (!user && isResetPage) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/auth/login";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (user && pathname.startsWith("/dashboard")) {
-    const { data: profile } = await supabase
+  if (user) {
+    const { data: profile, error: profileError } = await supabase
       .schema("organization")
       .from("profiles")
-      .select("role")
+      .select("account_status, role")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const userRole = profile?.role;
+    if (!profileError && profile) {
+      if (profile.account_status === "PENDING") {
+        if (profile.role === "ORG_ADMIN") {
+          const { data: orgData } = await supabase
+            .schema("organization")
+            .from("profiles")
+            .select("organizations(name)")
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-    if (ADMIN_ROUTES.some((route) => pathname.startsWith(route))) {
-      if (userRole !== "ORG_ADMIN" && userRole !== "PLATFORM_ADMIN") {
+          if (!orgData?.organizations?.[0]?.name) {
+            const redirectUrl = req.nextUrl.clone();
+            redirectUrl.pathname = "/onboarding/setup-organization";
+            return NextResponse.redirect(redirectUrl);
+          }
+        }
+
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/onboarding/setup-profile";
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      if (isAuthPage) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/dashboard";
         return NextResponse.redirect(redirectUrl);
+      }
+
+      if (
+        pathname.startsWith("/dashboard") &&
+        ORG_ADMIN_ROUTES.some((route) => matchesRoute(pathname, route))
+      ) {
+        if (profile.role !== "ORG_ADMIN") {
+          const redirectUrl = req.nextUrl.clone();
+          redirectUrl.pathname = "/dashboard";
+          return NextResponse.redirect(redirectUrl);
+        }
+      }
+
+      if (
+        pathname.startsWith("/admin") &&
+        PLATFORM_ADMIN_ROUTES.some((route) => matchesRoute(pathname, route))
+      ) {
+        if (profile.role !== "PLATFORM_ADMIN") {
+          const redirectUrl = req.nextUrl.clone();
+          redirectUrl.pathname = "/auth/login";
+          return NextResponse.redirect(redirectUrl);
+        }
       }
     }
   }

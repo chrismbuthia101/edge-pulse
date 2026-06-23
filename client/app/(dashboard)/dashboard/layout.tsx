@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { user, loading, isApproved } = useAuth();
+    const { user, loading, role } = useAuth();
     const router = useRouter();
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -28,16 +28,17 @@ export default function DashboardLayout({
     }, [sidebarCollapsed]);
 
     useEffect(() => {
-        if (!loading && user && !isApproved) {
+        if (!loading && user) {
             if (user.profiles.some((p) => p.account_status === "PENDING")) {
-                router.push("/auth/setup-profile");
+                router.push("/onboarding/setup-profile");
+                return;
             }
-            return;
+            const hasOrg = user.profiles.some((p) => p.organization_id !== null);
+            if (!hasOrg && role !== "PLATFORM_ADMIN") {
+                router.push("/onboarding/setup-organization");
+            }
         }
-        if (!loading && isApproved && user && !user.organization_id && user.role !== "PLATFORM_ADMIN") {
-            router.push("/auth/setup-organization");
-        }
-    }, [loading, isApproved, user, router]);
+    }, [loading, user, router, role]);
 
     // Show loading state while checking authentication
     if (loading) {

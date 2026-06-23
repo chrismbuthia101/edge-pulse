@@ -1,14 +1,16 @@
-import {
-  BaseRepository,
-  type FilterValue,
-  type QueryOptions,
-} from "@/lib/repositories/base-repository";
 import type {
-  SyncQueueEntry,
-  DeviceSyncQueueSummary,
-} from "@/lib/supabase/types";
+  SupabaseClient,
+  RealtimePostgresChangesPayload,
+} from "@supabase/supabase-js";
+import type { SyncQueueEntry, DeviceSyncQueueSummary } from "@/lib/types/sync";
 
-export interface SyncQueueQueryOptions extends QueryOptions {
+type FilterValue = string | number | boolean | string[];
+
+export interface SyncQueueQueryOptions {
+  select?: string;
+  orderBy?: { column: string; ascending: boolean };
+  limit?: number;
+  offset?: number;
   deviceId?: string;
   status?: string | string[];
   startDate?: string;
@@ -25,10 +27,251 @@ export interface SyncQueueSubscriptionCallbacks {
 
 export type SyncQueueItem = SyncQueueEntry;
 
-export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
-  constructor() {
-    super("sync_queue");
-    this.schema = "internal";
+const TABLE_NAME = "sync_queue";
+const SCHEMA = "internal";
+
+export class SyncQueueRepository {
+  constructor(private readonly supabaseClient: SupabaseClient) {}
+
+  public async findSyncQueueItems(
+    options: SyncQueueQueryOptions = {},
+  ): Promise<{ data: SyncQueueEntry[] | null; error: Error | null }> {
+    try {
+      const query = this.buildSyncQueueQuery(options);
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: (data ?? []) as unknown as SyncQueueEntry[], error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to find sync queue items"),
+      };
+    }
+  }
+
+  public async getDeviceSyncQueueSummaries(
+    organizationId?: string,
+  ): Promise<{ data: DeviceSyncQueueSummary[] | null; error: Error | null }> {
+    try {
+      let query = this.supabaseClient
+        .schema(SCHEMA)
+        .from(TABLE_NAME)
+        .select(
+          `
+          device_id,
+          status,
+          created_at,
+          devices!inner ( name )
+        `,
+        )
+        .in("status", ["PENDING", "FAILED"]);
+
+      if (organizationId) {
+        query = query.eq("organization_id", organizationId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const map = new Map<string, DeviceSyncQueueSummary>();
+      for (const row of (data ?? []) as unknown as Array<{
+        device_id: string;
+        status: string;
+        created_at: string;
+        devices: { name: string };
+      }>) {
+        const existing = map.get(row.device_id) ?? {
+          device_id: row.device_id,
+          device_name: row.devices?.name ?? row.device_id,
+          pending_count: 0,
+          failed_count: 0,
+          oldest_queued_at: null,
+        };
+        if (row.status === "PENDING") existing.pending_count++;
+        if (row.status === "FAILED") existing.failed_count++;
+        if (
+          !existing.oldest_queued_at ||
+          row.created_at < existing.oldest_queued_at
+        ) {
+          existing.oldest_queued_at = row.created_at;
+        }
+        map.set(row.device_id, existing);
+      }
+      return { data: Array.from(map.values()), error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get device sync queue summaries"),
+      };
+    }
+  }
+
+  public async getSyncQueueByDevice(
+    deviceId: string,
+    limit = 50,
+  ): Promise<{ data: SyncQueueEntry[] | null; error: Error | null }> {
+    return this.findSyncQueueItems({
+      deviceId,
+      orderBy: { column: "created_at", ascending: false },
+      limit,
+    });
+  }
+
+  public async getPendingSyncQueueItems(): Promise<{
+    data: SyncQueueEntry[] | null;
+    error: Error | null;
+  }> {
+    return this.findSyncQueueItems({
+      status: "PENDING",
+      orderBy: { column: "created_at", ascending: false },
+    });
+  }
+
+  public async getFailedSyncQueueItems(): Promise<{
+    data: SyncQueueEntry[] | null;
+    error: Error | null;
+  }> {
+    return this.findSyncQueueItems({
+      status: "FAILED",
+      orderBy: { column: "created_at", ascending: false },
+    });
+  }
+
+  public async getSyncQueueMetrics(organizationId?: string): Promise<{
+    data: {
+      totalPending: number;
+      totalFailed: number;
+      devicesWithIssues: number;
+      oldestPendingAge: number | null;
+    } | null;
+    error: Error | null;
+  }> {
+    try {
+      const summariesResult =
+        await this.getDeviceSyncQueueSummaries(organizationId);
+      if (summariesResult.error) throw summariesResult.error;
+
+      const summaries = summariesResult.data ?? [];
+
+      const totalPending = summaries.reduce(
+        (sum, s) => sum + s.pending_count,
+        0,
+      );
+      const totalFailed = summaries.reduce((sum, s) => sum + s.failed_count, 0);
+      const devicesWithIssues = summaries.filter(
+        (s) => s.pending_count > 0 || s.failed_count > 0,
+      ).length;
+
+      const oldestPendingAge = summaries
+        .filter((s) => s.oldest_queued_at)
+        .map((s) => Date.now() - new Date(s.oldest_queued_at!).getTime())
+        .reduce((min, age) => Math.min(min, age), Infinity);
+
+      return {
+        data: {
+          totalPending,
+          totalFailed,
+          devicesWithIssues,
+          oldestPendingAge:
+            oldestPendingAge === Infinity
+              ? null
+              : Math.floor(oldestPendingAge / 60000),
+        },
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get sync queue metrics"),
+      };
+    }
+  }
+
+  public subscribeToSyncQueue(
+    filters: Record<string, FilterValue> = {},
+    callbacks: SyncQueueSubscriptionCallbacks = {},
+  ): { data: string | null; error: Error | null } {
+    try {
+      const channelName = `realtime-sync-queue-${Date.now()}`;
+      const filterString = this.buildFilterString(filters);
+
+      this.supabaseClient
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: SCHEMA,
+            table: TABLE_NAME,
+            filter: filterString,
+          },
+          (payload: RealtimePostgresChangesPayload<SyncQueueEntry>) => {
+            try {
+              const p = payload as {
+                eventType: string;
+                new?: SyncQueueEntry;
+                old?: SyncQueueEntry;
+              };
+              switch (p.eventType) {
+                case "INSERT":
+                  callbacks.onInsert?.(p.new!);
+                  break;
+                case "UPDATE":
+                  callbacks.onUpdate?.(p.new!);
+                  break;
+                case "DELETE":
+                  callbacks.onDelete?.(p.old!);
+                  break;
+              }
+            } catch (error) {
+              callbacks.onError?.(error);
+            }
+          },
+        )
+        .subscribe();
+
+      return { data: channelName, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to subscribe to sync queue"),
+      };
+    }
+  }
+
+  public unsubscribeFromSyncQueue(channelName: string): {
+    data: null;
+    error: Error | null;
+  } {
+    try {
+      const channel = this.supabaseClient
+        .getChannels()
+        .find((c) => c.topic === channelName);
+      if (channel) {
+        this.supabaseClient.removeChannel(channel);
+      }
+      return { data: null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to unsubscribe from sync queue"),
+      };
+    }
   }
 
   private buildSyncQueueQuery(options: SyncQueueQueryOptions) {
@@ -39,13 +282,31 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
     if (options.organizationId)
       standardFilters.organization_id = options.organizationId;
 
-    let query = this.buildQuery({
-      select: options.select ?? "*",
-      filters: standardFilters,
-      orderBy: options.orderBy,
-      limit: options.limit,
-      offset: options.offset,
-    });
+    let query = this.supabaseClient
+      .schema(SCHEMA)
+      .from(TABLE_NAME)
+      .select(options.select ?? "*");
+
+    if (options.orderBy) {
+      query = query.order(options.orderBy.column, {
+        ascending: options.orderBy.ascending,
+      });
+    }
+
+    for (const [key, value] of Object.entries(standardFilters)) {
+      if (Array.isArray(value)) {
+        query = query.in(key, value);
+      } else {
+        query = query.eq(key, value as string | number | boolean);
+      }
+    }
+
+    if (options.limit) query = query.limit(options.limit);
+    if (options.offset)
+      query = query.range(
+        options.offset,
+        options.offset + (options.limit ?? 20) - 1,
+      );
 
     if (options.startDate) query = query.gte("created_at", options.startDate);
     if (options.endDate) query = query.lte("created_at", options.endDate);
@@ -53,186 +314,15 @@ export class SyncQueueRepository extends BaseRepository<SyncQueueEntry> {
     return query;
   }
 
-  async findSyncQueueItems(
-    options: SyncQueueQueryOptions = {},
-  ): Promise<SyncQueueEntry[]> {
-    const cacheKey =
-      options.cacheKey ?? `sync_queue_${JSON.stringify(options)}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { data, error } = await this.buildSyncQueueQuery(options);
-        if (error) throw this.handleError(error);
-        return (data ?? []) as unknown as SyncQueueEntry[];
-      },
-      { ttl: options.cacheTTL },
-    );
-  }
-
-  async getDeviceSyncQueueSummaries(
-    organizationId?: string,
-  ): Promise<DeviceSyncQueueSummary[]> {
-    const cacheKey = `device_sync_queue_summaries_${organizationId || "all"}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        let query = this.getClient()
-          .from(this.tableName)
-          .select(
-            `
-            device_id,
-            status,
-            created_at,
-            devices!inner ( name )
-          `,
-          )
-          .in("status", ["PENDING", "FAILED"]);
-
-        if (organizationId) {
-          query = query.eq("organization_id", organizationId);
-        }
-
-        const { data, error } = await query;
-        if (error) throw this.handleError(error);
-
-        const map = new Map<string, DeviceSyncQueueSummary>();
-        for (const row of (data ?? []) as unknown as Array<{
-          device_id: string;
-          status: string;
-          created_at: string;
-          devices: { name: string };
-        }>) {
-          const existing = map.get(row.device_id) ?? {
-            device_id: row.device_id,
-            device_name: row.devices?.name ?? row.device_id,
-            pending_count: 0,
-            failed_count: 0,
-            oldest_queued_at: null,
-          };
-          if (row.status === "PENDING") existing.pending_count++;
-          if (row.status === "FAILED") existing.failed_count++;
-          if (
-            !existing.oldest_queued_at ||
-            row.created_at < existing.oldest_queued_at
-          ) {
-            existing.oldest_queued_at = row.created_at;
-          }
-          map.set(row.device_id, existing);
-        }
-        return Array.from(map.values());
-      },
-      { ttl: 30 * 1000 },
-    );
-  }
-
-  async getSyncQueueByDevice(
-    deviceId: string,
-    limit = 50,
-  ): Promise<SyncQueueEntry[]> {
-    return this.findSyncQueueItems({
-      deviceId,
-      orderBy: { column: "created_at", ascending: false },
-      limit,
-      cacheTTL: 2 * 60 * 1000,
-    });
-  }
-
-  async getPendingSyncQueueItems(): Promise<SyncQueueEntry[]> {
-    return this.findSyncQueueItems({
-      status: "PENDING",
-      orderBy: { column: "created_at", ascending: false },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async getFailedSyncQueueItems(): Promise<SyncQueueEntry[]> {
-    return this.findSyncQueueItems({
-      status: "FAILED",
-      orderBy: { column: "created_at", ascending: false },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async getSyncQueueMetrics(organizationId?: string): Promise<{
-    totalPending: number;
-    totalFailed: number;
-    devicesWithIssues: number;
-    oldestPendingAge: number | null;
-  }> {
-    const cacheKey = `sync_queue_metrics_${organizationId || "all"}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const summaries =
-          await this.getDeviceSyncQueueSummaries(organizationId);
-
-        const totalPending = summaries.reduce(
-          (sum, s) => sum + s.pending_count,
-          0,
-        );
-        const totalFailed = summaries.reduce(
-          (sum, s) => sum + s.failed_count,
-          0,
-        );
-        const devicesWithIssues = summaries.filter(
-          (s) => s.pending_count > 0 || s.failed_count > 0,
-        ).length;
-
-        const oldestPendingAge = summaries
-          .filter((s) => s.oldest_queued_at)
-          .map((s) => Date.now() - new Date(s.oldest_queued_at!).getTime())
-          .reduce((min, age) => Math.min(min, age), Infinity);
-
-        return {
-          totalPending,
-          totalFailed,
-          devicesWithIssues,
-          oldestPendingAge:
-            oldestPendingAge === Infinity
-              ? null
-              : Math.floor(oldestPendingAge / 60000),
-        };
-      },
-      { ttl: 60 * 1000 },
-    );
-  }
-
-  subscribeToSyncQueue(
-    filters: Record<string, FilterValue> = {},
-    callbacks: SyncQueueSubscriptionCallbacks = {},
-  ): string {
-    const channelName = `realtime-sync-queue-${Date.now()}`;
-
-    this.subscribe(channelName, filters, (payload) => {
-      try {
-        const p = payload as {
-          eventType: string;
-          new?: SyncQueueEntry;
-          old?: SyncQueueEntry;
-        };
-        switch (p.eventType) {
-          case "INSERT":
-            callbacks.onInsert?.(p.new!);
-            break;
-          case "UPDATE":
-            callbacks.onUpdate?.(p.new!);
-            break;
-          case "DELETE":
-            callbacks.onDelete?.(p.old!);
-            break;
-        }
-      } catch (error) {
-        callbacks.onError?.(error);
+  private buildFilterString(filters: Record<string, FilterValue>): string {
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(filters)) {
+      if (Array.isArray(value)) {
+        parts.push(`${key}=in.(${value.join(",")})`);
+      } else {
+        parts.push(`${key}=eq.${value}`);
       }
-    });
-
-    return channelName;
-  }
-
-  unsubscribeFromSyncQueue(channelName: string): void {
-    this.unsubscribe(channelName);
+    }
+    return parts.join(" and ");
   }
 }

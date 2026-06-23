@@ -1,264 +1,233 @@
 import { create } from "zustand";
-import { AlertRepository } from "@/lib/repositories";
+import { devtools } from "zustand/middleware";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AlertService } from "@/lib/services/alert-service";
-import type { Alert, AlertStatus } from "@/lib/supabase/types";
-import { errorMessage } from "@/lib/utils/error";
+import { AlertRepository } from "@/lib/repositories/alert-repository";
+import type { Alert, AlertStatus } from "@/lib/types/alerts";
 import { toast } from "sonner";
+import { createClient } from "@/lib/config/client";
 
-interface AlertStore {
-  alerts: Alert[];
-  pendingCount: number;
-  unreadCount: number;
-  loading: boolean;
-  error: string | null;
+type Status = "idle" | "loading" | "success" | "error";
 
-  initialize: () => Promise<void>;
-  refreshAlerts: () => Promise<void>;
-  refreshAlertsForUser: (userId?: string, isAdmin?: boolean) => Promise<void>;
-  fetchAlerts: () => Promise<void>;
-  addAlert: (alert: Alert) => void;
-  updateAlert: (id: string, updates: Partial<Alert>) => void;
-  updateAlertStatus: (
-    id: string,
-    status: AlertStatus,
-    userId?: string,
-  ) => Promise<void>;
-  markRead: (id: string) => void;
-  markMultipleRead: (ids: string[]) => Promise<void>;
-  setAlerts: (alerts: Alert[]) => void;
-  clearError: () => void;
+let alertService = new AlertService(new AlertRepository(createClient()));
+let alertCleanup: (() => void) | null = null;
 
-  bulkUpdateStatus: (
-    ids: string[],
-    status: AlertStatus,
-    userId?: string,
-  ) => Promise<void>;
-  bulkAcknowledge: (ids: string[], userId?: string) => Promise<void>;
-  bulkClose: (ids: string[], userId?: string) => Promise<void>;
-
-  searchAlerts: (query: string) => Promise<Alert[]>;
-  getAlertsByDevice: (deviceId: string) => Promise<Alert[]>;
-  getCriticalAlerts: () => Promise<Alert[]>;
-  getAlertById: (id: string) => Promise<Alert | null>;
-  getMetrics: () => Promise<unknown>;
-
-  subscribeToAlerts: () => void;
-  unsubscribeFromAlerts: () => void;
-}
-
-const alertRepository = new AlertRepository();
-const alertService = new AlertService(alertRepository);
-
-function deriveCounters(
-  alerts: Alert[],
-): Pick<AlertStore, "pendingCount" | "unreadCount"> {
+function deriveCounters(alerts: Alert[]) {
   return {
     pendingCount: alerts.filter((a) => a.status === "PENDING").length,
     unreadCount: alerts.filter((a) => !a.read && a.status !== "CLOSED").length,
   };
 }
 
-export const useAlertStore = create<AlertStore>((set, get) => ({
- 
-  alerts: [],
+const initialState = {
+  alerts: [] as Alert[],
   pendingCount: 0,
   unreadCount: 0,
-  loading: false,
-  error: null,
+  status: "idle" as Status,
+  error: null as string | null,
+};
 
-  initialize: async () => {
-    await get().fetchAlerts();
-    get().subscribeToAlerts();
-  },
+type AlertStore = typeof initialState & {
+  initialize: (supabaseClient?: SupabaseClient) => void;
+  refreshAlerts: () => Promise<void>;
+  fetchAlerts: () => Promise<void>;
+  addAlert: (alert: Alert) => void;
+  updateAlert: (id: string, updates: Partial<Alert>) => void;
+  updateAlertStatus: (id: string, status: AlertStatus, userId?: string) => Promise<void>;
+  markRead: (id: string) => void;
+  markMultipleRead: (ids: string[]) => Promise<void>;
+  setAlerts: (alerts: Alert[]) => void;
+  clearError: () => void;
+  bulkUpdateStatus: (ids: string[], status: AlertStatus, userId?: string) => Promise<void>;
+  bulkAcknowledge: (ids: string[], userId?: string) => Promise<void>;
+  bulkClose: (ids: string[], userId?: string) => Promise<void>;
+  searchAlerts: (query: string) => Promise<Alert[]>;
+  getAlertsByDevice: (deviceId: string) => Promise<Alert[]>;
+  getCriticalAlerts: () => Promise<Alert[]>;
+  getAlertById: (id: string) => Promise<Alert | null>;
+  getMetrics: () => Promise<unknown>;
+  subscribeToAlerts: () => void;
+  unsubscribeFromAlerts: () => void;
+};
 
-  refreshAlerts: async () => {
-    await get().fetchAlerts();
-  },
+export const useAlertStore = create<AlertStore>()(
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-  /** @deprecated Use refreshAlerts() — alerts are not user-scoped. */
-  refreshAlertsForUser: async () => {
-    await get().refreshAlerts();
-  },
+      initialize: (supabaseClient) => {
+        const client = supabaseClient ?? createClient();
+        alertService = new AlertService(new AlertRepository(client));
+      },
 
-  fetchAlerts: async () => {
-    try {
-      set({ loading: true, error: null });
-      const result = await alertService.getAlertsPaginated({
-        page: 1,
-        limit: 100,
-      });
-      set({
-        alerts: result.alerts,
-        ...deriveCounters(result.alerts),
-        loading: false,
-      });
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-    }
-  },
+      refreshAlerts: async () => {
+        await get().fetchAlerts();
+      },
 
-  addAlert: (alert) => {
-    set((state) => {
-      const alerts = [alert, ...state.alerts];
-      return { alerts, ...deriveCounters(alerts) };
-    });
-  },
-
-  updateAlert: (id, updates) => {
-    set((state) => {
-      const alerts = state.alerts.map((a) =>
-        a.id === id ? { ...a, ...updates } : a,
-      );
-      return { alerts, ...deriveCounters(alerts) };
-    });
-  },
-
-  setAlerts: (alerts) => {
-    set({ alerts, ...deriveCounters(alerts) });
-  },
-
-  markRead: (id) => {
-    set((state) => {
-      const alerts = state.alerts.map((a) =>
-        a.id === id ? { ...a, read: true } : a,
-      );
-      return { alerts, ...deriveCounters(alerts) };
-    });
-  },
-
-  clearError: () => set({ error: null }),
-
-  updateAlertStatus: async (id, status, userId) => {
-    const previous = get().alerts.find((a) => a.id === id);
-
-    // Optimistic update
-    get().updateAlert(id, { status });
-
-    try {
-      await alertService.updateAlertStatus(id, status, { userId });
-    } catch (err) {
-      // Rollback
-      if (previous) get().updateAlert(id, { status: previous.status });
-      set({ error: errorMessage(err) });
-    }
-  },
-
-  markMultipleRead: async (ids) => {
-    ids.forEach((id) => get().markRead(id));
-
-    try {
-      await alertService.bulkUpdateAlerts({
-        alertIds: ids,
-        operation: "mark_read",
-      });
-    } catch (err) {
-      set({ error: errorMessage(err) });
-    }
-  },
-
-  bulkUpdateStatus: async (ids, status, userId) => {
-    const previousAlerts = get().alerts;
-    ids.forEach((id) => get().updateAlert(id, { status }));
-
-    const operation =
-      status === "ACKNOWLEDGED"
-        ? "acknowledge"
-        : status === "INVESTIGATED"
-          ? "investigate"
-          : "close";
-
-    try {
-      await alertService.bulkUpdateAlerts({
-        alertIds: ids,
-        operation,
-        options: { userId },
-      });
-    } catch (err) {
-      set({ alerts: previousAlerts, error: errorMessage(err) });
-    }
-  },
-
-  bulkAcknowledge: (ids, userId) =>
-    get().bulkUpdateStatus(ids, "ACKNOWLEDGED", userId),
-
-  bulkClose: (ids, userId) => get().bulkUpdateStatus(ids, "CLOSED", userId),
-
-  searchAlerts: async (query) => {
-    try {
-      return await alertService.searchAlerts(query);
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return [];
-    }
-  },
-
-  getAlertsByDevice: async (deviceId) => {
-    try {
-      return await alertService.getAlerts({ deviceId });
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return [];
-    }
-  },
-
-  getCriticalAlerts: async () => {
-    try {
-      return await alertService.getCriticalAlerts();
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return [];
-    }
-  },
-
-  getAlertById: async (id: string) => {
-    try {
-      return await alertService.getAlertById(id);
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return null;
-    }
-  },
-
-  getMetrics: async () => {
-    try {
-      return await alertService.getMetrics();
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return null;
-    }
-  },
-
-  subscribeToAlerts: () => {
-    alertService.subscribeToAlerts({
-      onNewAlert: (alert) => {
-        get().addAlert(alert);
-
-        if (alert.severity === "critical") {
-          toast.error(`Critical Alert: ${alert.title}`, {
-            action: {
-              label: "View",
-              onClick: () => {
-                window.location.href = `/dashboard/alerts/${alert.id}`;
-              },
-            },
+      fetchAlerts: async () => {
+        set({ status: "loading" });
+        const result = await alertService.getAlertsPaginated({
+          page: 1,
+          limit: 100,
+        });
+        if (!result.success) {
+          set({ error: result.error, status: "error" });
+        } else {
+          set({
+            alerts: result.data.alerts,
+            ...deriveCounters(result.data.alerts),
+            status: "success",
           });
         }
       },
-      onAlertUpdated: (alert) => {
-        get().updateAlert(alert.id, alert);
-      },
-      onAlertClosed: (alert) => {
-        get().updateAlert(alert.id, alert);
-      },
-      onError: (error) => {
-        console.error("[AlertStore] Realtime error:", error);
-      },
-    });
-  },
 
-  unsubscribeFromAlerts: () => {
-    alertService.unsubscribeFromAlerts();
-  },
-}));
+      addAlert: (alert) => {
+        set((state) => {
+          const alerts = [alert, ...state.alerts];
+          return { alerts, ...deriveCounters(alerts) };
+        });
+      },
 
-export { alertService, alertRepository };
+      updateAlert: (id, updates) => {
+        set((state) => {
+          const alerts = state.alerts.map((a) =>
+            a.id === id ? { ...a, ...updates } : a,
+          );
+          return { alerts, ...deriveCounters(alerts) };
+        });
+      },
+
+      setAlerts: (alerts) => {
+        set({ alerts, ...deriveCounters(alerts) });
+      },
+
+      markRead: (id) => {
+        set((state) => {
+          const alerts = state.alerts.map((a) =>
+            a.id === id ? { ...a, read: true } : a,
+          );
+          return { alerts, ...deriveCounters(alerts) };
+        });
+      },
+
+      clearError: () => set({ error: null }),
+
+      updateAlertStatus: async (id, status, userId) => {
+        const previous = get().alerts.find((a) => a.id === id);
+
+        get().updateAlert(id, { status });
+
+        const result = await alertService.updateAlertStatus(id, status, userId);
+        if (!result.success) {
+          if (previous) get().updateAlert(id, { status: previous.status });
+          set({ error: result.error });
+        }
+      },
+
+      markMultipleRead: async (ids) => {
+        ids.forEach((id) => get().markRead(id));
+
+        const result = await alertService.bulkMarkAlertsRead(ids);
+        if (!result.success) {
+          set({ error: result.error });
+        }
+      },
+
+      bulkUpdateStatus: async (ids, status, userId) => {
+        const previousAlerts = get().alerts;
+        ids.forEach((id) => get().updateAlert(id, { status }));
+
+        const result = await alertService.bulkUpdateStatus(ids, status, userId);
+        if (!result.success) {
+          set({ alerts: previousAlerts, error: result.error });
+        }
+      },
+
+      bulkAcknowledge: (ids, userId) =>
+        get().bulkUpdateStatus(ids, "ACKNOWLEDGED", userId),
+
+      bulkClose: (ids, userId) => get().bulkUpdateStatus(ids, "CLOSED", userId),
+
+      searchAlerts: async (query) => {
+        const result = await alertService.getAlerts({ search: query });
+        if (!result.success) {
+          set({ error: result.error });
+          return [];
+        }
+        return result.data ?? [];
+      },
+
+      getAlertsByDevice: async (deviceId) => {
+        const result = await alertService.getAlerts({ deviceId });
+        if (!result.success) {
+          set({ error: result.error });
+          return [];
+        }
+        return result.data ?? [];
+      },
+
+      getCriticalAlerts: async () => {
+        const result = await alertService.getCriticalAlerts();
+        if (!result.success) {
+          set({ error: result.error });
+          return [];
+        }
+        return result.data ?? [];
+      },
+
+      getAlertById: async (id: string) => {
+        const result = await alertService.getAlertById(id);
+        if (!result.success) {
+          set({ error: result.error });
+          return null;
+        }
+        return result.data;
+      },
+
+      getMetrics: async () => {
+        const result = await alertService.getMetrics();
+        if (!result.success) {
+          set({ error: result.error });
+          return null;
+        }
+        return result.data;
+      },
+
+      subscribeToAlerts: () => {
+        alertCleanup = alertService.subscribeToAlerts({
+          onNewAlert: (alert) => {
+            get().addAlert(alert);
+
+            if (alert.severity === "critical") {
+              toast.error(`Critical Alert: ${alert.title}`, {
+                action: {
+                  label: "View",
+                  onClick: () => {
+                    window.location.href = `/dashboard/alerts/${alert.id}`;
+                  },
+                },
+              });
+            }
+          },
+          onAlertUpdated: (alert) => {
+            get().updateAlert(alert.id, alert);
+          },
+          onAlertClosed: (alert) => {
+            get().updateAlert(alert.id, alert);
+          },
+          onError: (error) => {
+            console.error("[AlertStore] Realtime error:", error);
+          },
+        });
+      },
+
+      unsubscribeFromAlerts: () => {
+        if (alertCleanup) {
+          alertCleanup();
+          alertCleanup = null;
+        }
+      },
+    }),
+    { name: "AlertStore" },
+  ),
+);

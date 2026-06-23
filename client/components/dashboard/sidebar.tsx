@@ -29,8 +29,7 @@ import { toast } from "sonner";
 import { useFocusTrap } from "@/lib/use-focus-trap";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth/useAuth";
-import { AuthService } from "@/lib/services/auth-service";
-import { AuthRepository } from "@/lib/repositories/auth-repository";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useAlertStore } from "@/lib/stores/alert-store";
 
@@ -79,14 +78,14 @@ const navItems: NavGroup[] = [
       {
         icon: Brain,
         label: "ML Insights",
-        href: "/dashboard/insights",
-        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
+        href: "/dashboard/ml-insights",
+        roles: ["ORG_ADMIN"],
       },
       {
         icon: BarChart3,
-        label: "Explainability",
-        href: "/dashboard/explainability",
-        roles: ["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"],
+        label: "XAI",
+        href: "/dashboard/xai",
+        roles: ["ORG_ANALYST", "ORG_ADMIN"],
       },
     ],
   },
@@ -97,7 +96,7 @@ const navItems: NavGroup[] = [
         icon: Shield,
         label: "Audit Log",
         href: "/dashboard/audit-log",
-        roles: ["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"],
+        roles: ["ORG_ANALYST", "ORG_ADMIN"],
       },
       {
         icon: Bell,
@@ -134,25 +133,25 @@ const navItems: NavGroup[] = [
     ],
   },
   {
-    group: "Admin",
+    group: "Org-admin",
     items: [
       {
         icon: Users,
         label: "Users",
         href: "/dashboard/users",
-        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
+        roles: ["ORG_ADMIN"],
       },
       {
         icon: MonitorSmartphone,
         label: "Assignments",
         href: "/dashboard/assignments",
-        roles: ["ORG_ADMIN", "PLATFORM_ADMIN"],
+        roles: ["ORG_ADMIN"],
       },
       {
         icon: FileText,
         label: "Reports",
         href: "/dashboard/reports",
-        roles: ["ORG_ADMIN", "PLATFORM_ADMIN", "ORG_ANALYST"],
+        roles: ["ORG_ADMIN", "ORG_ANALYST"],
       },
       { icon: Settings, label: "Settings", href: "/dashboard/settings" },
     ],
@@ -177,9 +176,6 @@ export function Sidebar({
   const { hasRole } = useAuth();
   const focusTrapRef = useFocusTrap(mobileOpen || false);
 
-  const authRepository = new AuthRepository();
-  const authService = new AuthService(authRepository);
-
   const { unreadCount } = useNotifications();
   const { alerts } = useAlertStore();
   const pendingAlertsCount = alerts.filter(
@@ -195,7 +191,7 @@ export function Sidebar({
 
   const confirmLogout = async () => {
     setLogoutLoading(true);
-    const result = await authService.signOut();
+    const result = await useAuthStore.getState().signOut();
     setLogoutLoading(false);
     if (result.success) {
       toast.success("Logged out successfully");

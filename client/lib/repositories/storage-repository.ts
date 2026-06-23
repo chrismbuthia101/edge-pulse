@@ -1,13 +1,13 @@
-import { createClient } from "@/lib/supabase/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySupabaseClient = SupabaseClient<any>;
+import { SupabaseClient } from "@supabase/supabase-js";
 
 export class StorageRepository {
-  private supabase: AnySupabaseClient = createClient();
+  private supabase: SupabaseClient;
 
-  async uploadFile(
+  constructor(supabaseClient: SupabaseClient) {
+    this.supabase = supabaseClient;
+  }
+
+  public async uploadFile(
     bucket: string,
     path: string,
     file: File,
@@ -33,14 +33,14 @@ export class StorageRepository {
     }
   }
 
-  getPublicUrl(bucket: string, path: string): string {
+  public getPublicUrl(bucket: string, path: string): string {
     const { data } = this.supabase.storage
       .from(bucket)
       .getPublicUrl(path);
     return data.publicUrl;
   }
 
-  async deleteFile(
+  public async deleteFile(
     bucket: string,
     path: string,
   ): Promise<{ error: Error | null }> {

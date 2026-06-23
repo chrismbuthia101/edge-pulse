@@ -1,130 +1,113 @@
 import { create } from "zustand";
-import { UserRepository } from "@/lib/repositories";
-import { UserService } from "@/lib/services/user-service";
-import type { UserWithProfile } from "@/lib/repositories/user-repository";
-import { toast } from "sonner";
+import { devtools } from "zustand/middleware";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { OrgProfileService } from "@/lib/services/org-profile-service";
+import { OrgProfileRepository } from "@/lib/repositories/org-profile-repository";
+import { UserRepository } from "@/lib/repositories/user-repository";
+import { createClient } from "@/lib/config/client";
+import type { UserRole } from "@/lib/types/shared";
 
-interface UserStore {
-  users: UserWithProfile[];
-  pendingUsers: UserWithProfile[];
-  loading: boolean;
-  searchTerm: string;
-  filterRole: string;
-  filterStatus: string;
-  initialize: () => Promise<void>;
-  refreshPendingUsers: () => Promise<void>;
-  setSearchTerm: (term: string) => void;
-  setFilterRole: (role: string) => void;
-  setFilterStatus: (status: string) => void;
-  toggleUserStatus: (userId: string, isActive: boolean) => Promise<void>;
-  approveUser: (userId: string) => Promise<void>;
-  rejectUser: (userId: string) => Promise<void>;
-  reapproveUser: (userId: string) => Promise<void>;
+export interface ManagedUser {
+  id: string;
+  full_name: string;
+  role: UserRole;
+  account_status: "PENDING" | "ACTIVE" | "SUSPENDED";
+  created_at: string;
 }
 
-const userRepository = new UserRepository();
-const userService = new UserService(userRepository);
+type Status = "idle" | "loading" | "success" | "error";
 
-export const useUserStore = create<UserStore>((set, get) => ({
-  users: [],
-  pendingUsers: [],
+let orgProfileService = new OrgProfileService(
+  new OrgProfileRepository(createClient()),
+);
+const userRepository = new UserRepository(createClient());
+
+const initialState = {
+  users: [] as ManagedUser[],
+  status: "idle" as Status,
   loading: false,
+  error: null as string | null,
   searchTerm: "",
-  filterRole: "all",
-  filterStatus: "all",
+  filterRole: "all" as UserRole | "all",
+  filterStatus: "all" as "all" | "active" | "inactive",
+  userCache: {} as Record<string, string>,
+};
 
-  initialize: async () => {
-    set({ loading: true });
-    const users = await userService.getUsers();
-    set({ users, loading: false });
-  },
+type UserStore = typeof initialState & {
+  initialize: (supabaseClient?: SupabaseClient) => void;
+  setSearchTerm: (term: string) => void;
+  setFilterRole: (role: UserRole | "all") => void;
+  setFilterStatus: (status: "all" | "active" | "inactive") => void;
+  toggleUserStatus: (userId: string, currentlyActive: boolean) => Promise<void>;
+  resolveUserNames: (userIds: string[]) => Promise<void>;
+  clearError: () => void;
+};
 
-  refreshPendingUsers: async () => {
-    try {
-      const pending = await userRepository.findUsers({
-        search: "",
-        accountStatus: "PENDING",
-        cacheTTL: 0,
-      });
-      set({ pendingUsers: pending });
-    } catch (err) {
-      console.error("Failed to load pending users:", err);
-    }
-  },
+export const useUserStore = create<UserStore>()(
+  devtools(
+    (set) => ({
+      ...initialState,
 
-  setSearchTerm: (searchTerm: string) => {
-    set({ searchTerm });
-  },
+      initialize: (supabaseClient) => {
+        if (supabaseClient) {
+          orgProfileService = new OrgProfileService(
+            new OrgProfileRepository(supabaseClient),
+          );
+        }
+        set({ status: "loading", error: null, loading: true });
 
-  setFilterRole: (filterRole: string) => {
-    set({ filterRole });
-  },
+        orgProfileService.getProfilesWithUsers({}).then((result) => {
+          if (!result.success) {
+            set({ error: result.error, status: "error", loading: false });
+            return;
+          }
+          const users = result.data.map((p) => ({
+            id: p.user_id,
+            full_name: p.user?.full_name ?? "Unknown",
+            role: p.role,
+            account_status: p.account_status,
+            created_at: p.joined_at,
+          }));
+          set({ users, status: "success", loading: false });
+        });
+      },
 
-  setFilterStatus: (filterStatus: string) => {
-    set({ filterStatus });
-  },
+      setSearchTerm: (searchTerm) => set({ searchTerm }),
 
-  toggleUserStatus: async (userId: string, isActive: boolean) => {
-    const newStatus = !isActive;
-    const { users } = get();
+      setFilterRole: (filterRole) => set({ filterRole }),
 
-    set({
-      users: users.map((user) =>
-        user.user_id === userId
-          ? { ...user, account_status: newStatus ? "ACTIVE" : "SUSPENDED" }
-          : user,
-      ),
-    });
+      setFilterStatus: (filterStatus) => set({ filterStatus }),
 
-    try {
-      await userService.updateUserStatus(userId, { isActive: newStatus });
-      toast.success(
-        `User ${newStatus ? "activated" : "deactivated"} successfully`,
-      );
-    } catch (err) {
-      console.error("Failed to toggle user status:", err);
-      toast.error("Failed to update user status");
-      set({ users });
-    }
-  },
+      toggleUserStatus: async (userId, currentlyActive) => {
+        const newStatus = currentlyActive ? "SUSPENDED" : "ACTIVE";
+        const result = await orgProfileService.updateAccountStatus(
+          userId,
+          newStatus,
+        );
+        if (!result.success) {
+          set({ error: result.error });
+          return;
+        }
+        set((state) => ({
+          users: state.users.map((u) =>
+            u.id === userId ? { ...u, account_status: newStatus } : u,
+          ),
+        }));
+      },
 
-  approveUser: async (userId: string) => {
-    const { pendingUsers } = get();
-    set({
-      pendingUsers: pendingUsers.filter((u) => u.user_id !== userId),
-    });
-    try {
-      await userRepository.updateUserStatus(userId, "ACTIVE");
-      toast.success("User approved successfully");
-      get().initialize();
-    } catch {
-      toast.error("Failed to approve user");
-      get().refreshPendingUsers();
-    }
-  },
+      resolveUserNames: async (userIds) => {
+        const cache: Record<string, string> = {};
+        await Promise.all(
+          userIds.map(async (id) => {
+            const { data } = await userRepository.getUserById(id);
+            if (data) cache[id] = data.full_name;
+          }),
+        );
+        set((state) => ({ userCache: { ...state.userCache, ...cache } }));
+      },
 
-  rejectUser: async (userId: string) => {
-    const { pendingUsers } = get();
-    set({
-      pendingUsers: pendingUsers.filter((u) => u.user_id !== userId),
-    });
-    try {
-      await userRepository.updateUserStatus(userId, "SUSPENDED");
-      toast.success("User rejected");
-      get().initialize();
-    } catch (err) {
-      toast.error("Failed to reject user");
-      get().refreshPendingUsers();
-    }
-  },
-
-  reapproveUser: async (userId: string) => {
-    try {
-      await userRepository.updateUserStatus(userId, "ACTIVE");
-      toast.success("User re-approved");
-      get().initialize();
-    } catch (err) {
-      toast.error("Failed to re-approve user");
-    }
-  },
-}));
+      clearError: () => set({ error: null }),
+    }),
+    { name: "UserStore" },
+  ),
+);

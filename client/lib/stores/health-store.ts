@@ -1,126 +1,155 @@
 import { create } from "zustand";
-import { HealthRepository } from "@/lib/repositories";
+import { devtools } from "zustand/middleware";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { HealthService } from "@/lib/services/health-service";
-import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
-import { errorMessage } from "@/lib/utils/error";
-import { toast } from "sonner";
+import { HealthRepository } from "@/lib/repositories/health-repository";
+import { TelemetryService } from "@/lib/services/telemetry-service";
+import type { TelemetrySample } from "@/lib/services/telemetry-service";
+import { ResilienceService } from "@/lib/services/resilience-service";
+import type { ConnectionMetrics } from "@/lib/repositories/resilience-repository";
+import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/types/health";
+import { createClient } from "@/lib/config/client";
 
-interface HealthStore {
-  devices: DeviceHealthSnapshot[];
-  systemHealth: SystemHealth | null;
-  loading: boolean;
-  error: string | null;
+type Status = "idle" | "loading" | "success" | "error";
 
-  initialize: () => Promise<void>;
+let healthService = new HealthService(new HealthRepository(createClient()));
+const telemetryService = new TelemetryService(createClient());
+const resilienceService = new ResilienceService(createClient());
+let healthCleanup: (() => void) | null = null;
+
+const initialState = {
+  devices: [] as DeviceHealthSnapshot[],
+  systemHealth: null as SystemHealth | null,
+  telemetry: {} as Record<string, TelemetrySample[]>,
+  connectionMetrics: {} as Record<string, ConnectionMetrics>,
+  status: "idle" as Status,
+  error: null as string | null,
+};
+
+type HealthStore = typeof initialState & {
+  initialize: (supabaseClient: SupabaseClient) => void;
   refreshHealthData: () => Promise<void>;
   setDevices: (devices: DeviceHealthSnapshot[]) => void;
   setSystemHealth: (systemHealth: SystemHealth | null) => void;
   clearError: () => void;
-
   getDeviceById: (deviceId: string) => DeviceHealthSnapshot | null;
   getSystemMetrics: () => Promise<SystemHealth | null>;
-
   subscribeToHealthUpdates: () => void;
   unsubscribeFromHealthUpdates: () => void;
-}
+  fetchTelemetry: (deviceId: string, limit?: number) => Promise<void>;
+  fetchConnectionMetrics: (deviceId: string) => Promise<void>;
+};
 
-const healthRepository = new HealthRepository();
-const healthService = new HealthService({ repository: healthRepository });
+export const useHealthStore = create<HealthStore>()(
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-let healthChannelName: string | null = null;
+      initialize: (supabaseClient: SupabaseClient) => {
+        healthService = new HealthService(new HealthRepository(supabaseClient));
+      },
 
-export const useHealthStore = create<HealthStore>((set, get) => ({
-  devices: [],
-  systemHealth: null,
-  loading: false,
-  error: null,
+      refreshHealthData: async () => {
+        set({ status: "loading", error: null });
 
-  initialize: async () => {
-    try {
-      set({ loading: true, error: null });
+        const devicesResult = await healthService.getDeviceHealth({ limit: 100 });
+        if (!devicesResult.success) {
+          set({ error: devicesResult.error, status: "error" });
+          return;
+        }
 
-      const [devices, systemHealth] = await Promise.all([
-        healthService.getDeviceHealth({ limit: 100 }),
-        healthService.getSystemHealth(),
-      ]);
+        const systemResult = await healthService.getSystemHealth();
+        if (!systemResult.success) {
+          set({ error: systemResult.error, status: "error" });
+          return;
+        }
 
-      set({ devices, systemHealth, loading: false });
-
-      get().subscribeToHealthUpdates();
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-    }
-  },
-
-  refreshHealthData: async () => {
-    try {
-      set({ loading: true, error: null });
-
-      const [devices, systemHealth] = await Promise.all([
-        healthService.refreshDeviceHealth(),
-        healthService.getSystemHealth(),
-      ]);
-
-      set({ devices, systemHealth, loading: false });
-      toast.success("Health data refreshed");
-    } catch (err) {
-      set({ error: errorMessage(err), loading: false });
-      toast.error("Failed to refresh health data");
-    }
-  },
-
-  setDevices: (devices) => set({ devices }),
-
-  setSystemHealth: (systemHealth) => set({ systemHealth }),
-
-  clearError: () => set({ error: null }),
-
-  getDeviceById: (deviceId) => {
-    return get().devices.find((d) => d.device_id === deviceId) || null;
-  },
-
-  getSystemMetrics: async () => {
-    try {
-      const systemHealth = await healthService.getSystemHealth();
-      set({ systemHealth });
-      return systemHealth;
-    } catch (err) {
-      set({ error: errorMessage(err) });
-      return null;
-    }
-  },
-
-  subscribeToHealthUpdates: () => {
-    if (healthChannelName) return;
-
-    healthChannelName = healthService.subscribeToHealthUpdates({
-      onDeviceHealthUpdate: (snapshot) => {
-        set((state) => {
-          const idx = state.devices.findIndex(
-            (d) => d.device_id === snapshot.device_id,
-          );
-          if (idx >= 0) {
-            const devices = [...state.devices];
-            devices[idx] = snapshot;
-            return { devices };
-          }
-          return {
-            devices: [snapshot, ...state.devices].slice(0, 100),
-          };
+        set({
+          devices: devicesResult.data,
+          systemHealth: systemResult.data,
+          status: "success",
         });
       },
-      onError: (error) => {
-        console.error("[HealthStore] Realtime error:", error);
+
+      setDevices: (devices) => set({ devices }),
+
+      setSystemHealth: (systemHealth) => set({ systemHealth }),
+
+      clearError: () => set({ error: null }),
+
+      getDeviceById: (deviceId) => {
+        return get().devices.find((d) => d.device_id === deviceId) || null;
       },
-    });
-  },
 
-  unsubscribeFromHealthUpdates: () => {
-    if (healthChannelName) {
-      healthService.unsubscribeFromHealthUpdates(healthChannelName);
-      healthChannelName = null;
-    }
-  },
-}));
+      getSystemMetrics: async () => {
+        const result = await healthService.getSystemHealth();
+        if (!result.success) {
+          set({ error: result.error });
+          return null;
+        }
+        set({ systemHealth: result.data });
+        return result.data;
+      },
 
-export { healthService, healthRepository };
+      fetchTelemetry: async (deviceId, limit = 48) => {
+        const result = await telemetryService.getLatestTelemetry(
+          deviceId,
+          limit,
+        );
+        if (result.data) {
+          const samples: TelemetrySample[] = result.data;
+          set((state) => ({
+            telemetry: { ...state.telemetry, [deviceId]: samples },
+          }));
+        }
+      },
+
+      fetchConnectionMetrics: async (deviceId) => {
+        const result = await resilienceService.getConnectionMetrics();
+        const metrics =
+          result.data?.find((m) => m.device_id === deviceId) ?? null;
+        if (metrics) {
+          set((state) => ({
+            connectionMetrics: {
+              ...state.connectionMetrics,
+              [deviceId]: metrics,
+            },
+          }));
+        }
+      },
+
+      subscribeToHealthUpdates: () => {
+        if (healthCleanup) return;
+
+        healthCleanup = healthService.subscribeToHealthUpdates({
+          onDeviceHealthUpdate: (snapshot) => {
+            set((state) => {
+              const idx = state.devices.findIndex(
+                (d) => d.device_id === snapshot.device_id,
+              );
+              if (idx >= 0) {
+                const devices = [...state.devices];
+                devices[idx] = snapshot;
+                return { devices };
+              }
+              return {
+                devices: [snapshot, ...state.devices].slice(0, 100),
+              };
+            });
+          },
+          onError: (error) => {
+            console.error("[HealthStore] Realtime error:", error);
+          },
+        });
+      },
+
+      unsubscribeFromHealthUpdates: () => {
+        if (healthCleanup) {
+          healthCleanup();
+          healthCleanup = null;
+        }
+      },
+    }),
+    { name: "HealthStore" },
+  ),
+);

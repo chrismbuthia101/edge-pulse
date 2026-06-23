@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useAlertStore } from "@/lib/stores/alert-store";
-import type { Alert, AlertStatus } from "@/lib/supabase/types";
+import { createClient } from "@/lib/config/client";
+import type { Alert, AlertStatus } from "@/lib/types/alerts";
 
 export type AlertFilter = "ALL" | "PENDING" | "IN_REVIEW" | "CLOSED";
 
@@ -22,7 +23,7 @@ export function useAlerts() {
   const {
     alerts,
     pendingCount,
-    loading,
+    status,
     error,
     initialize,
     updateAlertStatus,
@@ -30,7 +31,7 @@ export function useAlerts() {
   } = useAlertStore();
 
   useEffect(() => {
-    initialize();
+    initialize(createClient());
   }, [initialize]);
 
   useEffect(() => {
@@ -106,7 +107,7 @@ export function useAlerts() {
     alerts,
     filtered,
     pendingCount,
-    loading,
+    loading: status === "loading",
 
     filter,
     setFilter,

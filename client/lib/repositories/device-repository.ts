@@ -1,312 +1,221 @@
-import {
-  BaseRepository,
-  type FilterValue,
-  type QueryOptions,
-  type PaginatedResult,
-  type PaginationOptions,
-} from "@/lib/repositories/base-repository";
-import { escapeWildcards } from "@/lib/repositories/query-utils";
-import type {
-  Device,
-  DeviceStatus,
-  DeviceRisk,
-  DeviceType,
-  RealtimeDevicePayload,
-} from "@/lib/supabase/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Device, DeviceQueryOptions, DeviceSubscriptionCallbacks } from "@/lib/types/devices";
+import type { RealtimeDevicePayload } from "@/lib/types/realtime";
 
-const THRESHOLDS = {
-  cpuWarning: 80,
-  cpuCritical: 90,
-  ramWarning: 80,
-  ramCritical: 90,
-  diskWarning: 85,
-  diskCritical: 95,
-  syncQueueWarning: 50,
-  syncQueueCritical: 100,
-} as const;
+export class DeviceRepository {
+  private readonly tableName = "devices";
 
-const DEFAULT_DEVICE_SELECT = `
-  id,
-  name,
-  type,
-  status,
-  risk,
-  alerts_count,
-  os,
-  last_seen,
-  ip,
-  agent_version,
-  cpu_percent,
-  ram_percent,
-  sync_queue_depth,
-  actively_reporting
-`.trim();
+  constructor(private readonly supabaseClient: SupabaseClient) {}
 
-const TRIAGE_SELECT =
-  "id,name,status,risk,cpu_percent,ram_percent,sync_queue_depth";
+  public async findDevices(
+    options: DeviceQueryOptions = {},
+  ): Promise<{ data: Device[]; error: Error | null }> {
+    try {
+      let query = this.supabaseClient
+        .from(this.tableName)
+        .select(options.select ?? "*");
 
-export interface DeviceQueryOptions extends QueryOptions {
-  status?: DeviceStatus | DeviceStatus[];
-  type?: DeviceType | DeviceType[];
-  risk?: DeviceRisk | DeviceRisk[];
-  search?: string;
-  onlineOnly?: boolean;
-  minCpuUsage?: number;
-  maxCpuUsage?: number;
-  minRamUsage?: number;
-  maxRamUsage?: number;
-  agentVersion?: string;
-  osType?: string;
-}
+      if (options.onlineOnly) {
+        query = query.in("status", ["online", "gone_silent", "unsynced"]);
+      } else if (options.status) {
+        query = Array.isArray(options.status)
+          ? query.in("status", options.status)
+          : query.eq("status", options.status);
+      }
 
-export interface DeviceMetrics {
-  total: number;
-  online: number;
-  offline: number;
-  isolated: number;
-  gone_silent: number;
-  unsynced: number;
-  byType: Record<string, number>;
-  byRisk: Record<string, number>;
-  avgCpuUsage: number;
-  avgRamUsage: number;
-  totalAlerts: number;
-  criticalDevices: number;
-  highRiskDevices: number;
-  outdatedAgents: number;
-  totalSyncQueueDepth: number;
-}
+      if (options.type) {
+        query = Array.isArray(options.type)
+          ? query.in("type", options.type)
+          : query.eq("type", options.type);
+      }
 
-export interface DeviceSubscriptionCallbacks {
-  onInsert?: (device: Device) => void;
-  onUpdate?: (device: Device) => void;
-  onDelete?: (device: Device) => void;
-  onError?: (error: unknown) => void;
-}
+      if (options.risk) {
+        query = Array.isArray(options.risk)
+          ? query.in("risk", options.risk)
+          : query.eq("risk", options.risk);
+      }
 
-export interface DeviceHealthStatus {
-  deviceId: string;
-  deviceName: string;
-  status: "healthy" | "warning" | "critical";
-  issues: string[];
-  lastSeen: string;
-  syncQueueDepth: number;
-  agentVersion: string;
-  recommendations: string[];
-}
+      if (options.orderBy) {
+        query = query.order(options.orderBy.column, {
+          ascending: options.orderBy.ascending ?? true,
+        });
+      }
 
-export class DeviceRepository extends BaseRepository<Device> {
-  constructor() {
-    super("devices");
-  }
+      if (options.limit) query = query.limit(options.limit);
+      if (options.offset !== undefined && options.limit) {
+        query = query.range(options.offset, options.offset + options.limit - 1);
+      }
 
-  private buildDeviceQuery(options: DeviceQueryOptions) {
-    const standardFilters: Record<string, FilterValue> = {};
+      if (options.search) {
+        query = query.or(
+          `name.ilike.%${options.search}%,ip.ilike.%${options.search}%,os.ilike.%${options.search}%,type.ilike.%${options.search}%`,
+        );
+      }
 
-    if (options.onlineOnly) {
-      standardFilters.status = ["online", "gone_silent", "unsynced"];
-    } else if (options.status) {
-      standardFilters.status = options.status;
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: (data ?? []) as unknown as Device[], error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to find devices"),
+      };
     }
+  }
 
-    if (options.type) standardFilters.type = options.type;
-    if (options.risk) standardFilters.risk = options.risk;
-    if (options.agentVersion)
-      standardFilters.agent_version = options.agentVersion;
+  public async findDevicesPaginated(
+    options: DeviceQueryOptions & { page: number; limit: number },
+  ): Promise<{
+    data: {
+      data: Device[];
+      count: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    } | null;
+    error: Error | null;
+  }> {
+    try {
+      const { page, limit, ...queryOptions } = options;
+      const offset = (page - 1) * limit;
 
-    let query = this.buildQuery({
-      select: options.select ?? DEFAULT_DEVICE_SELECT,
-      filters: standardFilters,
-      orderBy: options.orderBy,
-      limit: options.limit,
-      offset: options.offset,
-    });
+      const { count, error: countError } = await this.supabaseClient
+        .from(this.tableName)
+        .select("*", { count: "exact", head: true });
 
-    if (options.search) {
-      const s = escapeWildcards(options.search);
-      query = query.or(
-        `name.ilike.%${s}%,ip.ilike.%${s}%,os.ilike.%${s}%,type.ilike.%${s}%`,
-      );
+      if (countError) throw countError;
+
+      const { data, error } = await this.findDevices({
+        ...queryOptions,
+        limit,
+        offset,
+      });
+      if (error) throw error;
+
+      const totalPages = Math.ceil((count ?? 0) / limit);
+
+      return {
+        data: {
+          data,
+          count: count ?? 0,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to find devices paginated"),
+      };
     }
-
-    if (options.minCpuUsage !== undefined)
-      query = query.gte("cpu_percent", options.minCpuUsage);
-    if (options.maxCpuUsage !== undefined)
-      query = query.lte("cpu_percent", options.maxCpuUsage);
-    if (options.minRamUsage !== undefined)
-      query = query.gte("ram_percent", options.minRamUsage);
-    if (options.maxRamUsage !== undefined)
-      query = query.lte("ram_percent", options.maxRamUsage);
-
-    if (options.osType) {
-      const os = options.osType.replace(/[%_]/g, "\\$&");
-      query = query.ilike("os", `%${os}%`);
-    }
-
-    return query;
   }
 
-  async findDevices(options: DeviceQueryOptions = {}): Promise<Device[]> {
-    const cacheKey = options.cacheKey ?? `devices_${JSON.stringify(options)}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        const { data, error } = await this.buildDeviceQuery(options);
-        if (error) throw this.handleError(error);
-        return (data ?? []) as unknown as Device[];
-      },
-      { ttl: options.cacheTTL },
-    );
-  }
-
-  async findDevicesPaginated(
-    options: DeviceQueryOptions & PaginationOptions,
-  ): Promise<PaginatedResult<Device>> {
-    const { page, limit, search, ...queryOptions } = options;
-
-    const filters: Record<string, FilterValue> = {};
-
-    if (queryOptions.onlineOnly) {
-      filters.status = ["online", "gone_silent", "unsynced"];
-    } else if (queryOptions.status) {
-      filters.status = queryOptions.status;
-    }
-
-    if (queryOptions.type) filters.type = queryOptions.type;
-    if (queryOptions.risk) filters.risk = queryOptions.risk;
-    if (queryOptions.agentVersion)
-      filters.agent_version = queryOptions.agentVersion;
-
-    if (search || queryOptions.osType) {
-      return this.findDevicesWithCustomFiltersPaginated(options);
-    }
-
-    return this.findPaginated({
-      page,
-      limit,
-      select: queryOptions.select ?? DEFAULT_DEVICE_SELECT,
-      filters,
-      orderBy: queryOptions.orderBy,
-      cacheTTL: queryOptions.cacheTTL,
-    });
-  }
-
-  private async findDevicesWithCustomFiltersPaginated(
-    options: DeviceQueryOptions & PaginationOptions,
-  ): Promise<PaginatedResult<Device>> {
-    const { page, limit, ...queryOptions } = options;
-    const offset = (page - 1) * limit;
-
-    let query = this.buildDeviceQuery(queryOptions);
-    query = query.range(offset, offset + limit - 1);
-
-    const { count, error: countError } = await this.supabase
-      .from(this.tableName)
-      .select("*", { count: "exact", head: true });
-
-    if (countError) throw this.handleError(countError);
-
-    const { data, error } = await query;
-    if (error) throw this.handleError(error);
-
-    const totalPages = Math.ceil((count ?? 0) / limit);
-
-    return {
-      data: (data ?? []) as unknown as Device[],
-      count: count ?? 0,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
-    };
-  }
-
-  async getOnlineDevices(): Promise<Device[]> {
-    return this.findDevices({
-      status: "online",
-      orderBy: { column: "name", ascending: true },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async getDevicesByStatus(status: DeviceStatus): Promise<Device[]> {
-    return this.findDevices({
-      status,
-      orderBy: { column: "last_seen", ascending: false },
-      cacheTTL: 60 * 1000,
-    });
-  }
-
-  async getDevicesByRisk(risk: DeviceRisk): Promise<Device[]> {
-    return this.findDevices({
-      risk,
-      orderBy: { column: "last_seen", ascending: false },
-      cacheTTL: 60 * 1000,
-    });
-  }
-
-  async getCriticalDevices(): Promise<Device[]> {
-    return this.findDevices({
-      risk: ["critical", "high"],
-      orderBy: { column: "risk", ascending: false },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async getDevicesWithPerformanceIssues(): Promise<Device[]> {
-    const devices = await this.findDevices({
-      onlineOnly: true,
-      select: TRIAGE_SELECT,
-      cacheTTL: 60 * 1000,
-    });
-
-    return devices.filter(
-      (d) =>
-        (d.cpu_percent ?? 0) > THRESHOLDS.cpuWarning ||
-        (d.ram_percent ?? 0) > THRESHOLDS.ramWarning ||
-        (d.sync_queue_depth ?? 0) > THRESHOLDS.syncQueueWarning,
-    );
-  }
-
-  async getDevicesNeedingAttention(): Promise<Device[]> {
-    const devices = await this.findDevices({
-      select: TRIAGE_SELECT,
-      cacheTTL: 30 * 1000,
-    });
-
-    return devices.filter(
-      (d) =>
-        d.risk === "critical" ||
-        d.status === "offline" ||
-        d.status === "gone_silent" ||
-        (d.sync_queue_depth ?? 0) > THRESHOLDS.syncQueueWarning ||
-        (d.cpu_percent ?? 0) > THRESHOLDS.cpuCritical ||
-        (d.ram_percent ?? 0) > THRESHOLDS.ramCritical,
-    );
-  }
-
-  async searchDevices(
+  public async searchDevices(
     query: string,
     options: DeviceQueryOptions = {},
-  ): Promise<Device[]> {
+  ): Promise<{ data: Device[]; error: Error | null }> {
     return this.findDevices({ ...options, search: query });
   }
 
-  async getDevicesByOS(osPattern: string): Promise<Device[]> {
+  public async getById(id: string): Promise<{
+    data: Device | null;
+    error: Error | null;
+  }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return { data: data as unknown as Device | null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get device"),
+      };
+    }
+  }
+
+  public async getOnlineDevices(): Promise<{ data: Device[]; error: Error | null }> {
     return this.findDevices({
-      osType: osPattern,
+      status: "online",
       orderBy: { column: "name", ascending: true },
-      cacheTTL: 5 * 60 * 1000,
     });
   }
 
-  async updateDeviceStatus(id: string, status: DeviceStatus): Promise<Device> {
-    return this.update(id, { status });
+  public async getCriticalDevices(): Promise<{ data: Device[]; error: Error | null }> {
+    return this.findDevices({
+      risk: ["critical", "high"],
+      orderBy: { column: "risk", ascending: false },
+    });
   }
 
-  async updateDeviceMetrics(
+  public async isolateDevice(id: string): Promise<{
+    data: Device | null;
+    error: Error | null;
+  }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .update({ status: "isolated" as Device["status"] })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { data: data as unknown as Device | null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to isolate device"),
+      };
+    }
+  }
+
+  public async unisolateDevice(id: string): Promise<{
+    data: Device | null;
+    error: Error | null;
+  }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .update({ status: "online" as Device["status"] })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { data: data as unknown as Device | null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to unisolate device"),
+      };
+    }
+  }
+
+  public async updateDeviceMetrics(
     id: string,
     metrics: {
       cpuPercent?: number;
@@ -314,295 +223,142 @@ export class DeviceRepository extends BaseRepository<Device> {
       syncQueueDepth?: number;
       activelyReporting?: boolean;
     },
-  ): Promise<Device> {
-    const updates: Partial<Device> = {};
+  ): Promise<{ data: Device | null; error: Error | null }> {
+    try {
+      const updates: Record<string, unknown> = {};
+      if (metrics.cpuPercent !== undefined)
+        updates.cpu_percent = metrics.cpuPercent;
+      if (metrics.ramPercent !== undefined)
+        updates.ram_percent = metrics.ramPercent;
+      if (metrics.syncQueueDepth !== undefined)
+        updates.sync_queue_depth = metrics.syncQueueDepth;
+      if (metrics.activelyReporting !== undefined)
+        updates.actively_reporting = metrics.activelyReporting;
 
-    if (metrics.cpuPercent !== undefined)
-      updates.cpu_percent = metrics.cpuPercent;
-    if (metrics.ramPercent !== undefined)
-      updates.ram_percent = metrics.ramPercent;
-    if (metrics.syncQueueDepth !== undefined)
-      updates.sync_queue_depth = metrics.syncQueueDepth;
-    if (metrics.activelyReporting !== undefined)
-      updates.actively_reporting = metrics.activelyReporting;
-
-    return this.update(id, updates);
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { data: data as unknown as Device | null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to update device metrics"),
+      };
+    }
   }
 
-  async isolateDevice(id: string): Promise<Device> {
-    return this.update(id, { status: "isolated" as DeviceStatus });
-  }
-
-  async unisolateDevice(id: string): Promise<Device> {
-    return this.update(id, { status: "online" as DeviceStatus });
-  }
-
-  async bulkUpdateStatus(
+  public async bulkUpdateStatus(
     ids: string[],
-    status: DeviceStatus,
-  ): Promise<Device[]> {
-    return this.updateMany({ id: ids }, { status });
+    status: Device["status"],
+  ): Promise<{ data: Device[]; error: Error | null }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .update({ status })
+        .in("id", ids)
+        .select();
+      if (error) throw error;
+      return { data: (data ?? []) as unknown as Device[], error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to bulk update device status"),
+      };
+    }
   }
 
-  async getDeviceMetrics(): Promise<DeviceMetrics> {
-    return this.cachedQuery(
-      "device_metrics",
-      async () => {
-        // Head-only count queries for status buckets (cheap, no data transfer)
-        const [
-          total,
-          online,
-          offline,
-          isolated,
-          gone_silent,
-          unsynced,
-        ] = await Promise.all([
-          this.countWhere(),
-          this.countWhere({ status: "online" }),
-          this.countWhere({ status: "offline" }),
-          this.countWhere({ status: "isolated" }),
-          this.countWhere({ status: "gone_silent" }),
-          this.countWhere({ status: "unsynced" }),
-        ]);
-
-        // For aggregations that need data, select minimal columns
-        const aggregations = await this.findMany({
-          select: "type,risk,alerts_count,sync_queue_depth,agent_version,cpu_percent,ram_percent,status",
-          limit: 10000,
-          cacheTTL: 0,
-        });
-
-        const byType: Record<string, number> = {};
-        const byRisk: Record<string, number> = {};
-        let totalAlerts = 0;
-        let totalSyncQueueDepth = 0;
-        let criticalDevices = 0;
-        let highRiskDevices = 0;
-        let outdatedAgents = 0;
-        let totalCpu = 0;
-        let totalRam = 0;
-        let onlineCount = 0;
-
-        for (const d of aggregations) {
-          const rec = d as unknown as Record<string, unknown>;
-          const type = (rec.type as string) ?? "unknown";
-          const risk = (rec.risk as string) ?? "none";
-
-          byType[type] = (byType[type] ?? 0) + 1;
-          byRisk[risk] = (byRisk[risk] ?? 0) + 1;
-
-          totalAlerts += (rec.alerts_count as number) ?? 0;
-          totalSyncQueueDepth += (rec.sync_queue_depth as number) ?? 0;
-
-          if (risk === "critical") criticalDevices++;
-          if (risk === "critical" || risk === "high") highRiskDevices++;
-          if (rec.agent_version) outdatedAgents++;
-
-          if (rec.status === "online") {
-            onlineCount++;
-            totalCpu += (rec.cpu_percent as number) ?? 0;
-            totalRam += (rec.ram_percent as number) ?? 0;
-          }
-        }
-
-        return {
-          total,
-          online,
-          offline,
-          isolated,
-          gone_silent,
-          unsynced,
-          byType,
-          byRisk,
-          avgCpuUsage: onlineCount > 0 ? totalCpu / onlineCount : 0,
-          avgRamUsage: onlineCount > 0 ? totalRam / onlineCount : 0,
-          totalAlerts,
-          criticalDevices,
-          highRiskDevices,
-          outdatedAgents,
-          totalSyncQueueDepth,
-        };
-      },
-      { ttl: 60 * 1000 },
-    );
+  public async delete(id: string): Promise<{ data: null; error: Error | null }> {
+    try {
+      const { error } = await this.supabaseClient
+        .from(this.tableName)
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      return { data: null, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to delete device"),
+      };
+    }
   }
 
-  async getDeviceDistribution(): Promise<{
-    byType: Record<string, { total: number; online: number; offline: number }>;
-    byStatus: Record<string, number>;
-  }> {
-    return this.cachedQuery(
-      "device_distribution",
-      async () => {
-        const devices = await this.findDevices({ select: "type,status" });
-
-        const byType: Record<
-          string,
-          { total: number; online: number; offline: number }
-        > = {};
-        const byStatus: Record<string, number> = {};
-
-        for (const d of devices) {
-          const type = d.type ?? "unknown";
-          const status = d.status ?? "unknown";
-
-          byType[type] ??= { total: 0, online: 0, offline: 0 };
-          byType[type].total++;
-          if (status === "online") {
-            byType[type].online++;
-          } else {
-            byType[type].offline++;
-          }
-
-          byStatus[status] = (byStatus[status] ?? 0) + 1;
-        }
-
-        return { byType, byStatus };
-      },
-      { ttl: 5 * 60 * 1000 },
-    );
+  public async countWhere(): Promise<{ data: number; error: Error | null }> {
+    try {
+      const { count, error } = await this.supabaseClient
+        .from(this.tableName)
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return { data: count ?? 0, error: null };
+    } catch (error) {
+      return {
+        data: 0,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to count devices"),
+      };
+    }
   }
 
-  async getDeviceHealthStatuses(): Promise<DeviceHealthStatus[]> {
-    return this.cachedQuery(
-      "device_health_statuses",
-      async () => {
-        const devices = await this.findDevices();
-        return devices.map(buildHealthStatus);
-      },
-      { ttl: 2 * 60 * 1000 },
-    );
-  }
-
-  subscribeToDeviceUpdates(
-    filters: Record<string, FilterValue> = {},
+  public subscribeToDeviceUpdates(
     callbacks: DeviceSubscriptionCallbacks = {},
   ): string {
-    const channelName = "realtime-devices";
+    const channel = this.supabaseClient.channel("realtime-devices");
 
-    // Unsubscribe old channel before creating new one (avoids leaks)
-    this.unsubscribe(channelName);
-
-    this.subscribe(channelName, filters, (payload) => {
-      try {
-        const p = payload as RealtimeDevicePayload;
-        switch (p.eventType) {
-          case "INSERT":
-            callbacks.onInsert?.(p.new);
-            break;
-          case "UPDATE":
-            callbacks.onUpdate?.(p.new);
-            break;
-          case "DELETE":
-            callbacks.onDelete?.(p.old as Device);
-            break;
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: this.tableName },
+      (payload) => {
+        try {
+          const p = payload as unknown as RealtimeDevicePayload;
+          switch (p.eventType) {
+            case "INSERT":
+              callbacks.onInsert?.(p.new);
+              break;
+            case "UPDATE":
+              callbacks.onUpdate?.(p.new);
+              break;
+            case "DELETE":
+              callbacks.onDelete?.(p.old as Device);
+              break;
+          }
+        } catch (error) {
+          callbacks.onError?.(error);
         }
-      } catch (error) {
-        callbacks.onError?.(error);
+      },
+    );
+
+    channel.subscribe((status) => {
+      if (status === "CHANNEL_ERROR" && callbacks.onError) {
+        callbacks.onError(new Error("Channel subscription error"));
       }
     });
 
-    return channelName;
+    return channel.topic;
   }
 
-  unsubscribeFromDeviceUpdates(channelName?: string): void {
-    this.unsubscribe(channelName ?? "realtime-devices");
+  public unsubscribeFromDeviceUpdates(channelName?: string): void {
+    const topic = channelName ?? "realtime-devices";
+    const channel = this.supabaseClient
+      .getChannels()
+      .find((c) => c.topic === topic);
+
+    if (channel) {
+      this.supabaseClient.removeChannel(channel);
+    }
   }
-}
-
-function escalate(
-  current: DeviceHealthStatus["status"],
-  next: DeviceHealthStatus["status"],
-): DeviceHealthStatus["status"] {
-  const rank = { healthy: 0, warning: 1, critical: 2 } as const;
-  return rank[next] > rank[current] ? next : current;
-}
-
-function buildHealthStatus(device: Device): DeviceHealthStatus {
-  const issues: string[] = [];
-  const recommendations: string[] = [];
-  let status: DeviceHealthStatus["status"] = "healthy";
-
-  switch (device.status) {
-    case "offline":
-      issues.push("Device is offline");
-      recommendations.push("Check network connectivity");
-      status = escalate(status, "critical");
-      break;
-    case "gone_silent":
-      issues.push("Device has gone silent");
-      recommendations.push("Verify agent is running");
-      status = escalate(status, "warning");
-      break;
-    case "unsynced":
-      issues.push("Device has unsynced data");
-      recommendations.push("Check network connection to server");
-      status = escalate(status, "critical");
-      break;
-    case "isolated":
-      issues.push("Device is isolated");
-      recommendations.push(
-        "Re-enable network access when investigation is complete",
-      );
-      status = escalate(status, "warning");
-      break;
-  }
-
-  const cpu = device.cpu_percent ?? 0;
-  if (cpu > THRESHOLDS.cpuCritical) {
-    issues.push(`Critical CPU usage (${cpu.toFixed(1)}%)`);
-    recommendations.push("Investigate high CPU processes");
-    status = escalate(status, "critical");
-  } else if (cpu > THRESHOLDS.cpuWarning) {
-    issues.push(`High CPU usage (${cpu.toFixed(1)}%)`);
-    recommendations.push("Monitor CPU-intensive processes");
-    status = escalate(status, "warning");
-  }
-
-  const ram = device.ram_percent ?? 0;
-  if (ram > THRESHOLDS.ramCritical) {
-    issues.push(`Critical memory usage (${ram.toFixed(1)}%)`);
-    recommendations.push("Restart memory-intensive applications");
-    status = escalate(status, "critical");
-  } else if (ram > THRESHOLDS.ramWarning) {
-    issues.push(`High memory usage (${ram.toFixed(1)}%)`);
-    recommendations.push("Check memory-intensive applications");
-    status = escalate(status, "warning");
-  }
-
-  const queueDepth = device.sync_queue_depth ?? 0;
-  if (queueDepth > THRESHOLDS.syncQueueCritical) {
-    issues.push(`Large sync queue backlog (${queueDepth})`);
-    recommendations.push("Check network bandwidth");
-    status = escalate(status, "critical");
-  } else if (queueDepth > THRESHOLDS.syncQueueWarning) {
-    issues.push(`Growing sync queue (${queueDepth})`);
-    recommendations.push("Monitor network throughput");
-    status = escalate(status, "warning");
-  }
-
-  if (device.risk === "critical") {
-    recommendations.push("Address critical security alerts immediately");
-    status = escalate(status, "critical");
-  } else if (device.risk === "high") {
-    recommendations.push("Review and address high-severity security alerts");
-    status = escalate(status, "warning");
-  }
-
-  if (device.agent_version) {
-    issues.push(`Agent version: ${device.agent_version}`);
-    recommendations.push("Ensure agent is up-to-date");
-    status = escalate(status, "warning");
-  }
-
-  return {
-    deviceId: device.id,
-    deviceName: device.name,
-    status,
-    issues,
-    lastSeen: device.last_seen ?? "",
-    syncQueueDepth: queueDepth,
-    agentVersion: device.agent_version ?? "unknown",
-    recommendations,
-  };
 }

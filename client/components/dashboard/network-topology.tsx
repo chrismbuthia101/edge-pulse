@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Network,
@@ -10,6 +10,8 @@ import {
   Wifi,
   Activity,
 } from "lucide-react";
+import { useDeviceStore } from "@/lib/stores/device-store";
+import { useDeviceAssignmentStore } from "@/lib/stores/device-assignment-store";
 
 interface NetworkNode {
   id: string;
@@ -30,116 +32,102 @@ interface NetworkConnection {
   encrypted: boolean;
 }
 
-const mockNodes: NetworkNode[] = [
-  {
-    id: "gw-01",
-    name: "Gateway Server",
-    type: "server",
-    status: "online",
-    x: 400,
-    y: 200,
-    connections: ["srv-db-01", "srv-web-01"],
-    anomalyLevel: "low",
-    lastSeen: "Active now",
-  },
-  {
-    id: "srv-db-01",
-    name: "Database Server",
-    type: "server",
-    status: "online",
-    x: 200,
-    y: 100,
-    connections: ["ws-finance-01", "ws-hr-01"],
-    anomalyLevel: "low",
-    lastSeen: "Active now",
-  },
-  {
-    id: "srv-web-01",
-    name: "Web Server",
-    type: "server",
-    status: "online",
-    x: 600,
-    y: 100,
-    connections: ["ws-dev-01", "ws-dev-02"],
-    anomalyLevel: "medium",
-    lastSeen: "Active now",
-  },
-  {
-    id: "ws-finance-01",
-    name: "Finance WS-01",
-    type: "workstation",
-    status: "online",
-    x: 100,
-    y: 250,
-    connections: [],
-    anomalyLevel: "low",
-    lastSeen: "Active now",
-  },
-  {
-    id: "ws-hr-01",
-    name: "HR WS-01",
-    type: "workstation",
-    status: "warning",
-    x: 300,
-    y: 350,
-    connections: [],
-    anomalyLevel: "high",
-    lastSeen: "2 minutes ago",
-  },
-  {
-    id: "ws-dev-01",
-    name: "Dev WS-01",
-    type: "workstation",
-    status: "online",
-    x: 500,
-    y: 250,
-    connections: ["mobile-01"],
-    anomalyLevel: "low",
-    lastSeen: "Active now",
-  },
-  {
-    id: "ws-dev-02",
-    name: "Dev WS-02",
-    type: "workstation",
-    status: "offline",
-    x: 700,
-    y: 350,
-    connections: [],
-    anomalyLevel: "low",
-    lastSeen: "1 hour ago",
-  },
-  {
-    id: "mobile-01",
-    name: "Mobile Device",
-    type: "mobile",
-    status: "online",
-    x: 550,
-    y: 400,
-    connections: [],
-    anomalyLevel: "medium",
-    lastSeen: "Active now",
-  },
-];
+function deriveNodeType(deviceType: string): NetworkNode["type"] {
+  const t = deviceType.toLowerCase();
+  if (t.includes("server") || t === "server") return "server";
+  if (t.includes("mobile") || t === "mobile") return "mobile";
+  if (t.includes("iot") || t === "iot") return "iot";
+  return "workstation";
+}
 
-const mockConnections: NetworkConnection[] = [
-  { source: "gw-01", target: "srv-db-01", strength: 0.9, encrypted: true },
-  { source: "gw-01", target: "srv-web-01", strength: 0.8, encrypted: true },
-  {
-    source: "srv-db-01",
-    target: "ws-finance-01",
-    strength: 0.7,
-    encrypted: true,
-  },
-  { source: "srv-db-01", target: "ws-hr-01", strength: 0.6, encrypted: true },
-  { source: "srv-web-01", target: "ws-dev-01", strength: 0.8, encrypted: true },
-  { source: "srv-web-01", target: "ws-dev-02", strength: 0.0, encrypted: true },
-  { source: "ws-dev-01", target: "mobile-01", strength: 0.5, encrypted: true },
-];
+function deriveAnomalyLevel(risk: string, status: string): NetworkNode["anomalyLevel"] {
+  if (risk === "critical") return "critical";
+  if (risk === "high") return "high";
+  if (risk === "medium") return "medium";
+  if (risk === "low" || status === "offline") return "low";
+  return "low";
+}
+
+function layoutNodes(count: number, width: number, height: number): { x: number; y: number }[] {
+  const positions: { x: number; y: number }[] = [];
+  const centerX = width / 2;
+  const centerY = height / 2;
+  if (count === 0) return positions;
+  if (count === 1) return [{ x: centerX, y: centerY }];
+
+  const radius = Math.min(width, height) * 0.35;
+  for (let i = 0; i < count; i++) {
+    const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+    positions.push({
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle),
+    });
+  }
+  return positions;
+}
 
 export function NetworkTopology() {
+  const devices = useDeviceStore((s) => s.devices);
+  const assignments = useDeviceAssignmentStore((s) => s.assignments);
+  const loadData = useDeviceAssignmentStore((s) => s.loadData);
+  const refreshDevices = useDeviceStore((s) => s.refreshDevices);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    refreshDevices();
+    loadData();
+  }, [refreshDevices, loadData]);
+
+  const { nodes, connections } = useMemo(() => {
+    const result: NetworkNode[] = [];
+    const conns: NetworkConnection[] = [];
+    const positions = layoutNodes(devices.length, 800, 500);
+
+    devices.forEach((device, i) => {
+      const pos = positions[i] ?? { x: 400 + ((i * 137) % 200), y: 250 + ((i * 89) % 200) };
+      const status = device.status === "online" ? "online"
+        : device.status === "gone_silent" ? "warning"
+        : "offline";
+
+      result.push({
+        id: device.id,
+        name: device.name,
+        type: deriveNodeType(device.type),
+        status,
+        x: pos.x,
+        y: pos.y,
+        connections: [],
+        anomalyLevel: deriveAnomalyLevel(device.risk, device.status),
+        lastSeen: device.last_seen
+          ? (() => {
+              const diffMins = Math.floor(
+                (new Date().getTime() - new Date(device.last_seen).getTime()) / 60000,
+              );
+              if (diffMins < 1) return "Active now";
+              if (diffMins < 60) return `${diffMins}m ago`;
+              return `${Math.floor(diffMins / 60)}h ago`;
+            })()
+          : "Never",
+      });
+    });
+
+    const deviceMap = new Map(devices.map((d) => [d.id, true]));
+    assignments.forEach((assn) => {
+      if (deviceMap.has(assn.device_id)) {
+        const targetId = assn.user_id;
+        conns.push({
+          source: assn.device_id,
+          target: targetId,
+          strength: 0.8,
+          encrypted: true,
+        });
+      }
+    });
+
+    return { nodes: result, connections: conns };
+  }, [devices, assignments]);
 
   const getNodeIcon = (type: string) => {
     switch (type) {
@@ -182,6 +170,24 @@ export function NetworkTopology() {
     }
   };
 
+  if (nodes.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Network className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">
+              Network Topology
+            </h3>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground text-sm">No devices to display</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -216,9 +222,9 @@ export function NetworkTopology() {
           className="w-full h-full"
         >
           <g>
-            {mockConnections.map((conn, index) => {
-              const sourceNode = mockNodes.find((n) => n.id === conn.source);
-              const targetNode = mockNodes.find((n) => n.id === conn.target);
+            {connections.map((conn, index) => {
+              const sourceNode = nodes.find((n) => n.id === conn.source);
+              const targetNode = nodes.find((n) => n.id === conn.target);
               if (!sourceNode || !targetNode) return null;
               return (
                 <g key={index}>
@@ -236,7 +242,7 @@ export function NetworkTopology() {
             })}
           </g>
           <g>
-            {mockNodes.map((node) => {
+            {nodes.map((node) => {
               const Icon = getNodeIcon(node.type);
               const isHovered = hoveredNode === node.id;
               const isSelected = selectedNode?.id === node.id;

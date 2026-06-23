@@ -1,79 +1,43 @@
-import {
-  BaseRepository,
-  type FilterValue,
-  type QueryOptions,
-} from "@/lib/repositories/base-repository";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  DeviceAssignment
+} from "@/lib/types/devices";
 
-export interface DeviceAssignment {
+interface DeviceWithAssignment {
   id: string;
-  user_id: string;
-  device_id: string;
-  assigned_at: string;
-  assigned_by: string | null;
+  name: string;
+  type: string;
+  status: string;
+  ip: string;
   is_active: boolean;
-  organization_id: string;
-  device_name?: string;
-  device_type?: string;
-  device_status?: string;
-  device_ip?: string;
-  user_name?: string;
 }
 
-interface RawDeviceAssignment {
+interface AnalystWithAssignment {
   id: string;
-  user_id: string;
-  device_id: string;
-  assigned_at: string;
-  assigned_by: string | null;
-  is_active: boolean;
-  organization_id: string;
-  devices?: {
-    name?: string;
-    type?: string;
-    status?: string;
-    ip?: string;
-    is_active?: boolean;
-  };
-  users?: {
-    full_name?: string;
-  };
+  full_name: string;
+  role: string;
 }
 
-export interface DeviceAssignmentCreate {
-  user_id: string;
-  device_id: string;
-  assigned_by: string;
+interface AssignmentStats {
+  totalAssignments: number;
+  activeAssignments: number;
+  unassignedDevices: number;
+  usersWithAssignments: number;
 }
 
-export interface DeviceAssignmentQueryOptions extends QueryOptions {
-  userId?: string;
-  deviceId?: string;
-  isActive?: boolean;
-  assignedBy?: string;
-}
+export class DeviceAssignmentRepository {
+  private readonly tableName = "device_assignments";
 
-export interface DeviceAssignmentSubscriptionCallbacks {
-  onInsert?: (assignment: DeviceAssignment) => void;
-  onUpdate?: (assignment: DeviceAssignment) => void;
-  onDelete?: (assignment: DeviceAssignment) => void;
-  onError?: (error: unknown) => void;
-}
+  constructor(private readonly supabaseClient: SupabaseClient) {}
 
-export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment> {
-  constructor() {
-    super("device_assignments");
-  }
-
-  async getAssignments(
-    options: DeviceAssignmentQueryOptions = {},
-  ): Promise<DeviceAssignment[]> {
-    const cacheKey =
-      options.cacheKey ?? `assignments_${JSON.stringify(options)}`;
-
-    return this.cachedQuery(
-      cacheKey,
-      async () => {
-        let query = this.supabase.from(this.tableName).select(`
+  public async getAssignmentsByUser(
+    userId: string,
+  ): Promise<{ data: DeviceAssignment[]; error: Error | null }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .select(
+          `
             id,
             user_id,
             device_id,
@@ -81,312 +45,354 @@ export class DeviceAssignmentRepository extends BaseRepository<DeviceAssignment>
             assigned_by,
             is_active,
             organization_id,
-            devices:device_id (
-              name,
-              type,
-              status,
-              ip,
-              is_active
-            ),
-            users:user_id (
-              full_name
-            )
-          `);
+            devices:device_id (name, type, status, ip, is_active),
+            users:user_id (full_name)
+          `,
+        )
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("assigned_at", { ascending: false });
 
-        if (options.userId) query = query.eq("user_id", options.userId);
-        if (options.deviceId) query = query.eq("device_id", options.deviceId);
-        if (options.isActive !== undefined)
-          query = query.eq("is_active", options.isActive);
-        if (options.assignedBy)
-          query = query.eq("assigned_by", options.assignedBy);
+      if (error) throw error;
 
-        const orderCol = options.orderBy?.column ?? "assigned_at";
-        const orderAsc = options.orderBy?.ascending ?? false;
-        query = query.order(orderCol, { ascending: orderAsc });
-
-        if (options.limit) query = query.limit(options.limit);
-
-        const { data, error } = await query;
-        if (error) throw this.handleError(error);
-
-        return ((data as unknown as RawDeviceAssignment[]) ?? []).map(
-          (item) => ({
-            id: item.id,
-            user_id: item.user_id,
-            device_id: item.device_id,
-            assigned_at: item.assigned_at,
-            assigned_by: item.assigned_by,
-            is_active: item.is_active,
-            organization_id: item.organization_id,
-            device_name: item.devices?.name,
-            device_type: item.devices?.type,
-            device_status: item.devices?.status,
-            device_ip: item.devices?.ip,
-            user_name: item.users?.full_name,
-          }),
-        );
-      },
-      { ttl: options.cacheTTL },
-    );
-  }
-
-  async getAssignmentsByUser(userId: string): Promise<DeviceAssignment[]> {
-    return this.getAssignments({
-      userId,
-      isActive: true,
-      orderBy: { column: "assigned_at", ascending: false },
-      cacheTTL: 60 * 1000,
-    });
-  }
-
-  async getDeviceAssignments(deviceId: string): Promise<DeviceAssignment[]> {
-    return this.getAssignments({
-      deviceId,
-      isActive: true,
-      orderBy: { column: "assigned_at", ascending: false },
-      cacheTTL: 60 * 1000,
-    });
-  }
-
-  async getAllActiveAssignments(): Promise<DeviceAssignment[]> {
-    return this.getAssignments({
-      isActive: true,
-      orderBy: { column: "assigned_at", ascending: false },
-      cacheTTL: 30 * 1000,
-    });
-  }
-
-  async assignDeviceToUser(
-    deviceId: string,
-    userId: string,
-    assignedBy: string,
-  ): Promise<DeviceAssignment> {
-    const existing = await this.getAssignments({
-      userId,
-      deviceId,
-      isActive: true,
-    });
-    if (existing.length > 0) {
-      throw new Error("Device is already assigned to this user");
+      return {
+        data: ((data ?? []) as Array<Record<string, unknown>>).map(
+          (item) => {
+            const devices = item.devices as Record<string, unknown> | undefined;
+            const users = item.users as Record<string, unknown> | undefined;
+            return {
+              id: item.id as string,
+              user_id: item.user_id as string,
+              device_id: item.device_id as string,
+              assigned_at: item.assigned_at as string,
+              assigned_by: item.assigned_by as string | null,
+              is_active: item.is_active as boolean,
+              organization_id: item.organization_id as string,
+              device_name: devices?.name as string | undefined,
+              device_type: devices?.type as string | undefined,
+              device_status: devices?.status as string | undefined,
+              device_ip: devices?.ip as string | undefined,
+              user_name: users?.full_name as string | undefined,
+            } as DeviceAssignment;
+          },
+        ),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get assignments by user"),
+      };
     }
-
-    const { data, error } = await this.supabase
-      .from(this.tableName)
-      .insert({
-        user_id: userId,
-        device_id: deviceId,
-        assigned_by: assignedBy,
-        assigned_at: new Date().toISOString(),
-        is_active: true,
-      })
-      .select(
-        "id, user_id, device_id, assigned_at, assigned_by, is_active, organization_id",
-      )
-      .single();
-
-    if (error) throw this.handleError(error);
-    this.invalidateCache();
-    return data as unknown as DeviceAssignment;
   }
 
-  async removeDeviceAssignment(
-    deviceId: string,
-    userId: string,
-  ): Promise<void> {
-    const { error } = await this.supabase
-      .from(this.tableName)
-      .update({ is_active: false })
-      .eq("device_id", deviceId)
-      .eq("user_id", userId)
-      .eq("is_active", true);
-
-    if (error) throw this.handleError(error);
-    this.invalidateCache();
-  }
-
-  async reassignDevice(
-    deviceId: string,
-    fromUserId: string,
-    toUserId: string,
-    reassignedBy: string,
-  ): Promise<DeviceAssignment> {
-    await this.removeDeviceAssignment(deviceId, fromUserId);
-    return this.assignDeviceToUser(deviceId, toUserId, reassignedBy);
-  }
-
-  async getUnassignedDevices(): Promise<
-    {
-      id: string;
-      name: string;
-      type: string;
-      status: string;
-      ip: string;
-      is_active: boolean;
-    }[]
-  > {
+  public async getAllActiveAssignments(): Promise<{
+    data: DeviceAssignment[];
+    error: Error | null;
+  }> {
     try {
-      const { data: allDevices, error: devError } = await this.supabase
-        .from("devices")
-        .select("id, name, type, status, ip, is_active")
-        .eq("is_active", true);
+      const { data, error } = await this.supabaseClient
+        .from(this.tableName)
+        .select(
+          `
+            id,
+            user_id,
+            device_id,
+            assigned_at,
+            assigned_by,
+            is_active,
+            organization_id,
+            devices:device_id (name, type, status, ip, is_active),
+            users:user_id (full_name)
+          `,
+        )
+        .eq("is_active", true)
+        .order("assigned_at", { ascending: false });
 
-      if (devError) throw devError;
+      if (error) throw error;
 
-      const { data: activeAssignments, error: assError } = await this.supabase
+      return {
+        data: ((data ?? []) as Array<Record<string, unknown>>).map(
+          (item) => {
+            const devices = item.devices as Record<string, unknown> | undefined;
+            const users = item.users as Record<string, unknown> | undefined;
+            return {
+              id: item.id as string,
+              user_id: item.user_id as string,
+              device_id: item.device_id as string,
+              assigned_at: item.assigned_at as string,
+              assigned_by: item.assigned_by as string | null,
+              is_active: item.is_active as boolean,
+              organization_id: item.organization_id as string,
+              device_name: devices?.name as string | undefined,
+              device_type: devices?.type as string | undefined,
+              device_status: devices?.status as string | undefined,
+              device_ip: devices?.ip as string | undefined,
+              user_name: users?.full_name as string | undefined,
+            } as DeviceAssignment;
+          },
+        ),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get active assignments"),
+      };
+    }
+  }
+
+  public async getUnassignedDevices(): Promise<{
+    data: DeviceWithAssignment[];
+    error: Error | null;
+  }> {
+    try {
+      const { data: assigned, error: assignError } = await this.supabaseClient
         .from(this.tableName)
         .select("device_id")
         .eq("is_active", true);
 
-      if (assError) throw assError;
+      if (assignError) throw assignError;
 
       const assignedIds = new Set(
-        (activeAssignments ?? []).map(
-          (a: { device_id: string }) => a.device_id,
+        (assigned ?? []).map((a: { device_id: string }) => a.device_id),
+      );
+
+      const { data: devices, error: devicesError } = await this.supabaseClient
+        .from("devices")
+        .select("id, name, type, status, ip, is_active")
+        .not("status", "eq", "isolated");
+
+      if (devicesError) throw devicesError;
+
+      const unassigned = ((devices ?? []) as DeviceWithAssignment[]).filter(
+        (d) => !assignedIds.has(d.id),
+      );
+
+      return { data: unassigned, error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get unassigned devices"),
+      };
+    }
+  }
+
+  public async getUsersForAssignment(): Promise<{
+    data: AnalystWithAssignment[];
+    error: Error | null;
+  }> {
+    try {
+      const { data: admins, error: adminError } = await this.supabaseClient
+        .from("organization_profiles")
+        .select("user_id")
+        .eq("role", "ORG_ADMIN");
+
+      if (adminError) throw adminError;
+
+      const { data: profiles, error: profilesError } = await this.supabaseClient
+        .from("organization_profiles")
+        .select(
+          "user_id, organization_id, role, users:user_id!inner(full_name)",
+        )
+        .eq("role", "ORG_ANALYST")
+        .eq("account_status", "ACTIVE");
+
+      if (profilesError) throw profilesError;
+
+      const adminUserIds = new Set(
+        (admins ?? []).map((a: { user_id: string }) => a.user_id),
+      );
+
+      const analysts = (profiles ?? [])
+        .filter(
+          (p: Record<string, unknown>) =>
+            !adminUserIds.has(p.user_id as string),
+        )
+        .map(
+          (p: Record<string, unknown>) => {
+            const users = p.users as { full_name?: string } | undefined;
+            return {
+              id: p.user_id as string,
+              full_name: users?.full_name ?? "Unknown",
+              role: p.role as string,
+            } as AnalystWithAssignment;
+          },
+        );
+
+      return { data: analysts, error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get users for assignment"),
+      };
+    }
+  }
+
+  public async getAssignmentStats(): Promise<{
+    data: AssignmentStats | null;
+    error: Error | null;
+  }> {
+    try {
+      const { count: totalCount, error: totalError } =
+        await this.supabaseClient
+          .from(this.tableName)
+          .select("*", { count: "exact", head: true });
+
+      if (totalError) throw totalError;
+
+      const { count: activeCount, error: activeError } =
+        await this.supabaseClient
+          .from(this.tableName)
+          .select("*", { count: "exact", head: true })
+          .eq("is_active", true);
+
+      if (activeError) throw activeError;
+
+      const { data: devices, error: devicesError } = await this.supabaseClient
+        .from("devices")
+        .select("id")
+        .not("status", "eq", "isolated");
+
+      if (devicesError) throw devicesError;
+
+      const { data: assigned, error: assignedError } =
+        await this.supabaseClient
+          .from(this.tableName)
+          .select("device_id")
+          .eq("is_active", true);
+
+      if (assignedError) throw assignedError;
+
+      const assignedIds = new Set(
+        (assigned ?? []).map((a: { device_id: string }) => a.device_id),
+      );
+
+      const { data: usersWithAssignments, error: usersError } =
+        await this.supabaseClient
+          .from(this.tableName)
+          .select("user_id")
+          .eq("is_active", true);
+
+      if (usersError) throw usersError;
+
+      const uniqueUsers = new Set(
+        (usersWithAssignments ?? []).map(
+          (u: { user_id: string }) => u.user_id,
         ),
       );
 
-      return (allDevices ?? []).filter(
-        (d: { id: string }) => !assignedIds.has(d.id),
-      );
+      return {
+        data: {
+          totalAssignments: totalCount ?? 0,
+          activeAssignments: activeCount ?? 0,
+          unassignedDevices: (devices ?? []).length - assignedIds.size,
+          usersWithAssignments: uniqueUsers.size,
+        },
+        error: null,
+      };
     } catch (error) {
-      throw this.handleError(error);
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to get assignment stats"),
+      };
     }
   }
 
-  async getUsersForAssignment(): Promise<
-    {
-      id: string;
-      full_name: string;
-      role: string;
-    }[]
-  > {
+  public async assignDeviceToUser(
+    deviceId: string,
+    userId: string,
+    assignedBy: string,
+  ): Promise<{ data: DeviceAssignment | null; error: Error | null }> {
     try {
-      const { data, error } = await this.supabase
-        .schema("organization")
-        .from("profiles")
-        .select("user_id, role, user:user_id(full_name)")
-        .in("role", ["ORG_ANALYST", "ORG_ADMIN"])
-        .eq("account_status", "ACTIVE");
-
-      if (error) throw error;
-      return ((data ?? []) as Record<string, unknown>[]).map((p) => {
-        const u = (p.user ?? {}) as Record<string, unknown>;
-        return {
-          id: (u.id ?? p.user_id) as string,
-          full_name: (u.full_name ?? "") as string,
-          role: p.role as string,
-        };
-      });
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async getAssignmentById(
-    assignmentId: string,
-  ): Promise<DeviceAssignment | null> {
-    try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.supabaseClient
         .from(this.tableName)
+        .insert({
+          user_id: userId,
+          device_id: deviceId,
+          assigned_by: assignedBy,
+          is_active: true,
+        })
         .select(
-          `
-          id,
-          user_id,
-          device_id,
-          assigned_at,
-          assigned_by,
-          is_active,
-          organization_id,
-          devices:device_id (name, type, status, ip),
-          users:user_id (full_name)
-        `,
+          "id, user_id, device_id, assigned_at, assigned_by, is_active, organization_id",
         )
-        .eq("id", assignmentId)
         .single();
 
-      if (error) {
-        if (error.code === "PGRST116") return null;
-        throw error;
-      }
-
-      const raw = data as unknown as RawDeviceAssignment;
-      return {
-        id: raw.id,
-        user_id: raw.user_id,
-        device_id: raw.device_id,
-        assigned_at: raw.assigned_at,
-        assigned_by: raw.assigned_by,
-        is_active: raw.is_active,
-        organization_id: raw.organization_id,
-        device_name: raw.devices?.name,
-        device_type: raw.devices?.type,
-        device_status: raw.devices?.status,
-        device_ip: raw.devices?.ip,
-        user_name: raw.users?.full_name,
-      };
+      if (error) throw error;
+      return { data: data as unknown as DeviceAssignment, error: null };
     } catch (error) {
-      throw this.handleError(error);
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to assign device to user"),
+      };
     }
   }
 
-  subscribeToAssignments(
-    filters: Record<string, FilterValue> = {},
-    callbacks: DeviceAssignmentSubscriptionCallbacks = {},
-  ): string {
-    const channelName = `realtime-assignments-${Date.now()}`;
-
-    this.subscribe(channelName, filters, (payload: unknown) => {
-      try {
-        const p = payload as {
-          eventType: string;
-          new?: DeviceAssignment;
-          old?: DeviceAssignment;
-        };
-        switch (p.eventType) {
-          case "INSERT":
-            callbacks.onInsert?.(p.new!);
-            break;
-          case "UPDATE":
-            callbacks.onUpdate?.(p.new!);
-            break;
-          case "DELETE":
-            callbacks.onDelete?.(p.old!);
-            break;
-        }
-      } catch (error) {
-        callbacks.onError?.(error);
-      }
-    });
-
-    return channelName;
-  }
-
-  unsubscribeFromAssignments(channelName: string): void {
-    this.unsubscribe(channelName);
-  }
-
-  async getAssignmentStats(): Promise<{
-    totalAssignments: number;
-    activeAssignments: number;
-    unassignedDevices: number;
-    usersWithAssignments: number;
-  }> {
+  public async removeDeviceAssignment(
+    deviceId: string,
+    userId: string,
+  ): Promise<{ data: null; error: Error | null }> {
     try {
-      const [assignments, unassignedDevices] = await Promise.all([
-        this.getAllActiveAssignments(),
-        this.getUnassignedDevices(),
-      ]);
+      const { error } = await this.supabaseClient
+        .from(this.tableName)
+        .update({ is_active: false })
+        .eq("device_id", deviceId)
+        .eq("user_id", userId)
+        .eq("is_active", true);
 
-      const uniqueUsers = new Set(assignments.map((a) => a.user_id)).size;
-
-      return {
-        totalAssignments: assignments.length,
-        activeAssignments: assignments.filter((a) => a.is_active).length,
-        unassignedDevices: unassignedDevices.length,
-        usersWithAssignments: uniqueUsers,
-      };
+      if (error) throw error;
+      return { data: null, error: null };
     } catch (error) {
-      throw this.handleError(error);
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to remove device assignment"),
+      };
+    }
+  }
+
+  public async reassignDevice(
+    deviceId: string,
+    fromUserId: string,
+    toUserId: string,
+    reassignedBy: string,
+  ): Promise<{ data: DeviceAssignment | null; error: Error | null }> {
+    try {
+      const { error: removeError } = await this.removeDeviceAssignment(
+        deviceId,
+        fromUserId,
+      );
+      if (removeError) throw removeError;
+
+      return this.assignDeviceToUser(deviceId, toUserId, reassignedBy);
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to reassign device"),
+      };
     }
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -15,8 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { AuditLogRepository } from "@/lib/repositories";
-import type { AuditLogEntry } from "@/lib/supabase/types";
+import { useLogsStore } from "@/lib/stores/logs-store";
 
 const severityStyles: Record<
   string,
@@ -60,35 +59,25 @@ export default function AuditLogPage() {
     document.title = "Audit Log - EdgePulse";
   }, []);
 
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const logs = useLogsStore((s) => s.logs);
+  const status = useLogsStore((s) => s.status);
+  const searchTerm = useLogsStore((s) => s.searchTerm);
+  const setSearchTerm = useLogsStore((s) => s.setSearchTerm);
+
   const [severityFilter, setSeverityFilter] = useState<string>("all");
-  const loadLogs = useCallback(async () => {
-    const auditLogRepo = new AuditLogRepository();
-    setLoading(true);
-    try {
-      const data = await auditLogRepo.findMany({
-        orderBy: { column: "timestamp", ascending: false },
-        limit: 200,
-      });
-      setLogs(data);
-    } catch {
-      // silently handle
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
+    useLogsStore.getState().refreshLogs({
+      orderBy: { column: "timestamp", ascending: false },
+      limit: 200,
+    });
+  }, []);
 
   const filtered = logs.filter((log) => {
     if (severityFilter !== "all" && log.severity !== severityFilter)
       return false;
-    if (!search) return true;
-    const term = search.toLowerCase();
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
     return (
       log.action.toLowerCase().includes(term) ||
       log.resource_type.toLowerCase().includes(term) ||
@@ -96,6 +85,8 @@ export default function AuditLogPage() {
       (log.user_id && log.user_id.toLowerCase().includes(term))
     );
   });
+
+  const loading = status === "loading";
 
   return (
     <div className="max-w-275 space-y-6">
@@ -116,8 +107,8 @@ export default function AuditLogPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search audit log..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 h-9"
           />
         </div>

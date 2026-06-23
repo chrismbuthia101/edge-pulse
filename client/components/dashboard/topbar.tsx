@@ -25,6 +25,7 @@ import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import type { ConnStatus } from "@/lib/hooks/use-notifications";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { useHealthStore } from "@/lib/stores/health-store";
 
 function useConnConfig(
   status: ConnStatus,
@@ -88,7 +89,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const userRole = useAuthStore((s) => s.role);
+  const userRole = useAuthStore((s) => s.user?.role);
   const hasMultipleOrgs = useAuthStore((s) => s.hasMultipleOrganizations());
   const signOut = useAuthStore((s) => s.signOut);
 
@@ -113,6 +114,9 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
 
     onlineCount,
   } = useNotifications();
+
+  const healthEvents = useHealthStore((s) => s.systemHealth?.total_alerts_24h ?? 0);
+  const eventsPerMin = onlineCount > 0 ? Math.max(1, Math.round(healthEvents / 5)) : 0;
 
   const conn = useConnConfig(connStatus, queuedCount, isLoading, hasError);
 
@@ -197,7 +201,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Events/min</span>
                       <span className="font-medium text-foreground">
-                        {onlineCount > 0 ? "12" : "0"}
+                        {eventsPerMin}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
@@ -496,7 +500,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                   {hasMultipleOrgs && (
                     <button
                       onClick={() => {
-                        window.location.href = "/auth/organizations";
+                        window.location.href = "/onboarding/organizations";
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
                     >

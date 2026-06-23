@@ -2,8 +2,11 @@ import { LiveRepository } from "@/lib/repositories";
 import type {
   LiveStats,
   LiveQueryOptions,
+  LiveSubscriptionHandles,
 } from "@/lib/repositories/live-repository";
-import type { Alert, TelemetryEvent } from "@/lib/supabase/types";
+import type { Alert } from "@/lib/types/alerts";
+import type { TelemetryEvent } from "@/lib/types/telemetry";
+import type { Result } from "@/lib/types/shared";
 
 export interface LiveSubscriptionOptions {
   onNewAlert?: (alert: Alert) => void;
@@ -12,51 +15,87 @@ export interface LiveSubscriptionOptions {
   onStatusChange?: (connected: boolean) => void;
 }
 
+export interface LiveFeedData {
+  alerts: Alert[];
+  telemetry: TelemetryEvent[];
+  stats: LiveStats;
+}
+
 export class LiveService {
-  private cleanup: (() => void) | null = null;
+  private readonly repository: LiveRepository;
+  private activeHandles: LiveSubscriptionHandles | null = null;
 
-  constructor(private readonly repository: LiveRepository) {}
-
-  async getRecentAlerts(options: LiveQueryOptions = {}): Promise<Alert[]> {
-    return this.repository.getRecentAlerts(options);
+  constructor(repository: LiveRepository) {
+    this.repository = repository;
   }
 
-  async getTodayStats(): Promise<LiveStats> {
-    return this.repository.getTodayStats();
-  }
-
-  async getRecentTelemetry(
+  public async getRecentAlerts(
     options: LiveQueryOptions = {},
-  ): Promise<TelemetryEvent[]> {
-    return this.repository.getRecentTelemetry(options);
+  ): Promise<Result<Alert[]>> {
+    const { data, error } = await this.repository.getRecentAlerts(options);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   }
 
-  subscribeToLiveFeed(options: LiveSubscriptionOptions = {}): void {
-    if (this.cleanup) {
-      this.unsubscribeFromLiveFeed();
+  public async getTodayStats(): Promise<Result<LiveStats>> {
+    const { data, error } = await this.repository.getTodayStats();
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+  }
+
+  public async getRecentTelemetry(
+    options: LiveQueryOptions = {},
+  ): Promise<Result<TelemetryEvent[]>> {
+    const { data, error } = await this.repository.getRecentTelemetry(options);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+  }
+
+  public subscribeToLiveFeed(
+    options: LiveSubscriptionOptions = {},
+  ): Result<LiveSubscriptionHandles> {
+    if (this.activeHandles) {
+      this.repository.unsubscribeFromLiveFeed(this.activeHandles);
+      this.activeHandles = null;
     }
 
-    this.cleanup = this.repository.subscribeToLiveFeed(options);
-  }
-
-  unsubscribeFromLiveFeed(): void {
-    if (this.cleanup) {
-      this.cleanup();
-      this.cleanup = null;
+    const { data, error } = this.repository.subscribeToLiveFeed(options);
+    if (error || !data) {
+      return { success: false, error: error?.message ?? "No subscription handle" };
     }
+    this.activeHandles = data;
+    return { success: true, data };
   }
 
-  async initializeLiveFeed(): Promise<{
-    alerts: Alert[];
-    telemetry: TelemetryEvent[];
-    stats: LiveStats;
-  }> {
-    const [alerts, telemetry, stats] = await Promise.all([
+  public unsubscribeFromLiveFeed(): Result<void> {
+    if (this.activeHandles) {
+      this.repository.unsubscribeFromLiveFeed(this.activeHandles);
+      this.activeHandles = null;
+    }
+    return { success: true, data: undefined };
+  }
+
+  public async initializeLiveFeed(): Promise<Result<LiveFeedData>> {
+    const [alertsResult, telemetryResult, statsResult] = await Promise.all([
       this.getRecentAlerts(),
       this.getRecentTelemetry(),
       this.getTodayStats(),
     ]);
 
-    return { alerts, telemetry, stats };
+    if (!alertsResult.success) return alertsResult;
+    if (!telemetryResult.success) return telemetryResult;
+    if (!statsResult.success) return statsResult;
+
+    return {
+      success: true,
+      data: {
+        alerts: alertsResult.data,
+        telemetry: telemetryResult.data,
+        stats: statsResult.data,
+      },
+    };
   }
 }
+
+import { createClient } from "@/lib/config/client";
+export const liveService = new LiveService(new LiveRepository(createClient()));

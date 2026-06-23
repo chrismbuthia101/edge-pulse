@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Alert } from "@/lib/supabase/types";
+import type { Alert } from "@/lib/types/alerts";
 import {
   ShieldAlert,
   MonitorSmartphone,
@@ -155,14 +155,17 @@ export default function DashboardPage() {
     initialize: initAlerts,
     alerts,
     pendingCount,
-    loading: alertsLoading,
+    status: alertsStatus,
   } = useAlertStore();
   const {
     initialize: initDevices,
     devices,
     onlineCount,
-    loading: devicesLoading,
+    status: devicesStatus,
   } = useDeviceStore();
+
+  const alertsLoading = alertsStatus === "loading";
+  const devicesLoading = devicesStatus === "loading";
 
   const [tick, setTick] = useState(() => Date.now());
 

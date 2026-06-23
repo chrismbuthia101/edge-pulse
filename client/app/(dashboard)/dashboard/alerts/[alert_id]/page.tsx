@@ -23,8 +23,7 @@ import { ShapChart } from "@/components/charts/ShapChart";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
-import { UserRepository } from "@/lib/repositories/user-repository";
-import { DeviceRepository } from "@/lib/repositories/device-repository";
+import { useUserStore } from "@/lib/stores/user-store";
 
 interface AlertRecord {
   id: string;
@@ -67,9 +66,6 @@ interface ShapExplanation {
   base_score?: number;
   final_score?: number;
 }
-
-const userRepository = new UserRepository();
-const deviceRepository = new DeviceRepository();
 
 export default function AlertDetailPage() {
   const params = useParams();
@@ -126,11 +122,14 @@ export default function AlertDetailPage() {
           resolvedDeviceName = device.name;
         } else {
           try {
-            const fetchedDevice = await deviceRepository.findById(
-              alertData.device_id,
+            const { refreshDevices } = useDeviceStore.getState();
+            await refreshDevices();
+            const refreshedDevices = useDeviceStore.getState().devices;
+            const refreshedDevice = refreshedDevices.find(
+              (d) => d.id === alertData.device_id,
             );
             resolvedDeviceName =
-              fetchedDevice?.name || alertData.device_id || "Unknown Device";
+              refreshedDevice?.name || alertData.device_id || "Unknown Device";
           } catch (error) {
             console.error("Failed to fetch device:", error);
             resolvedDeviceName = alertData.device_id || "Unknown Device";
@@ -148,20 +147,16 @@ export default function AlertDetailPage() {
         alertData.closed_by,
       ].filter(Boolean) as string[];
 
-      const names: Record<string, string> = {};
-      await Promise.all(
-        userIds.map(async (userId) => {
-          try {
-            const userData = await userRepository.getUserById(userId);
-            if (userData) {
-              names[userId] = userData.full_name;
-            }
-          } catch (error) {
-            console.error(`Failed to fetch user ${userId}:`, error);
-          }
-        }),
-      );
-      setUserNames(names);
+      if (userIds.length > 0) {
+        const { resolveUserNames } = useUserStore.getState();
+        await resolveUserNames(userIds);
+        const cache = useUserStore.getState().userCache;
+        const names: Record<string, string> = {};
+        for (const id of userIds) {
+          if (cache[id]) names[id] = cache[id];
+        }
+        setUserNames(names);
+      }
     } catch (error) {
       console.error("Failed to fetch alert:", error);
       router.push("/dashboard/alerts");
@@ -275,7 +270,6 @@ export default function AlertDetailPage() {
 
   return (
     <div className="container mx-auto py-8 max-w-6xl space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button variant="ghost" onClick={() => router.back()}>
@@ -290,14 +284,13 @@ export default function AlertDetailPage() {
           </div>
         </div>
         {alert.alert_status === "PENDING" &&
-          hasRole(["ORG_ANALYST", "ORG_ADMIN", "PLATFORM_ADMIN"]) && (
+          hasRole(["ORG_ANALYST", "ORG_ADMIN"]) && (
             <Button onClick={handleAcknowledge} disabled={acknowledging}>
               {acknowledging ? "Acknowledging..." : "Acknowledge Alert"}
             </Button>
           )}
       </div>
 
-      {/* Alert Overview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -468,7 +461,6 @@ export default function AlertDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Detailed Analysis */}
       <Tabs defaultValue="explanation" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="explanation">AI Explanation</TabsTrigger>

@@ -49,51 +49,9 @@ import {
   type ReportData,
 } from "@/lib/services/pdf-report-service";
 
-const SEV_COLORS: Record<string, string> = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#f59e0b",
-  low: "#06b6d4",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "#ef4444",
-  ACKNOWLEDGED: "#f59e0b",
-  INVESTIGATED: "#3b82f6",
-  CLOSED: "#22c55e",
-};
-
-function TooltipBox({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl text-xs">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} className="font-bold" style={{ color: p.color }}>
-          {p.name}: {p.value}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-type DateRange = "7d" | "30d" | "90d" | "all";
-type SeverityFilter = "all" | "critical" | "high" | "medium" | "low";
-type StatusFilter =
-  | "all"
-  | "PENDING"
-  | "ACKNOWLEDGED"
-  | "INVESTIGATED"
-  | "CLOSED";
-type SourceFilter = "all" | "PROCESS" | "NETWORK" | "FILE" | "RESOURCE";
+import type { DateRange, SeverityFilter, AlertStatusFilter, SourceFilter } from "@/lib/types/reports";
+import { SEV_COLORS, STATUS_COLORS, RANGE_OPTS, cutoffFromDateRange } from "@/lib/utils/report-utils";
+import { TooltipBox } from "@/components/ui/TooltipBox";
 
 export default function AlertAnalysisReport() {
   useEffect(() => {
@@ -106,7 +64,7 @@ export default function AlertAnalysisReport() {
 
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [severity, setSeverity] = useState<SeverityFilter>("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<AlertStatusFilter>("all");
   const [source, setSource] = useState<SourceFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedDevice, setSelectedDevice] = useState("all");
@@ -121,13 +79,7 @@ export default function AlertAnalysisReport() {
     }
   }, [initialize]);
 
-  const cutoff = useMemo(() => {
-    if (dateRange === "all") return new Date(0);
-    const d = new Date();
-    const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
-    d.setDate(d.getDate() - days);
-    return d;
-  }, [dateRange]);
+  const cutoff = useMemo(() => cutoffFromDateRange(dateRange), [dateRange]);
 
   const filtered = useMemo(() => {
     return alerts.filter((a) => {
@@ -619,13 +571,6 @@ export default function AlertAnalysisReport() {
     }
   };
 
-  const RANGE_OPTS: { label: string; value: DateRange }[] = [
-    { label: "7 days", value: "7d" },
-    { label: "30 days", value: "30d" },
-    { label: "90 days", value: "90d" },
-    { label: "All time", value: "all" },
-  ];
-
   return (
     <div className="max-w-300 space-y-6">
       <motion.div
@@ -730,7 +675,7 @@ export default function AlertAnalysisReport() {
           </Select>
           <Select
             value={status}
-            onValueChange={(v) => setStatus(v as StatusFilter)}
+            onValueChange={(v) => setStatus(v as AlertStatusFilter)}
           >
             <SelectTrigger className="h-8 text-xs w-36">
               <SelectValue />

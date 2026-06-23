@@ -1,70 +1,64 @@
-import { HealthRepository } from "@/lib/repositories";
-import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/supabase/types";
-
-export interface HealthServiceDependencies {
-  repository: HealthRepository;
-}
+import { HealthRepository } from "@/lib/repositories/health-repository";
+import type { DeviceHealthSnapshot, SystemHealth } from "@/lib/types/health";
+import type { Result } from "@/lib/types/shared";
 
 export class HealthService {
-  private repository: HealthRepository;
+  private channelName: string | null = null;
 
-  constructor(dependencies: HealthServiceDependencies) {
-    this.repository = dependencies.repository;
-  }
+  constructor(private readonly repository: HealthRepository) {}
 
-  async getDeviceHealth(options?: {
+  public async getDeviceHealth(options?: {
     limit?: number;
-  }): Promise<DeviceHealthSnapshot[]> {
-    return this.repository.getDeviceHealth(options);
+  }): Promise<Result<DeviceHealthSnapshot[]>> {
+    const { data, error } = await this.repository.getDeviceHealth(options);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   }
 
-  async getSystemHealth(): Promise<SystemHealth | null> {
-    return this.repository.getSystemHealth();
+  public async getSystemHealth(): Promise<Result<SystemHealth>> {
+    const { data, error } = await this.repository.getSystemHealth();
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   }
 
-  async refreshDeviceHealth(): Promise<DeviceHealthSnapshot[]> {
-    return this.getDeviceHealth({ limit: 100 });
-  }
-
-  subscribeToHealthUpdates(callbacks: {
+  public subscribeToHealthUpdates(callbacks: {
     onDeviceHealthUpdate?: (device: DeviceHealthSnapshot) => void;
     onError?: (error: Error) => void;
-  }): string {
-    const channelName = "realtime-health";
-    const channel = this.repository["supabase"]
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "telemetry",
-          table: "device_health",
-        },
-        (payload: unknown) => {
-          try {
-            const p = payload as {
-              eventType: string;
-              new: Record<string, unknown>;
-              old: Record<string, unknown>;
-            };
-            if (p.eventType === "INSERT" || p.eventType === "UPDATE") {
-              const snapshot = p.new as unknown as DeviceHealthSnapshot;
-              callbacks.onDeviceHealthUpdate?.(snapshot);
-            }
-          } catch (error) {
-            callbacks.onError?.(
-              error instanceof Error ? error : new Error("Unknown error"),
-            );
-          }
-        },
-      )
-      .subscribe();
+  }): () => void {
+    if (this.channelName) {
+      this.repository.unsubscribeFromHealthUpdates(this.channelName);
+    }
 
-    this.repository["subscriptions"].add(channelName, channel);
-    return channelName;
+    const repoCallbacks = {
+      onInsert: (device: DeviceHealthSnapshot) => {
+        callbacks.onDeviceHealthUpdate?.(device);
+      },
+      onUpdate: (device: DeviceHealthSnapshot) => {
+        callbacks.onDeviceHealthUpdate?.(device);
+      },
+      onError: (err: unknown) => {
+        callbacks.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
+      },
+    };
+
+    this.channelName =
+      this.repository.subscribeToHealthUpdates(repoCallbacks);
+
+    const currentChannel = this.channelName;
+    return () => {
+      if (this.channelName === currentChannel) {
+        this.repository.unsubscribeFromHealthUpdates(this.channelName);
+        this.channelName = null;
+      }
+    };
   }
 
-  unsubscribeFromHealthUpdates(channelName?: string): void {
-    this.repository.unsubscribe(channelName ?? "realtime-health");
+  public unsubscribeFromHealthUpdates(): void {
+    if (this.channelName) {
+      this.repository.unsubscribeFromHealthUpdates(this.channelName);
+      this.channelName = null;
+    }
   }
 }

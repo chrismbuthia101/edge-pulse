@@ -1,428 +1,534 @@
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+import type { User, Session, Provider } from "@supabase/supabase-js";
+import { createClient } from "@/lib/config/client";
 import { AuthService } from "@/lib/services/auth-service";
-import {
-  AuthRepository,
-  type AuthUser,
-} from "@/lib/repositories/auth-repository";
-import type { OrganizationRow } from "@/lib/supabase/types/database";
-import type { Session } from "@supabase/supabase-js";
-import { toast } from "sonner";
+import { AuthRepository } from "@/lib/repositories/auth-repository";
+import { UserService } from "@/lib/services/user-service";
+import { UserRepository } from "@/lib/repositories/user-repository";
+import { OrgProfileService } from "@/lib/services/org-profile-service";
+import { OrgProfileRepository } from "@/lib/repositories/org-profile-repository";
+import { StorageRepository } from "@/lib/repositories/storage-repository";
+import type { OrganizationProfile, UserProfile } from "@/lib/types/user";
+import type { AccountStatus } from "@/lib/types/shared";
+import type { Result } from "@/lib/types/shared";
 
-const ACTIVE_ORG_KEY = "edgepulse_active_org";
+const supabase = createClient();
+const authService = new AuthService(new AuthRepository(supabase));
+const storageRepo = new StorageRepository(supabase);
+const userService = new UserService(new UserRepository(supabase), storageRepo);
+const orgProfileService = new OrgProfileService(
+  new OrgProfileRepository(supabase),
+);
 
-function getStoredActiveOrgId(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(ACTIVE_ORG_KEY);
-  } catch {
-    return null;
-  }
+export interface AuthUser extends User {
+  profiles: OrganizationProfile[];
+  full_name: string;
+  username: string | null;
+  avatar_url: string | null;
 }
 
-function storeActiveOrgId(orgId: string | null) {
-  if (typeof window === "undefined") return;
-  try {
-    if (orgId) {
-      localStorage.setItem(ACTIVE_ORG_KEY, orgId);
-    } else {
-      localStorage.removeItem(ACTIVE_ORG_KEY);
-    }
-  } catch {
-    // localStorage unavailable
-  }
-}
-
-interface AuthStore {
+interface AuthState {
   user: AuthUser | null;
   session: Session | null;
-  role: string | null;
+  profiles: OrganizationProfile[];
+  activeOrganizationId: string | null;
+  status: "loading" | "authenticated" | "unauthenticated";
   loading: boolean;
   error: string | null;
-  initialized: boolean;
-  activeOrganizationId: string | null;
+}
 
+interface AuthActions {
   initialize: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-  signOut: () => Promise<void>;
-
-  loadUserSession: (
-    fetchFn: () => Promise<{
-      user: AuthUser | null;
-      session: Session | null;
-      error: string | null;
-    }>,
-  ) => Promise<void>;
-  fetchUserRole: (userId: string) => Promise<string | null>;
-  hasRole: (roles: string[]) => boolean;
-  switchOrganization: (organizationId: string) => Promise<void>;
-  hasMultipleOrganizations: () => boolean;
-
-  clearSessionData: () => void;
-
-  clearError: () => void;
-  setError: (error: string) => void;
-
-  // Auth actions
-  signIn: (
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  signInWithGoogle: (
+  signIn: (email: string, password: string) => Promise<Result<void>>;
+  signInWithGoogle: (redirectTo?: string) => Promise<Result<void>>;
+  signInWithOAuth: (
+    provider: Provider,
     redirectTo?: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<Result<void>>;
   signUp: (
     email: string,
     password: string,
     fullName: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  resetPassword: (
-    email: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  updatePassword: (
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<Result<void>>;
+  resetPassword: (email: string, redirectTo?: string) => Promise<Result<void>>;
+  updatePassword: (password: string) => Promise<Result<void>>;
+  signOut: () => Promise<Result<void>>;
   updateProfile: (
     userId: string,
-    data: Parameters<AuthService["updateUserProfile"]>[1],
-  ) => Promise<{ success: boolean; error?: string }>;
-  activateProfile: (
-    userId: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+    data: { full_name?: string; username?: string; avatar_url?: string | null },
+  ) => Promise<Result<void>>;
+  activateProfile: (userId: string) => Promise<Result<void>>;
   getProfileStatus: (
     userId: string,
-  ) => Promise<{ account_status: string | null; error?: string }>;
+  ) => Promise<{ account_status: AccountStatus }>;
+  switchOrganization: (organizationId: string) => Promise<Result<void>>;
+  refreshSession: () => Promise<void>;
+  hasRole: (roles: string[]) => boolean;
+  hasMultipleOrganizations: () => boolean;
+  clearError: () => void;
+  setSession: (user: User | null, session: Session | null) => Promise<void>;
 }
 
-const authRepository = new AuthRepository();
-const authService = new AuthService(authRepository);
+type AuthStore = AuthState & AuthActions;
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
-  // Initial state
+const initialState: AuthState = {
   user: null,
   session: null,
-  role: null,
-  loading: true,
-  error: null,
-  initialized: false,
+  profiles: [],
   activeOrganizationId: null,
+  status: "loading",
+  loading: false,
+  error: null,
+};
 
-  initialize: async () => {
-    if (get().initialized) return;
-    await get().loadUserSession(async () => authService.getSession());
-    set({ initialized: true });
-  },
+async function fetchProfiles(userId: string): Promise<OrganizationProfile[]> {
+  const result = await orgProfileService.getProfileOrNull(userId);
+  if (!result.success || !result.data) return [];
+  return [result.data];
+}
 
-  refreshSession: async () => {
-    await get().loadUserSession(async () => authService.refreshSession());
-  },
+function enrichUser(
+  user: User | null,
+  profiles: OrganizationProfile[],
+  userProfile: UserProfile | null,
+): AuthUser | null {
+  if (!user) return null;
+  return {
+    ...user,
+    profiles,
+    full_name: userProfile?.full_name ?? "",
+    username: userProfile?.username ?? null,
+    avatar_url: userProfile?.avatar_url ?? null,
+  };
+}
 
-  loadUserSession: async (
-    fetchFn: () => Promise<{
-      user: AuthUser | null;
-      session: Session | null;
-      error: string | null;
-    }>,
-  ) => {
-    try {
-      set({ loading: true, error: null });
+export function deriveActiveProfile(
+  profiles: OrganizationProfile[],
+  activeOrganizationId: string | null,
+): OrganizationProfile | undefined {
+  if (activeOrganizationId) {
+    return profiles.find((p) => p.organization_id === activeOrganizationId);
+  }
+  return (
+    profiles.find(
+      (p) => p.account_status === "ACTIVE" && p.organization_id !== null,
+    ) ?? profiles.find((p) => p.organization_id === null)
+  );
+}
 
-      const result = await fetchFn();
+export const useAuthStore = create<AuthStore>()(
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-      if (result.error) {
-        console.error("Session error:", result.error);
-        set({ user: null, session: null, role: null, activeOrganizationId: null });
-        return;
-      }
-
-      let activeOrgId = result.user?.activeOrganizationId ?? null;
-      const storedOrgId = getStoredActiveOrgId();
-
-      if (storedOrgId && result.user?.profiles.some((p) => p.organization_id === storedOrgId)) {
-        activeOrgId = storedOrgId;
-      }
-
-      const activeProfile = activeOrgId
-        ? result.user?.profiles.find((p) => p.organization_id === activeOrgId) ?? null
-        : result.user?.profiles.find(
-            (p) => p.account_status === "ACTIVE" && p.organization_id !== null,
-          ) ?? result.user?.profiles.find((p) => p.organization_id === null) ?? null;
-
-      set({
-        session: result.session,
-        user: result.user,
-        role: activeProfile?.role ?? null,
-        activeOrganizationId: activeProfile?.organization_id ?? null,
-      });
-
-      if (result.user && !result.user.activeOrganizationId) {
-        get().clearSessionData();
-      }
-    } catch (error) {
-      console.error("Session error:", error);
-      set({
-        user: null,
-        session: null,
-        role: null,
-        activeOrganizationId: null,
-        error: error instanceof Error ? error.message : "Session error",
-      });
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  signOut: async () => {
-    try {
-      await authService.signOut();
-      get().clearSessionData();
-      storeActiveOrgId(null);
-      set({ user: null, session: null, role: null, activeOrganizationId: null });
-      toast.success("Signed out successfully");
-
-      window.location.href = "/auth/login";
-    } catch (error) {
-      console.error("Error signing out:", error);
-      set({
-        error: error instanceof Error ? error.message : "Failed to sign out",
-      });
-      toast.error("Error signing out");
-    }
-  },
-
-  fetchUserRole: async (userId: string): Promise<string | null> => {
-    try {
-      const result = await authService.getUserRole(userId);
-      if (result.error) {
-        console.error("Error fetching user role:", result.error);
-        return null;
-      }
-      return result.role;
-    } catch (error) {
-      console.error("Error fetching user role:", error);
-      return null;
-    }
-  },
-
-  hasRole: (roles: string[]): boolean => {
-    const { role } = get();
-    if (!role) return false;
-    return roles.includes(role);
-  },
-
-  hasMultipleOrganizations: (): boolean => {
-    const { user } = get();
-    if (!user) return false;
-    const orgProfiles = user.profiles.filter((p) => p.organization_id !== null);
-    return orgProfiles.length > 1;
-  },
-
-  switchOrganization: async (organizationId: string) => {
-    const { user } = get();
-    if (!user) return;
-
-    const profile = user.profiles.find(
-      (p) => p.organization_id === organizationId,
-    );
-    if (!profile) {
-      toast.error("You don't have access to this organization");
-      return;
-    }
-
-    storeActiveOrgId(organizationId);
-
-    set({
-      role: profile.role,
-      activeOrganizationId: profile.organization_id,
-      user: {
-        ...user,
-        role: profile.role,
-        account_status: profile.account_status,
-        organization_id: profile.organization_id,
-        activeOrganizationId: profile.organization_id,
-      },
-    });
-
-    window.location.href = "/dashboard";
-  },
-
-  clearSessionData: () => {
-    try {
-      document.cookie.split(";").forEach((c) => {
-        const cookie = c.trim();
-        if (cookie.length > 0) {
-          const eqPos = cookie.indexOf("=");
-          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
-          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`;
+      initialize: async () => {
+        const sessionResult = await authService.getSession();
+        if (!sessionResult.success) {
+          set(
+            {
+              status: "unauthenticated",
+              loading: false,
+              user: null,
+              session: null,
+            },
+            undefined,
+            "auth/initialize/noSession",
+          );
+          return;
         }
-      });
-    } catch (error) {
-      console.error("Error clearing session data:", error);
-    }
-  },
 
-  clearError: () => set({ error: null }),
+        const { user: authUser, session } = sessionResult.data;
+        const [profiles, userProfileResult] = await Promise.all([
+          fetchProfiles(authUser.id),
+          userService.getUserById(authUser.id),
+        ]);
+        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const user = enrichUser(authUser, profiles, userProfile);
+        const activeProfile = deriveActiveProfile(profiles, null);
 
-  setError: (error: string) => set({ error }),
+        set(
+          {
+            user,
+            session,
+            profiles,
+            activeOrganizationId: activeProfile?.organization_id ?? null,
+            status: "authenticated",
+            loading: false,
+          },
+          undefined,
+          "auth/initialize/success",
+        );
+      },
 
-  signIn: async (email, password) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.signInWithPassword(email, password);
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      if (result.user) {
-        set({
-          user: result.user,
-          session: result.session,
-          role: result.user.role,
-          activeOrganizationId: result.user.activeOrganizationId,
+      setSession: async (user, session) => {
+        if (!user) {
+          set(
+            { ...initialState, status: "unauthenticated" },
+            undefined,
+            "auth/setSession/unauthenticated",
+          );
+          return;
+        }
+
+        const [profiles, userProfileResult] = await Promise.all([
+          fetchProfiles(user.id),
+          userService.getUserById(user.id),
+        ]);
+        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const enrichedUser = enrichUser(user, profiles, userProfile);
+        const activeProfile = deriveActiveProfile(
+          profiles,
+          get().activeOrganizationId,
+        );
+
+        set(
+          {
+            user: enrichedUser,
+            session,
+            profiles,
+            activeOrganizationId:
+              activeProfile?.organization_id ?? get().activeOrganizationId,
+            status: "authenticated",
+            loading: false,
+          },
+          undefined,
+          "auth/setSession/authenticated",
+        );
+      },
+
+      clearError: () => set({ error: null }, undefined, "auth/clearError"),
+
+      signIn: async (email, password) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/signIn/start",
+        );
+        const result = await authService.signIn(email, password);
+
+        if (!result.success) {
+          set(
+            { status: "unauthenticated", loading: false, error: result.error },
+            undefined,
+            "auth/signIn/error",
+          );
+          return { success: false, error: result.error };
+        }
+
+        const { user: authUser, session } = result.data;
+        const [profiles, userProfileResult] = await Promise.all([
+          fetchProfiles(authUser.id),
+          userService.getUserById(authUser.id),
+        ]);
+        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const user = enrichUser(authUser, profiles, userProfile);
+        const activeProfile = deriveActiveProfile(profiles, null);
+
+        set(
+          {
+            user,
+            session,
+            profiles,
+            activeOrganizationId: activeProfile?.organization_id ?? null,
+            status: "authenticated",
+            loading: false,
+            error: null,
+          },
+          undefined,
+          "auth/signIn/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      signInWithGoogle: async (redirectTo) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/signInGoogle/start",
+        );
+        const result = await authService.signInWithGoogle(redirectTo);
+
+        if (!result.success) {
+          set(
+            { status: "unauthenticated", loading: false, error: result.error },
+            undefined,
+            "auth/signInGoogle/error",
+          );
+        }
+
+        return result;
+      },
+
+      signInWithOAuth: async (provider, redirectTo) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/signInOAuth/start",
+        );
+        const result = await authService.signInWithOAuth(provider, {
+          redirectTo,
         });
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to sign in";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
 
-  signInWithGoogle: async (redirectTo) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.signInWithOAuth("google", {
-        redirectTo: redirectTo ?? `${window.location.origin}/auth/callback`,
-      });
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to sign in with Google";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
+        if (!result.success) {
+          set(
+            { status: "unauthenticated", loading: false, error: result.error },
+            undefined,
+            "auth/signInOAuth/error",
+          );
+        }
 
-  signUp: async (email, password, fullName) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.signUp(email, password, fullName);
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      if (result.user) {
-        set({
-          user: result.user,
-          session: result.session,
-          role: result.user.role,
-          activeOrganizationId: result.user.activeOrganizationId,
+        return result.success
+          ? { success: true, data: undefined }
+          : { success: false, error: result.error };
+      },
+
+      signUp: async (email, password, fullName) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/signUp/start",
+        );
+        const result = await authService.signUp(email, password, fullName);
+
+        if (!result.success) {
+          set(
+            { status: "unauthenticated", loading: false, error: result.error },
+            undefined,
+            "auth/signUp/error",
+          );
+          return { success: false, error: result.error };
+        }
+
+        const { user: authUser, session } = result.data;
+        const [profiles, userProfileResult] = await Promise.all([
+          fetchProfiles(authUser.id),
+          userService.getUserById(authUser.id),
+        ]);
+        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const user = enrichUser(authUser, profiles, userProfile);
+
+        set(
+          {
+            user,
+            session,
+            profiles,
+            status: "authenticated",
+            loading: false,
+            error: null,
+          },
+          undefined,
+          "auth/signUp/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      resetPassword: async (email, redirectTo) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/resetPassword/start",
+        );
+        const result = await authService.resetPassword(email, redirectTo);
+
+        set(
+          {
+            status: "unauthenticated",
+            loading: false,
+            error: result.success ? null : result.error,
+          },
+          undefined,
+          "auth/resetPassword/done",
+        );
+
+        return result;
+      },
+
+      updatePassword: async (password) => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/updatePassword/start",
+        );
+        const result = await authService.updatePassword(password);
+
+        set(
+          {
+            status: "authenticated",
+            loading: false,
+            error: result.success ? null : result.error,
+          },
+          undefined,
+          "auth/updatePassword/done",
+        );
+
+        return result;
+      },
+
+      signOut: async () => {
+        set(
+          { status: "loading", loading: true, error: null },
+          undefined,
+          "auth/signOut/start",
+        );
+        const result = await authService.signOut();
+
+        if (!result.success) {
+          set(
+            { status: "authenticated", loading: false, error: result.error },
+            undefined,
+            "auth/signOut/error",
+          );
+          return result;
+        }
+
+        set(
+          { ...initialState, status: "unauthenticated" },
+          undefined,
+          "auth/signOut/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      updateProfile: async (userId, data) => {
+        const result = await userService.updateUser(userId, {
+          full_name: data.full_name,
+          username: data.username,
+          avatar_url: data.avatar_url ?? undefined,
         });
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to sign up";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
 
-  resetPassword: async (email) => {
-    set({ loading: true, error: null });
-    try {
-      const redirectTo = `${window.location.origin}/auth/reset-password`;
-      const result = await authService.resetPasswordForEmail(email, redirectTo);
-      if (result.error) {
-        set({ loading: false, error: result.error });
+        if (result.success) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(userId),
+            userService.getUserById(userId),
+          ]);
+          const userProfile = userProfileResult.success ? userProfileResult.data : null;
+          const currentUser = get().user;
+          if (currentUser) {
+            const user = enrichUser(currentUser, profiles, userProfile);
+            set({ user, profiles }, undefined, "auth/updateProfile/success");
+          }
+        }
+
+        return result.success
+          ? { success: true, data: undefined }
+          : { success: false, error: result.error };
+      },
+
+      activateProfile: async (userId) => {
+        const result = await orgProfileService.activateProfile(userId);
+
+        if (result.success) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(userId),
+            userService.getUserById(userId),
+          ]);
+          const userProfile = userProfileResult.success ? userProfileResult.data : null;
+          const currentUser = get().user;
+          if (currentUser) {
+            const user = enrichUser(currentUser, profiles, userProfile);
+            set({ user, profiles }, undefined, "auth/activateProfile/success");
+          }
+        }
+
+        return result.success
+          ? { success: true, data: undefined }
+          : { success: false, error: result.error };
+      },
+
+      getProfileStatus: async (userId) => {
+        const result = await orgProfileService.getProfileStatus(userId);
+        return result.success
+          ? result.data
+          : { account_status: "PENDING" as AccountStatus };
+      },
+
+      switchOrganization: async (organizationId) => {
+        const currentUser = get().user;
+        if (!currentUser) {
+          return { success: false, error: "Not authenticated" };
+        }
+
+        const profile = currentUser.profiles.find(
+          (p) => p.organization_id === organizationId,
+        );
+
+        if (profile) {
+          set(
+            { activeOrganizationId: organizationId },
+            undefined,
+            "auth/switchOrganization/success",
+          );
+          return { success: true, data: undefined };
+        }
+
+        const result = await orgProfileService.switchOrganization(
+          currentUser.id,
+          organizationId,
+        );
+
+        if (result.success) {
+          set(
+            { activeOrganizationId: organizationId },
+            undefined,
+            "auth/switchOrganization/success",
+          );
+          return { success: true, data: undefined };
+        }
+
         return { success: false, error: result.error };
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to send reset email";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
+      },
 
-  updatePassword: async (password) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.updateUserPassword(password);
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update password";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
+      refreshSession: async () => {
+        const sessionResult = await authService.getSession();
+        if (!sessionResult.success) return;
 
-  updateProfile: async (userId, data) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.updateUserProfile(userId, data);
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update profile";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
+        const { user: authUser, session } = sessionResult.data;
+        const [profiles, userProfileResult] = await Promise.all([
+          fetchProfiles(authUser.id),
+          userService.getUserById(authUser.id),
+        ]);
+        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const user = enrichUser(authUser, profiles, userProfile);
+        const activeProfile = deriveActiveProfile(
+          profiles,
+          get().activeOrganizationId,
+        );
 
-  activateProfile: async (userId) => {
-    set({ loading: true, error: null });
-    try {
-      const result = await authService.activateProfile(userId);
-      if (result.error) {
-        set({ loading: false, error: result.error });
-        return { success: false, error: result.error };
-      }
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to activate profile";
-      set({ error: message });
-      return { success: false, error: message };
-    } finally {
-      set({ loading: false });
-    }
-  },
+        set(
+          {
+            user,
+            session,
+            profiles,
+            activeOrganizationId:
+              activeProfile?.organization_id ?? get().activeOrganizationId,
+            status: "authenticated",
+            loading: false,
+          },
+          undefined,
+          "auth/refreshSession/success",
+        );
+      },
 
-  getProfileStatus: async (userId) => {
-    try {
-      const result = await authService.getProfileStatus(userId);
-      if (result.error) {
-        return { account_status: null, error: result.error };
-      }
-      return { account_status: result.account_status };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to get profile status";
-      return { account_status: null, error: message };
-    }
-  },
-}));
+      hasRole: (roles) => {
+        const state = get();
+        const profile = deriveActiveProfile(
+          state.profiles,
+          state.activeOrganizationId,
+        );
+        if (!profile?.role) return false;
+        return roles.includes(profile.role);
+      },
 
-export { authService, authRepository };
+      hasMultipleOrganizations: () => {
+        return (
+          get().profiles.filter((p) => p.organization_id !== null).length > 1
+        );
+      },
+    }),
+    { name: "auth-store" },
+  ),
+);

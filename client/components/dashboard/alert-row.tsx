@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertStatus } from "@/lib/supabase/types";
+import { Alert, AlertStatus } from "@/lib/types/alerts";
 import { toast } from "@/components/ui/enhanced-toast";
 import Link from "next/link";
 

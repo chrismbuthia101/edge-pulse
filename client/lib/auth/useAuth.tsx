@@ -2,10 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/lib/stores/auth-store";
-import { toast } from "sonner";
-import type { AuthUser } from "@/lib/repositories/auth-repository";
+import {
+  useAuthStore,
+  deriveActiveProfile,
+} from "@/lib/stores/auth-store";
+import type { AuthUser } from "@/lib/stores/auth-store";
 import type { Session } from "@supabase/supabase-js";
+import { toast } from "sonner";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -15,58 +18,44 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
   hasRole: (roles: string[]) => boolean;
-  isAdmin: boolean;
-  isAnalyst: boolean;
-  isApproved: boolean;
-  approvalStatus: string | null;
   activeOrganizationId: string | null;
   hasMultipleOrganizations: boolean;
   switchOrganization: (organizationId: string) => Promise<void>;
 }
 
 export function useAuth(): AuthContextType {
-  const authStore = useAuthStore();
+  const store = useAuthStore();
 
-  useEffect(() => {
-    const mounted = true;
+  const loading = store.status === "loading";
 
-    const initializeAuth = async () => {
-      if (!mounted) return;
-      const store = useAuthStore.getState();
-      await store.initialize();
-    };
+  const activeProfile = deriveActiveProfile(
+    store.profiles,
+    store.activeOrganizationId,
+  ) ?? null;
 
-    initializeAuth();
-  }, []);
-
-  const profile = authStore.activeOrganizationId
-    ? authStore.user?.profiles.find(
-        (p) => p.organization_id === authStore.activeOrganizationId,
-      )
-    : authStore.user?.profiles.find(
-        (p) => p.account_status === "ACTIVE" && p.organization_id !== null,
-      ) ?? authStore.user?.profiles.find((p) => p.organization_id === null) ?? null;
-
-  const isApproved = profile?.account_status === "ACTIVE";
-  const approvalStatus = profile?.account_status ?? null;
-
-  const role = authStore.role;
+  const role = activeProfile?.role ?? null;
 
   return {
-    user: authStore.user,
-    session: authStore.session,
+    user: store.user,
+    session: store.session,
     role,
-    loading: authStore.loading,
-    signOut: authStore.signOut,
-    refreshSession: authStore.refreshSession,
-    hasRole: authStore.hasRole,
-    isAdmin: role === "ORG_ADMIN" || role === "PLATFORM_ADMIN",
-    isAnalyst: role === "ORG_ANALYST",
-    isApproved,
-    approvalStatus,
-    activeOrganizationId: authStore.activeOrganizationId,
-    hasMultipleOrganizations: authStore.hasMultipleOrganizations(),
-    switchOrganization: authStore.switchOrganization,
+    loading,
+    signOut: async () => {
+      const result = await store.signOut();
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to sign out");
+      }
+    },
+    refreshSession: store.refreshSession,
+    hasRole: store.hasRole,
+    activeOrganizationId: store.activeOrganizationId,
+    hasMultipleOrganizations: store.hasMultipleOrganizations(),
+    switchOrganization: async (organizationId) => {
+      const result = await store.switchOrganization(organizationId);
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to switch organization");
+      }
+    },
   };
 }
 

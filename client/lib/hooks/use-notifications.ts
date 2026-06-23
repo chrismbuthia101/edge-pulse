@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/config/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
@@ -28,7 +28,7 @@ export function useNotifications() {
   const {
     alerts,
     unreadCount,
-    loading: alertsLoading,
+    status: alertsStatus,
     error: alertsError,
     initialize: initializeAlerts,
     clearError: clearAlertsError,
@@ -37,7 +37,7 @@ export function useNotifications() {
 
   const {
     onlineCount,
-    loading: devicesLoading,
+    status: devicesStatus,
     error: devicesError,
     initialize: initializeDevices,
     clearError: clearDevicesError,
@@ -57,7 +57,7 @@ export function useNotifications() {
 
     const init = async () => {
       try {
-        await Promise.all([initializeAlerts(), initializeDevices()]);
+        await Promise.all([initializeAlerts(createClient()), initializeDevices(createClient())]);
         if (mounted) setConnStatus("live");
       } catch {
         if (mounted) setConnStatus("offline");
@@ -133,11 +133,9 @@ export function useNotifications() {
 
   const recentNotifs = useMemo(() => alerts.slice(0, 4), [alerts]);
 
-  const isLoading = authLoading || alertsLoading || devicesLoading;
+  const isLoading = authLoading || alertsStatus === "loading" || devicesStatus === "loading";
   const hasError = Boolean(alertsError || devicesError);
-
-  // ── Notification actions ─────────────────────────────────────────────────
-
+  
   const openNotifications = useCallback(() => setNotifOpen(true), []);
   const closeNotifications = useCallback(() => setNotifOpen(false), []);
   const toggleNotifications = useCallback(() => setNotifOpen((v) => !v), []);

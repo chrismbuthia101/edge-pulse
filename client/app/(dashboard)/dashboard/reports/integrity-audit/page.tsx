@@ -47,46 +47,9 @@ import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const INTEGRITY_COLORS: Record<string, string> = {
-  verified: "#22c55e",
-  tampered: "#ef4444",
-  unknown: "#f59e0b",
-  offline: "#6b7280",
-};
-
-const RISK_COLORS: Record<string, string> = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#f59e0b",
-  low: "#22c55e",
-};
-
-function TooltipBox({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl text-xs">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} className="font-bold" style={{ color: p.color }}>
-          {p.name}: {p.value}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-type DateRange = "7d" | "30d" | "90d" | "all";
-type IntegrityFilter = "all" | "verified" | "tampered" | "unknown";
-type RiskFilter = "all" | "critical" | "high" | "medium" | "low";
-type StatusFilter = "all" | "online" | "offline" | "isolated";
+import type { DateRange, IntegrityFilter, RiskFilter, StatusFilter } from "@/lib/types/reports";
+import { INTEGRITY_COLORS, RISK_COLORS, RANGE_OPTS, cutoffFromDateRange } from "@/lib/utils/report-utils";
+import { TooltipBox } from "@/components/ui/TooltipBox";
 
 export default function IntegrityAuditReport() {
   useEffect(() => {
@@ -114,13 +77,7 @@ export default function IntegrityAuditReport() {
     }
   }, [initDevices, initAlerts]);
 
-  const cutoff = useMemo(() => {
-    if (dateRange === "all") return new Date(0);
-    const d = new Date();
-    const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
-    d.setDate(d.getDate() - days);
-    return d;
-  }, [dateRange]);
+  const cutoff = useMemo(() => cutoffFromDateRange(dateRange), [dateRange]);
 
   const filteredDevices = useMemo(() => {
     return devices.filter((d) => {
@@ -362,13 +319,6 @@ export default function IntegrityAuditReport() {
       `integrity-audit-${dateRange}-${new Date().toISOString().split("T")[0]}.pdf`,
     );
   };
-
-  const RANGE_OPTS: { label: string; value: DateRange }[] = [
-    { label: "7 days", value: "7d" },
-    { label: "30 days", value: "30d" },
-    { label: "90 days", value: "90d" },
-    { label: "All time", value: "all" },
-  ];
 
   return (
     <div className="max-w-300 space-y-6">

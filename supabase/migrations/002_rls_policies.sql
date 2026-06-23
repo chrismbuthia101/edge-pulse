@@ -172,6 +172,21 @@ WHERE (SELECT internal.is_platform_admin())
   AND collected_at > NOW() - INTERVAL '24 hours'
 GROUP BY organization_id, source;
 
+CREATE VIEW internal.platform_alert_summary AS
+SELECT
+    a.organization_id,
+    COUNT(*)::INTEGER AS total_alerts,
+    COUNT(*) FILTER (WHERE a.status = 'PENDING')::INTEGER AS pending,
+    COUNT(*) FILTER (WHERE a.status = 'ACKNOWLEDGED')::INTEGER AS acknowledged,
+    COUNT(*) FILTER (WHERE a.status = 'CLOSED')::INTEGER AS closed,
+    COUNT(*) FILTER (WHERE a.severity = 'critical')::INTEGER AS critical,
+    COUNT(*) FILTER (WHERE a.severity = 'high')::INTEGER AS high,
+    COUNT(*) FILTER (WHERE a.severity = 'medium')::INTEGER AS medium,
+    COUNT(*) FILTER (WHERE a.severity = 'low')::INTEGER AS low
+FROM public.alerts a
+WHERE (SELECT internal.is_platform_admin())
+GROUP BY a.organization_id;
+
 -- Device authentication helpers
 CREATE OR REPLACE FUNCTION internal.get_device_id_from_headers()
 RETURNS UUID
@@ -922,6 +937,8 @@ GRANT SELECT ON internal.platform_device_summary TO authenticated;
 GRANT SELECT ON internal.platform_user_summary TO authenticated;
 
 GRANT SELECT ON internal.platform_event_volume TO authenticated;
+
+GRANT SELECT ON internal.platform_alert_summary TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.validate_enrollment_token(TEXT) TO anon, authenticated;
 
