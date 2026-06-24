@@ -41,11 +41,16 @@ BEGIN
     WHERE id = admin_user_id
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO organization.profiles (user_id, organization_id, role, account_status)
-    VALUES (admin_user_id, NULL, 'PLATFORM_ADMIN'::user_role, 'ACTIVE'::account_status)
-    ON CONFLICT (user_id, organization_id) DO UPDATE
-        SET role = 'PLATFORM_ADMIN'::user_role,
-            account_status = 'ACTIVE'::account_status;
+    UPDATE organization.profiles
+    SET role = 'PLATFORM_ADMIN'::user_role,
+        account_status = 'ACTIVE'::account_status
+    WHERE user_id = admin_user_id
+      AND organization_id IS NULL;
+
+    IF NOT FOUND THEN
+        INSERT INTO organization.profiles (user_id, organization_id, role, account_status)
+        VALUES (admin_user_id, NULL, 'PLATFORM_ADMIN'::user_role, 'ACTIVE'::account_status);
+    END IF;
 
     RAISE NOTICE 'Administrator bootstrap completed for email: %', admin_email;
     RAISE NOTICE 'User ID: %', admin_user_id;

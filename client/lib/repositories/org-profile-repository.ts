@@ -484,11 +484,9 @@ export class OrgProfileRepository {
       async (payload) => {
         try {
           if (payload.eventType === "INSERT" && callbacks.onInsert) {
-            const result = await this.findByUserId(payload.new.user_id as string);
-            if (result.data[0]) callbacks.onInsert(result.data[0]);
+            callbacks.onInsert(payload.new as unknown as OrganizationProfile);
           } else if (payload.eventType === "UPDATE" && callbacks.onUpdate) {
-            const result = await this.findByUserId(payload.new.user_id as string);
-            if (result.data[0]) callbacks.onUpdate(result.data[0]);
+            callbacks.onUpdate(payload.new as unknown as OrganizationProfile);
           } else if (payload.eventType === "DELETE" && callbacks.onDelete) {
             callbacks.onDelete(payload.old as unknown as OrganizationProfile);
           }

@@ -153,7 +153,14 @@ export function resolvePostLoginRoute(
     return "/auth/login?error=profile_fetch_failed";
   }
 
-  if (next && next !== "/dashboard") {
+  const isSafeInternalRedirect =
+    typeof next === "string" &&
+    next.startsWith("/") &&
+    !next.startsWith("//") &&
+    !next.includes("://") &&
+    !next.includes("\\");
+
+  if (isSafeInternalRedirect && next !== "/dashboard") {
     return next;
   }
 
@@ -235,7 +242,16 @@ export const useAuthStore = create<AuthStore>()(
                   .catch(() => {});
               } else {
                 set(
-                  { ...initialState, status: "unauthenticated" },
+                  {
+                    user: null,
+                    session: null,
+                    profiles: [],
+                    activeOrganizationId: null,
+                    status: "unauthenticated",
+                    loading: false,
+                    error: null,
+                    profileFetchFailed: false,
+                  },
                   undefined,
                   "auth/onAuthStateChange/signOut",
                 );

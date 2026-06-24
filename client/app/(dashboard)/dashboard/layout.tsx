@@ -16,6 +16,7 @@ export default function DashboardLayout({
     const router = useRouter();
     const profiles = useAuthStore((state) => state.profiles);
     const activeOrganizationId = useAuthStore((state) => state.activeOrganizationId);
+    const profileFetchFailed = useAuthStore((state) => state.profileFetchFailed);
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== "undefined") {
@@ -31,8 +32,12 @@ export default function DashboardLayout({
     }, [sidebarCollapsed]);
 
     useEffect(() => {
+        if (!loading && !user) {
+            router.replace("/auth/login");
+            return;
+        }
+
         if (!loading && user) {
-            const { profileFetchFailed } = useAuthStore.getState();
             const destination = resolvePostLoginRoute(
                 profiles,
                 activeOrganizationId,
@@ -43,7 +48,7 @@ export default function DashboardLayout({
                 router.replace(destination);
             }
         }
-    }, [loading, user, profiles, activeOrganizationId, router]);
+    }, [loading, user, profiles, activeOrganizationId, profileFetchFailed, router]);
 
     // Show loading state while checking authentication
     if (loading) {
