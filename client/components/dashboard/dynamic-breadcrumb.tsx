@@ -24,6 +24,13 @@ const BREADCRUMB_CONFIG: Record<string, { label: string; href?: string }> = {
     href: "/dashboard/notifications",
   },
   "/dashboard/settings": { label: "Settings", href: "/dashboard/settings" },
+  "/admin": { label: "Admin", href: "/admin/overview" },
+  "/admin/overview": { label: "Platform Overview", href: "/admin/overview" },
+  "/admin/organizations": {
+    label: "Organizations",
+    href: "/admin/organizations",
+  },
+  "/admin/audit-log": { label: "Platform Audit Log", href: "/admin/audit-log" },
 };
 
 // Dynamic routes (with parameters)

@@ -19,9 +19,7 @@ import {
   HelpCircle,
   Users,
   FileText,
-  BarChart3,
-  Globe,
-  Database,
+  BarChart3
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -103,32 +101,6 @@ const navItems: NavGroup[] = [
         label: "Notifications",
         href: "/dashboard/notifications",
         badge: "unread",
-      },
-    ],
-  },
-  {
-    group: "Platform",
-    roles: ["PLATFORM_ADMIN"],
-    items: [
-      {
-        icon: Globe,
-        label: "Organizations",
-        href: "/dashboard/admin/organizations",
-      },
-      {
-        icon: Users,
-        label: "All Users",
-        href: "/dashboard/admin/users",
-      },
-      {
-        icon: Database,
-        label: "Platform Overview",
-        href: "/dashboard/admin/overview",
-      },
-      {
-        icon: Shield,
-        label: "Audit Logs",
-        href: "/dashboard/admin/audit-log",
       },
     ],
   },
