@@ -45,6 +45,7 @@ export function useNotifications() {
 
   const fetchSyncQueue = useCallback(async () => {
     const { count, error } = await supabaseRef.current
+      .schema("internal")
       .from("sync_queue")
       .select("*", { count: "exact", head: true })
       .in("status", ["PENDING", "FAILED"]);
@@ -71,7 +72,7 @@ export function useNotifications() {
       .channel("realtime-sync-queue")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "sync_queue" },
+        { event: "*", schema: "internal", table: "sync_queue" },
         () => {
           if (!mounted) return;
           setConnStatus("syncing");

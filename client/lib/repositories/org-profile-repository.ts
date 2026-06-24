@@ -23,7 +23,7 @@ export class OrgProfileRepository {
   public async findByUserId(
     userId: string,
   ): Promise<{
-    data: OrganizationProfile | null;
+    data: OrganizationProfile[];
     error: Error | null;
   }> {
     try {
@@ -31,19 +31,18 @@ export class OrgProfileRepository {
         .schema("organization")
         .from("profiles")
         .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
+        .eq("user_id", userId);
 
       if (error) throw error;
 
-      return { data, error: null };
+      return { data: data ?? [], error: null };
     } catch (error) {
       return {
-        data: null,
+        data: [],
         error:
           error instanceof Error
             ? error
-            : new Error("Failed to find organization profile"),
+            : new Error("Failed to find organization profiles"),
       };
     }
   }
@@ -355,6 +354,36 @@ export class OrgProfileRepository {
     }
   }
 
+  public async activateSetupProfile(
+    userId: string,
+  ): Promise<{
+    data: OrganizationProfile | null;
+    error: Error | null;
+  }> {
+    try {
+      const { data, error } = await this.supabaseClient
+        .schema("organization")
+        .from("profiles")
+        .update({ account_status: "ACTIVE" as AccountStatus })
+        .is("organization_id", null)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to activate setup profile"),
+      };
+    }
+  }
+
   public async updateOrganizationMembership(
     userId: string,
     organizationId: string | null,
@@ -367,6 +396,7 @@ export class OrgProfileRepository {
         .schema("organization")
         .from("profiles")
         .update({ organization_id: organizationId })
+        .is("organization_id", null)
         .eq("user_id", userId)
         .select()
         .single();
@@ -455,10 +485,10 @@ export class OrgProfileRepository {
         try {
           if (payload.eventType === "INSERT" && callbacks.onInsert) {
             const result = await this.findByUserId(payload.new.user_id as string);
-            if (result.data) callbacks.onInsert(result.data);
+            if (result.data[0]) callbacks.onInsert(result.data[0]);
           } else if (payload.eventType === "UPDATE" && callbacks.onUpdate) {
             const result = await this.findByUserId(payload.new.user_id as string);
-            if (result.data) callbacks.onUpdate(result.data);
+            if (result.data[0]) callbacks.onUpdate(result.data[0]);
           } else if (payload.eventType === "DELETE" && callbacks.onDelete) {
             callbacks.onDelete(payload.old as unknown as OrganizationProfile);
           }

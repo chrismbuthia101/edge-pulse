@@ -8,8 +8,9 @@ export class OrgProfileService {
   public async getProfile(userId: string): Promise<Result<OrganizationProfile>> {
     const { data, error } = await this.repository.findByUserId(userId);
     if (error) return { success: false, error: error.message };
-    if (!data) return { success: false, error: "Profile not found" };
-    return { success: true, data };
+    const profile = data[0];
+    if (!profile) return { success: false, error: "Profile not found" };
+    return { success: true, data: profile };
   }
 
   public async getProfilesByOrganization(orgId: string): Promise<Result<OrganizationProfile[]>> {
@@ -47,8 +48,9 @@ export class OrgProfileService {
   ): Promise<Result<{ account_status: AccountStatus }>> {
     const { data, error } = await this.repository.findByUserId(userId);
     if (error) return { success: false, error: error.message };
-    if (!data) return { success: false, error: "Profile not found" };
-    return { success: true, data: { account_status: data.account_status } };
+    const profile = data[0];
+    if (!profile) return { success: false, error: "Profile not found" };
+    return { success: true, data: { account_status: profile.account_status } };
   }
 
   public async updateAccountStatus(
@@ -62,7 +64,17 @@ export class OrgProfileService {
   }
 
   public async activateProfile(userId: string): Promise<Result<OrganizationProfile>> {
-    return this.updateAccountStatus(userId, "ACTIVE");
+    const { data, error } = await this.repository.updateAccountStatus(userId, "ACTIVE");
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Profile not found" };
+    return { success: true, data };
+  }
+
+  public async activateSetupProfile(userId: string): Promise<Result<OrganizationProfile>> {
+    const { data, error } = await this.repository.activateSetupProfile(userId);
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Profile not found" };
+    return { success: true, data };
   }
 
   public async updateRole(
@@ -89,6 +101,12 @@ export class OrgProfileService {
   }
 
   public async getProfileOrNull(userId: string): Promise<Result<OrganizationProfile | null>> {
+    const { data, error } = await this.repository.findByUserId(userId);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: data[0] ?? null };
+  }
+
+  public async getProfilesByUserId(userId: string): Promise<Result<OrganizationProfile[]>> {
     const { data, error } = await this.repository.findByUserId(userId);
     if (error) return { success: false, error: error.message };
     return { success: true, data };
@@ -129,7 +147,7 @@ export class OrgProfileService {
     if (error) return { success: false, error: error.message };
     return {
       success: true,
-      data: data?.organization_id === organizationId,
+      data: data.some((p) => p.organization_id === organizationId),
     };
   }
 
@@ -138,7 +156,7 @@ export class OrgProfileService {
   ): Promise<Result<OrganizationProfile['role'] | null>> {
     const { data, error } = await this.repository.findByUserId(userId);
     if (error) return { success: false, error: error.message };
-    return { success: true, data: data?.role ?? null };
+    return { success: true, data: data[0]?.role ?? null };
   }
 
   public subscribeToProfileChanges(

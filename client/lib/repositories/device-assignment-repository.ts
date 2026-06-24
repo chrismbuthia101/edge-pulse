@@ -193,14 +193,16 @@ export class DeviceAssignmentRepository {
   }> {
     try {
       const { data: admins, error: adminError } = await this.supabaseClient
-        .from("organization_profiles")
+        .schema("organization")
+        .from("profiles")
         .select("user_id")
         .eq("role", "ORG_ADMIN");
 
       if (adminError) throw adminError;
 
       const { data: profiles, error: profilesError } = await this.supabaseClient
-        .from("organization_profiles")
+        .schema("organization")
+        .from("profiles")
         .select(
           "user_id, organization_id, role, users:user_id!inner(full_name)",
         )

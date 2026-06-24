@@ -70,6 +70,7 @@ export class AuthRepository {
         password,
         options: { data: { full_name: fullName } },
       });
+      
       if (error) throw error;
       return { user: data.user, session: data.session, error: null };
     } catch (error) {

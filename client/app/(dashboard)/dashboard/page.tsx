@@ -35,7 +35,6 @@ import {
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
 import { useAuth } from "@/lib/auth/useAuth";
-import { useRouter } from "next/navigation";
 
 function AnomalyTooltip({
   active,
@@ -136,18 +135,11 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { user, role } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     document.title = "Security Dashboard - EdgePulse";
   }, []);
-
-  useEffect(() => {
-    if (role === "PLATFORM_ADMIN") {
-      router.push("/dashboard/admin/overview");
-    }
-  }, [role, router]);
 
   const initialized = useRef(false);
 

@@ -13,6 +13,14 @@ import type { OrganizationProfile, UserProfile } from "@/lib/types/user";
 import type { AccountStatus } from "@/lib/types/shared";
 import type { Result } from "@/lib/types/shared";
 
+type AuthSubscription = {
+  data: {
+    subscription: {
+      unsubscribe: () => void;
+    };
+  };
+};
+
 const supabase = createClient();
 const authService = new AuthService(new AuthRepository(supabase));
 const storageRepo = new StorageRepository(supabase);
@@ -33,9 +41,11 @@ interface AuthState {
   session: Session | null;
   profiles: OrganizationProfile[];
   activeOrganizationId: string | null;
+  __authSubscription?: AuthSubscription | null;
   status: "loading" | "authenticated" | "unauthenticated";
   loading: boolean;
   error: string | null;
+  profileFetchFailed: boolean;
 }
 
 interface AuthActions {
@@ -77,15 +87,31 @@ const initialState: AuthState = {
   session: null,
   profiles: [],
   activeOrganizationId: null,
+  __authSubscription: undefined,
   status: "loading",
   loading: false,
   error: null,
+  profileFetchFailed: false,
 };
 
 async function fetchProfiles(userId: string): Promise<OrganizationProfile[]> {
-  const result = await orgProfileService.getProfileOrNull(userId);
-  if (!result.success || !result.data) return [];
-  return [result.data];
+  try {
+    const result = await orgProfileService.getProfilesByUserId(userId);
+    if (!result.success) {
+      console.warn("Failed to fetch profiles:", result.error);
+      useAuthStore.setState({ profileFetchFailed: true, error: result.error });
+      return [];
+    }
+    useAuthStore.setState({ profileFetchFailed: false });
+    return result.data;
+  } catch (err) {
+    console.warn("Failed to fetch profiles:", err);
+    useAuthStore.setState({
+      profileFetchFailed: true,
+      error: err instanceof Error ? err.message : "Failed to fetch profiles",
+    });
+    return [];
+  }
 }
 
 function enrichUser(
@@ -117,6 +143,44 @@ export function deriveActiveProfile(
   );
 }
 
+export function resolvePostLoginRoute(
+  profiles: OrganizationProfile[],
+  activeOrganizationId: string | null,
+  next?: string,
+  profileFetchFailed?: boolean,
+): string {
+  if (profileFetchFailed && profiles.length === 0) {
+    return "/auth/login?error=profile_fetch_failed";
+  }
+
+  if (next && next !== "/dashboard") {
+    return next;
+  }
+
+  if (profiles.some((p) => p.account_status === "PENDING")) {
+    return "/onboarding/setup-profile";
+  }
+
+  const activeProfile = deriveActiveProfile(profiles, activeOrganizationId);
+  const hasOrg = profiles.some((p) => p.organization_id !== null);
+
+  if (activeProfile?.role === "PLATFORM_ADMIN") {
+    return "/admin/overview";
+  }
+
+  const orgCount = profiles.filter((p) => p.organization_id !== null).length;
+
+  if (orgCount > 1) {
+    return "/onboarding/organizations";
+  }
+
+  if (!hasOrg) {
+    return "/onboarding/setup-organization";
+  }
+
+  return "/dashboard";
+}
+
 export const useAuthStore = create<AuthStore>()(
   devtools(
     (set, get) => ({
@@ -143,7 +207,9 @@ export const useAuthStore = create<AuthStore>()(
           fetchProfiles(authUser.id),
           userService.getUserById(authUser.id),
         ]);
-        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const userProfile = userProfileResult.success
+          ? userProfileResult.data
+          : null;
         const user = enrichUser(authUser, profiles, userProfile);
         const activeProfile = deriveActiveProfile(profiles, null);
 
@@ -159,6 +225,29 @@ export const useAuthStore = create<AuthStore>()(
           undefined,
           "auth/initialize/success",
         );
+
+        if (!get().__authSubscription) {
+          const sub: AuthSubscription = authService.onAuthStateChange(
+            (event, session) => {
+              if (session?.user) {
+                get()
+                  .setSession(session?.user ?? null, session)
+                  .catch(() => {});
+              } else {
+                set(
+                  { ...initialState, status: "unauthenticated" },
+                  undefined,
+                  "auth/onAuthStateChange/signOut",
+                );
+              }
+            },
+          ) as AuthSubscription;
+          set(
+            { __authSubscription: sub },
+            undefined,
+            "auth/initialize/subscribed",
+          );
+        }
       },
 
       setSession: async (user, session) => {
@@ -175,7 +264,9 @@ export const useAuthStore = create<AuthStore>()(
           fetchProfiles(user.id),
           userService.getUserById(user.id),
         ]);
-        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const userProfile = userProfileResult.success
+          ? userProfileResult.data
+          : null;
         const enrichedUser = enrichUser(user, profiles, userProfile);
         const activeProfile = deriveActiveProfile(
           profiles,
@@ -221,7 +312,9 @@ export const useAuthStore = create<AuthStore>()(
           fetchProfiles(authUser.id),
           userService.getUserById(authUser.id),
         ]);
-        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const userProfile = userProfileResult.success
+          ? userProfileResult.data
+          : null;
         const user = enrichUser(authUser, profiles, userProfile);
         const activeProfile = deriveActiveProfile(profiles, null);
 
@@ -302,25 +395,43 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         const { user: authUser, session } = result.data;
-        const [profiles, userProfileResult] = await Promise.all([
-          fetchProfiles(authUser.id),
-          userService.getUserById(authUser.id),
-        ]);
-        const userProfile = userProfileResult.success ? userProfileResult.data : null;
-        const user = enrichUser(authUser, profiles, userProfile);
 
-        set(
-          {
-            user,
-            session,
-            profiles,
-            status: "authenticated",
-            loading: false,
-            error: null,
-          },
-          undefined,
-          "auth/signUp/success",
-        );
+        if (authUser && session) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(authUser.id),
+            userService.getUserById(authUser.id),
+          ]);
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
+          const user = enrichUser(authUser, profiles, userProfile);
+
+          set(
+            {
+              user,
+              session,
+              profiles,
+              status: "authenticated",
+              loading: false,
+              error: null,
+            },
+            undefined,
+            "auth/signUp/success",
+          );
+        } else {
+          set(
+            {
+              user: null,
+              session: null,
+              profiles: [],
+              status: "unauthenticated",
+              loading: false,
+              error: null,
+            },
+            undefined,
+            "auth/signUp/success-no-session",
+          );
+        }
 
         return { success: true, data: undefined };
       },
@@ -384,8 +495,19 @@ export const useAuthStore = create<AuthStore>()(
           return result;
         }
 
+        const sub = get().__authSubscription;
+        try {
+          sub?.data.subscription.unsubscribe();
+        } catch {
+          // ignore
+        }
+
         set(
-          { ...initialState, status: "unauthenticated" },
+          {
+            ...initialState,
+            status: "unauthenticated",
+            __authSubscription: undefined,
+          },
           undefined,
           "auth/signOut/success",
         );
@@ -405,7 +527,9 @@ export const useAuthStore = create<AuthStore>()(
             fetchProfiles(userId),
             userService.getUserById(userId),
           ]);
-          const userProfile = userProfileResult.success ? userProfileResult.data : null;
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
           const currentUser = get().user;
           if (currentUser) {
             const user = enrichUser(currentUser, profiles, userProfile);
@@ -426,7 +550,9 @@ export const useAuthStore = create<AuthStore>()(
             fetchProfiles(userId),
             userService.getUserById(userId),
           ]);
-          const userProfile = userProfileResult.success ? userProfileResult.data : null;
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
           const currentUser = get().user;
           if (currentUser) {
             const user = enrichUser(currentUser, profiles, userProfile);
@@ -491,7 +617,9 @@ export const useAuthStore = create<AuthStore>()(
           fetchProfiles(authUser.id),
           userService.getUserById(authUser.id),
         ]);
-        const userProfile = userProfileResult.success ? userProfileResult.data : null;
+        const userProfile = userProfileResult.success
+          ? userProfileResult.data
+          : null;
         const user = enrichUser(authUser, profiles, userProfile);
         const activeProfile = deriveActiveProfile(
           profiles,

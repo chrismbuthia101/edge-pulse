@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { SkipToContent } from "@/components/ui/skip-to-content";
+import AuthBootstrap from "@/lib/auth/AuthBootstrap";
 import "./globals.css";
 
 const syne = Syne({
@@ -52,6 +53,7 @@ export default function RootLayout({
         >
           <TooltipProvider>
             <SkipToContent />
+            <AuthBootstrap />
             {children}
             <Toaster />
           </TooltipProvider>

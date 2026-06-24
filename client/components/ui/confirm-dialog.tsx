@@ -119,7 +119,7 @@ export function ConfirmDialog({
               placeholder="Please provide a reason..."
               value={reason}
               onChange={(e) => onReasonChange?.(e.target.value)}
-              className="min-h-[80px] resize-none"
+              className="min-h-20 resize-none"
               disabled={loading}
             />
           </div>

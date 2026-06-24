@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,16 +65,35 @@ export function LoginPage() {
       return;
     }
 
-    const next = searchParams.get("next") ?? "/dashboard";
+    const next = searchParams.get("next") ?? undefined;
+    const {
+      profiles: currentProfiles,
+      activeOrganizationId: currentOrgId,
+      profileFetchFailed,
+    } = useAuthStore.getState();
+    const destination = resolvePostLoginRoute(
+      currentProfiles,
+      currentOrgId,
+      next,
+      profileFetchFailed,
+    );
+
+    setIsLoading(false);
     toast.success("Login successful!");
-    router.push(next);
+    router.push(destination);
   };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
 
-    const next = searchParams.get("next") ?? "/dashboard";
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    const next = searchParams.get("next") ?? undefined;
+    const callbackTarget = next
+      ? `/auth/resolve?next=${encodeURIComponent(next)}`
+      : "/auth/resolve";
+
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      callbackTarget,
+    )}`;
     const result = await useAuthStore.getState().signInWithGoogle(redirectTo);
 
     if (!result.success) {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/lib/auth/useAuth";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 import { createClient } from "@/lib/config/client";
 import { StorageRepository } from "@/lib/repositories/storage-repository";
 import { toast } from "sonner";
@@ -106,7 +106,18 @@ export default function SetupProfilePage() {
       await useAuthStore.getState().activateProfile(user!.id);
       await refreshSession();
       toast.success("Profile setup complete!");
-      router.push("/dashboard");
+      const {
+        profiles: currentProfiles,
+        activeOrganizationId: currentOrgId,
+        profileFetchFailed,
+      } = useAuthStore.getState();
+      const destination = resolvePostLoginRoute(
+        currentProfiles,
+        currentOrgId,
+        undefined,
+        profileFetchFailed,
+      );
+      router.push(destination);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save profile");
     } finally {

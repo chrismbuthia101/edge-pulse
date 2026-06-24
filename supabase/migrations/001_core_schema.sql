@@ -18,6 +18,8 @@ CREATE SCHEMA IF NOT EXISTS internal;
 
 CREATE SCHEMA IF NOT EXISTS organization;
 
+CREATE SCHEMA IF NOT EXISTS rls_helpers;
+
 -- ─── Enums ────────────────────────────────────────────────────────────────────
 DO $$ BEGIN
     CREATE TYPE alert_severity    AS ENUM ('low','medium','high','critical');

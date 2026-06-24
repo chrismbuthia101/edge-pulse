@@ -58,17 +58,21 @@ GRANT USAGE ON SCHEMA internal TO authenticated, service_role;
 
 GRANT USAGE ON SCHEMA organization TO authenticated, service_role;
 
+GRANT USAGE ON SCHEMA rls_helpers TO authenticated;
+
+-- ─── PostgREST schema exposure ────────────────────────────────────────────────
+ALTER ROLE postgres SET pgrst.db_schemas TO 'public, graphql_public, organization, devices, telemetry, internal';
+
 -- ─── Helper functions ──────────────────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION internal.current_organization_id()
 RETURNS UUID
-LANGUAGE plpgsql STABLE SECURITY DEFINER
+LANGUAGE plpgsql STABLE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE
     v_org_id TEXT;
 BEGIN
-    SET LOCAL row_security = off;
     BEGIN
         v_org_id := current_setting('request.jwt.claims', true)::json->>'organization_id';
         IF v_org_id IS NOT NULL THEN
@@ -90,12 +94,11 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.is_platform_admin()
 RETURNS BOOLEAN
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
 BEGIN
-    SET LOCAL row_security = off;
     SELECT EXISTS (
         SELECT 1 FROM organization.profiles
         WHERE user_id          = (SELECT auth.uid())
@@ -109,12 +112,11 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.is_org_admin()
 RETURNS BOOLEAN
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
 BEGIN
-    SET LOCAL row_security = off;
     SELECT EXISTS (
         SELECT 1 FROM organization.profiles
         WHERE user_id        = (SELECT auth.uid())
@@ -129,7 +131,7 @@ $$;
 -- These views check is_platform_admin() internally, exposing only aggregate
 -- statistics — never individual tenant rows. This enforces zero-trust:
 
-CREATE VIEW internal.platform_device_summary AS
+CREATE VIEW internal.platform_device_summary WITH (security_invoker=true) AS
 SELECT
     o.id            AS organization_id,
     o.name          AS organization_name,
@@ -147,7 +149,7 @@ LEFT JOIN public.devices d ON d.organization_id = o.id
 WHERE (SELECT internal.is_platform_admin())
 GROUP BY o.id, o.name;
 
-CREATE VIEW internal.platform_user_summary AS
+CREATE VIEW internal.platform_user_summary WITH (security_invoker=true) AS
 SELECT
     p.organization_id,
     COUNT(*)::INTEGER AS total_users,
@@ -160,7 +162,7 @@ FROM organization.profiles p
 WHERE (SELECT internal.is_platform_admin())
 GROUP BY p.organization_id;
 
-CREATE VIEW internal.platform_event_volume AS
+CREATE VIEW internal.platform_event_volume WITH (security_invoker=true) AS
 SELECT
     organization_id,
     source,
@@ -172,7 +174,7 @@ WHERE (SELECT internal.is_platform_admin())
   AND collected_at > NOW() - INTERVAL '24 hours'
 GROUP BY organization_id, source;
 
-CREATE VIEW internal.platform_alert_summary AS
+CREATE VIEW internal.platform_alert_summary WITH (security_invoker=true) AS
 SELECT
     a.organization_id,
     COUNT(*)::INTEGER AS total_alerts,
@@ -225,7 +227,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION internal.is_authenticated_device()
+CREATE OR REPLACE FUNCTION rls_helpers.is_authenticated_device()
 RETURNS BOOLEAN
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, public, internal
@@ -261,7 +263,7 @@ LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal
 AS $$
 BEGIN
-    IF internal.is_authenticated_device() THEN
+    IF rls_helpers.is_authenticated_device() THEN
         RETURN internal.get_device_id_from_headers();
     END IF;
     RETURN NULL;
@@ -269,7 +271,7 @@ END;
 $$;
 
 -- Organization-scoped device access check
-CREATE OR REPLACE FUNCTION internal.user_has_device_access(p_device_id UUID)
+CREATE OR REPLACE FUNCTION rls_helpers.user_has_device_access(p_device_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, public, internal, organization
@@ -324,11 +326,10 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.get_user_assigned_devices()
 RETURNS TABLE(device_id UUID, device_name TEXT, device_type TEXT, device_status TEXT)
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal
 AS $$
 BEGIN
-    SET LOCAL row_security = off;
     RETURN QUERY
     SELECT d.id, d.name, d.type::TEXT, d.status::TEXT
     FROM public.devices d
@@ -524,7 +525,7 @@ CREATE POLICY "org_admins: manage organization devices" ON public.devices FOR AL
 CREATE POLICY "org_analysts: read assigned devices" ON public.devices FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (id)
+            SELECT rls_helpers.user_has_device_access (id)
         )
     );
 
@@ -600,7 +601,7 @@ SELECT USING (
 CREATE POLICY "org_analysts: read assigned device events" ON telemetry.events FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -626,7 +627,7 @@ SELECT USING (
 CREATE POLICY "org_analysts: read assigned device feature vectors" ON telemetry.feature_vectors FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -652,7 +653,7 @@ SELECT USING (
 CREATE POLICY "org_analysts: read assigned device anomaly scores" ON telemetry.anomaly_scores FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -677,20 +678,20 @@ CREATE POLICY "org_admins: manage organization alerts" ON public.alerts FOR ALL 
 CREATE POLICY "org_analysts: read assigned device alerts" ON public.alerts FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
 CREATE POLICY "org_analysts: update assigned device alerts" ON public.alerts FOR
 UPDATE USING (
     (
-        SELECT internal.user_has_device_access (device_id)
+        SELECT rls_helpers.user_has_device_access (device_id)
     )
 )
 WITH
     CHECK (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -716,7 +717,7 @@ SELECT USING (
 CREATE POLICY "org_analysts: read assigned device health" ON telemetry.device_health FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -760,20 +761,20 @@ CREATE POLICY "org_admins: manage organization privacy settings" ON public.priva
 CREATE POLICY "org_analysts: read assigned device privacy settings" ON public.privacy_settings FOR
 SELECT USING (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
 CREATE POLICY "org_analysts: update assigned device privacy settings" ON public.privacy_settings FOR
 UPDATE USING (
     (
-        SELECT internal.user_has_device_access (device_id)
+        SELECT rls_helpers.user_has_device_access (device_id)
     )
 )
 WITH
     CHECK (
         (
-            SELECT internal.user_has_device_access (device_id)
+            SELECT rls_helpers.user_has_device_access (device_id)
         )
     );
 
@@ -904,6 +905,10 @@ GRANT SELECT ON organization.organizations TO authenticated;
 
 GRANT SELECT ON organization.billing TO authenticated;
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON organization.profiles TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON devices.enrollment_tokens TO authenticated;
+
 REVOKE ALL ON devices.api_keys FROM authenticated;
 
 REVOKE ALL ON devices.config FROM authenticated;
@@ -932,6 +937,14 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
 GRANT ALL ON ALL ROUTINES IN SCHEMA internal TO service_role;
 
+REVOKE ALL ON internal.platform_device_summary FROM PUBLIC;
+
+REVOKE ALL ON internal.platform_user_summary FROM PUBLIC;
+
+REVOKE ALL ON internal.platform_event_volume FROM PUBLIC;
+
+REVOKE ALL ON internal.platform_alert_summary FROM PUBLIC;
+
 GRANT SELECT ON internal.platform_device_summary TO authenticated;
 
 GRANT SELECT ON internal.platform_user_summary TO authenticated;
@@ -955,10 +968,10 @@ REVOKE EXECUTE ON FUNCTION internal.is_platform_admin () FROM PUBLIC;
 
 REVOKE EXECUTE ON FUNCTION internal.is_org_admin () FROM PUBLIC;
 
-REVOKE EXECUTE ON FUNCTION internal.is_authenticated_device ()
+REVOKE EXECUTE ON FUNCTION rls_helpers.is_authenticated_device ()
 FROM PUBLIC;
 
-REVOKE EXECUTE ON FUNCTION internal.user_has_device_access (UUID)
+REVOKE EXECUTE ON FUNCTION rls_helpers.user_has_device_access (UUID)
 FROM PUBLIC;
 
 REVOKE EXECUTE ON FUNCTION internal.get_user_assigned_devices ()
@@ -975,27 +988,27 @@ FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION internal.validate_enrollment_token (TEXT)
 FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION internal.current_organization_id () TO authenticated;
+REVOKE EXECUTE ON FUNCTION internal.create_monthly_partition () FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION internal.is_platform_admin () TO authenticated;
+REVOKE EXECUTE ON FUNCTION internal.purge_table_data (TEXT, TEXT, TEXT, TIMESTAMPTZ, UUID, UUID) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION internal.is_org_admin () TO authenticated;
+GRANT EXECUTE ON FUNCTION internal.create_monthly_partition () TO service_role;
 
-GRANT EXECUTE ON FUNCTION internal.is_authenticated_device () TO authenticated;
-
-GRANT EXECUTE ON FUNCTION internal.user_has_device_access (UUID) TO authenticated;
-
-GRANT EXECUTE ON FUNCTION internal.get_user_assigned_devices () TO authenticated;
+GRANT EXECUTE ON FUNCTION internal.purge_table_data (TEXT, TEXT, TEXT, TIMESTAMPTZ, UUID, UUID) TO service_role;
 
 GRANT EXECUTE ON FUNCTION internal.current_device_id () TO authenticated;
 
-GRANT EXECUTE ON FUNCTION internal.get_device_id_from_headers () TO authenticated,
-anon;
+GRANT EXECUTE ON FUNCTION internal.is_platform_admin() TO authenticated;
 
-GRANT EXECUTE ON FUNCTION internal.get_api_key_from_headers () TO authenticated,
-anon;
+GRANT EXECUTE ON FUNCTION internal.is_org_admin() TO authenticated;
 
-GRANT EXECUTE ON FUNCTION internal.validate_enrollment_token (TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION internal.current_organization_id() TO authenticated;
+
+GRANT EXECUTE ON FUNCTION internal.get_user_assigned_devices() TO authenticated;
+
+GRANT EXECUTE ON FUNCTION rls_helpers.is_authenticated_device() TO authenticated;
+
+GRANT EXECUTE ON FUNCTION rls_helpers.user_has_device_access(UUID) TO authenticated;
 
 -- ─── Realtime publications ────────────────────────────────────────────────────
 DO $$

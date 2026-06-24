@@ -142,9 +142,8 @@ export default function RegisterPage() {
         errorMsg.includes("user already registered") ||
         errorMsg.includes("already exists")
       ) {
-        setEmailError(
-          "This email is already registered. Please log in instead.",
-        );
+
+        toast.error("This email is already registered. Please log in instead.")
         return;
       }
 
@@ -323,7 +322,7 @@ export default function RegisterPage() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="text-xs text-destructive"
+                      className="text-sm text-destructive"
                     >
                       {nameError}
                     </motion.p>
@@ -359,7 +358,7 @@ export default function RegisterPage() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="text-xs text-destructive"
+                      className="text-sm text-destructive"
                     >
                       {emailError}
                     </motion.p>
@@ -406,7 +405,7 @@ export default function RegisterPage() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="text-xs text-destructive"
+                      className="text-sm text-destructive"
                     >
                       {passwordError}
                     </motion.p>
@@ -525,7 +524,7 @@ export default function RegisterPage() {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="text-xs text-destructive"
+                        className="text-sm text-destructive"
                       >
                         Passwords do not match
                       </motion.p>
@@ -535,7 +534,7 @@ export default function RegisterPage() {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="text-xs text-emerald-500"
+                        className="text-sm text-emerald-500"
                       >
                         Passwords match ✓
                       </motion.p>

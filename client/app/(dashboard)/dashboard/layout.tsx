@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopBar } from "@/components/dashboard/topbar";
 import { useAuth } from "@/lib/auth/useAuth";
+import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const { user, loading, role } = useAuth();
+    const { user, loading } = useAuth();
     const router = useRouter();
+    const profiles = useAuthStore((state) => state.profiles);
+    const activeOrganizationId = useAuthStore((state) => state.activeOrganizationId);
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
         if (typeof window !== "undefined") {
@@ -29,16 +32,18 @@ export default function DashboardLayout({
 
     useEffect(() => {
         if (!loading && user) {
-            if (user.profiles.some((p) => p.account_status === "PENDING")) {
-                router.push("/onboarding/setup-profile");
-                return;
-            }
-            const hasOrg = user.profiles.some((p) => p.organization_id !== null);
-            if (!hasOrg && role !== "PLATFORM_ADMIN") {
-                router.push("/onboarding/setup-organization");
+            const { profileFetchFailed } = useAuthStore.getState();
+            const destination = resolvePostLoginRoute(
+                profiles,
+                activeOrganizationId,
+                "/dashboard",
+                profileFetchFailed,
+            );
+            if (destination !== "/dashboard") {
+                router.replace(destination);
             }
         }
-    }, [loading, user, router, role]);
+    }, [loading, user, profiles, activeOrganizationId, router]);
 
     // Show loading state while checking authentication
     if (loading) {

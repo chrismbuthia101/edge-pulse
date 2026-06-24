@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/lib/auth/useAuth";
+import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 import { createClient } from "@/lib/config/client";
 import { useOrganizationStore } from "@/lib/stores/organization-store";
 import { StorageRepository } from "@/lib/repositories/storage-repository";
@@ -186,7 +187,18 @@ export default function SetupOrganizationPage() {
 
       toast.success("Organization created successfully!");
       await refreshSession();
-      router.push("/dashboard");
+      const {
+        profiles: currentProfiles,
+        activeOrganizationId: currentOrgId,
+        profileFetchFailed,
+      } = useAuthStore.getState();
+      const destination = resolvePostLoginRoute(
+        currentProfiles,
+        currentOrgId,
+        undefined,
+        profileFetchFailed,
+      );
+      router.push(destination);
     } catch {
       toast.error("Failed to set up organization. Please try again.");
     } finally {

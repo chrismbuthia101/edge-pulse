@@ -2,10 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  useAuthStore,
-  deriveActiveProfile,
-} from "@/lib/stores/auth-store";
+import { useAuthStore, deriveActiveProfile } from "@/lib/stores/auth-store";
 import type { AuthUser } from "@/lib/stores/auth-store";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -25,13 +22,11 @@ interface AuthContextType {
 
 export function useAuth(): AuthContextType {
   const store = useAuthStore();
-
+  
   const loading = store.status === "loading";
 
-  const activeProfile = deriveActiveProfile(
-    store.profiles,
-    store.activeOrganizationId,
-  ) ?? null;
+  const activeProfile =
+    deriveActiveProfile(store.profiles, store.activeOrganizationId) ?? null;
 
   const role = activeProfile?.role ?? null;
 
