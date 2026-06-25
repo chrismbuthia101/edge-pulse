@@ -162,11 +162,10 @@ def _handle_run(args: argparse.Namespace) -> int:
                 "Sync and cloud features are disabled. "
                 "Run 'edge-agent enroll' to enroll this device.",
             )
-            cli_path = PathManager().base_dir / "venv" / "bin" / "edge-agent"
             print()
             print("⚠  Device not enrolled — running in local-only mode.")
             print("   Anomaly detection is active but events will NOT be synced to the cloud.")
-            print(f"   To enroll: sudo {cli_path} enroll")
+            print(f"   To enroll: sudo /opt/edgepulse/bin/edge-agent enroll")
             print()
 
         agent = EdgePulseAgent(settings=settings)
@@ -283,8 +282,7 @@ def _handle_status(args: argparse.Namespace) -> int:
                 print(f"  Backend URL : {url}")
         else:
             print("  Enrollment  : ✗ Not enrolled")
-            cli_path = PathManager().base_dir / "venv" / "bin" / "edge-agent"
-            print(f"  Run: sudo {cli_path} enroll")
+            print(f"  Run: sudo /opt/edgepulse/bin/edge-agent enroll")
     except Exception as e:
         print(f"  Enrollment  : ✗ Error reading credentials: {e}")
 

@@ -135,13 +135,20 @@ make deb
 **What the script does:**
 
 1. Reads the version from `pyproject.toml`.
-2. Installs all Python packages to a staging area using
-   `pip install --target`, which avoids the Python interpreter relocation
-   problem that plagued the previous venv-copy approach.
-3. Writes a launcher wrapper at `/opt/edgepulse/bin/edge-agent` that sets
-   `PYTHONPATH` and calls the system `python3`.
-4. Bundles the model, a systemd unit, and a default config.
-5. Runs `fpm` to produce the `.deb`.
+2. Builds a pure-Python wheel (`edge-agent` has no native extensions).
+3. Packages the wheel alongside a launcher wrapper, systemd unit, default
+   config, and ML model files.
+4. Runs `fpm` to produce a lightweight `.deb` (no Python deps bundled).
+
+**At install time** (`postinst`), the target machine's `python3` is used to:
+1. Create a virtual environment at `/opt/edgepulse/venv/`.
+2. Install the wheel + all dependencies from PyPI (or from bundled wheels
+   if built with `--offline`).
+3. Enable and start the systemd service.
+
+This approach guarantees that compiled extensions (numpy, scikit-learn,
+cryptography, etc.) match the target machine's Python version exactly,
+eliminating the Python-version-mismatch problem entirely.
 
 Output: `packaging/dist/edgepulse-agent_X.Y.Z_amd64.deb`
 
@@ -248,14 +255,42 @@ overrides the default without causing a "macro already defined" compile error.
 
 ## Installed file layout
 
-### Linux (.deb / .rpm)
+### Linux (.deb)
+
+```
+/opt/edgepulse/
+├── bin/
+│   └── edge-agent          # Launcher wrapper → /opt/edgepulse/venv/bin/python3 -m edgepulse
+├── venv/                   # Python virtual env (created by postinst)
+│   └── lib/
+│       └── python3.X/
+│           └── site-packages/   # All Python packages
+├── lib/
+│   └── edge_agent-*.whl        # Wheel file (consumed by postinst, then removed)
+└── .system-install         # Marker file
+
+/var/lib/edgepulse/
+├── models/                 # ML model files
+└── data/                   # Runtime database and sync queue
+
+/etc/edgepulse/
+└── agent_config.json       # Default configuration
+
+/etc/systemd/system/
+└── edgepulse-agent.service # systemd unit
+
+/var/log/edgepulse/         # Log files
+/run/edgepulse/             # Runtime socket / PID files
+```
+
+### Linux (.rpm)
 
 ```
 /opt/edgepulse/
 ├── bin/
 │   └── edge-agent          # Launcher wrapper (sets PYTHONPATH)
 └── lib/
-    └── site-packages/      # All Python packages (installed by pip --target)
+    └── site-packages/      # All Python packages (pip install --target)
 
 /var/lib/edgepulse/
 ├── models/                 # ML model files
@@ -306,9 +341,19 @@ sudo ln -sf /opt/edgepulse/bin/edge-agent /usr/local/bin/edge-agent
 
 ### `ModuleNotFoundError: No module named 'edgepulse'`
 
-The launcher wrapper sets `PYTHONPATH=/opt/edgepulse/lib/site-packages`. If
-you are running `python3 -m edgepulse` directly (not via the wrapper), you
-need to set it manually:
+This error means the Python environment is broken. The `.deb` package creates
+a virtual environment at `/opt/edgepulse/venv/` during install — it should
+always match the target's Python version.
+
+**Fix:** Reinstall the package to rebuild the venv:
+
+```bash
+sudo apt-get install --reinstall edgepulse-agent
+```
+
+If using the `.rpm` package, the launcher sets `PYTHONPATH` to
+`/opt/edgepulse/lib/site-packages`. If running `python3 -m edgepulse`
+directly, set it manually:
 
 ```bash
 PYTHONPATH=/opt/edgepulse/lib/site-packages python3 -m edgepulse run

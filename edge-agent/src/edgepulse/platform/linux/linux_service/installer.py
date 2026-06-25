@@ -38,7 +38,7 @@ def _systemd_unit_path(user_mode: bool = False) -> Path:
 
 
 def _run(
-    cmd: list[str], check: bool = True, capture_output: bool = True
+    cmd: "list[str]", check: bool = True, capture_output: bool = True
 ) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check, text=True, capture_output=capture_output)
 
@@ -60,9 +60,20 @@ def _service_main_path() -> Path:
     return Path(__file__).with_name("service_main.py")
 
 
+def _installed_launcher() -> Optional[Path]:
+    launcher = Path("/opt/edgepulse/bin/edge-agent")
+    return launcher if launcher.exists() else None
+
+
 def _build_unit_file(python_exe: Optional[str] = None, user_mode: bool = False) -> str:
-    exe = python_exe or sys.executable
-    main = _service_main_path()
+    installed = _installed_launcher()
+    if installed is not None and python_exe is None:
+        exe = str(installed)
+        exec_args = "run --config /etc/edgepulse/agent_config.json"
+    else:
+        exe = python_exe or sys.executable
+        main = _service_main_path()
+        exec_args = f"{main} --service-mode"
 
     hardening = (
         ""
@@ -93,7 +104,7 @@ def _build_unit_file(python_exe: Optional[str] = None, user_mode: bool = False) 
 
         [Service]
         Type=simple
-        ExecStart={exe} {main} --service-mode
+        ExecStart={exe} {exec_args}
         WorkingDirectory={_BASE_DIR}
         Restart=on-failure
         RestartSec=10
