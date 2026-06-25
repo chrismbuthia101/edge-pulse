@@ -203,7 +203,7 @@ serve(async (req: Request) => {
 
     const { error: userInsertError } = await supabase
       .from("users")
-      .insert({ id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" })
+      .upsert({ id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" })
       .onConflict("id")
       .ignore()
       .select();
