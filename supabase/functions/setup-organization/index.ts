@@ -203,10 +203,10 @@ serve(async (req: Request) => {
 
     const { error: userInsertError } = await supabase
       .from("users")
-      .upsert({ id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" })
-      .onConflict("id")
-      .ignore()
-      .select();
+      .upsert(
+        { id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
     if (userInsertError) {
       console.error("User insert error:", userInsertError);
     }
