@@ -45,21 +45,26 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
+# ── Install runtime deps for build-time imports (seal_config etc.) ──────
+echo "[1/7] Installing Python runtime dependencies..."
+python3 -m pip install --quiet ".[linux]" 2>/dev/null || \
+    python3 -m pip install --quiet --break-system-packages ".[linux]"
+
 # ── Build sealed config (if SUPABASE_URL is set) ──────────────────────────
 _BUILD_VARS_SRC="${REPO_ROOT}/src/edgepulse/_build_vars.py"
 rm -f "${_BUILD_VARS_SRC}"
 
 if [ -n "${SUPABASE_URL:-}" ]; then
-    echo "[1/6] Generating sealed build config..."
+    echo "[2/7] Generating sealed build config..."
     python3 "${REPO_ROOT}/packaging/scripts/seal_config.py" \
         --output "${_BUILD_VARS_SRC}"
     echo "  Sealed config written to ${_BUILD_VARS_SRC}"
 else
-    echo "[1/6] Skipping sealed config (SUPABASE_URL not set)"
+    echo "[2/7] Skipping sealed config (SUPABASE_URL not set)"
 fi
 
 # ── Build Python wheel ────────────────────────────────────────────────────
-echo "[2/6] Building Python wheel..."
+echo "[3/7] Building Python wheel..."
 cd "${REPO_ROOT}"
 rm -rf "${WHEEL_DIR}"/*.whl 2>/dev/null || true
 python3 -m pip install --quiet build 2>/dev/null || \
@@ -89,7 +94,7 @@ if command -v poetry &>/dev/null; then
 fi
 
 # ── Create staging directory ──────────────────────────────────────────────
-echo "[3/6] Creating staging directory..."
+echo "[4/7] Creating staging directory..."
 rm -rf "${STAGING_DIR}"
 mkdir -p \
     "${STAGING_DIR}${INSTALL_PREFIX}/bin" \
@@ -100,7 +105,7 @@ mkdir -p \
     "${DIST_DIR}"
 
 # ── Stage files ───────────────────────────────────────────────────────────
-echo "[4/6] Staging files..."
+echo "[5/7] Staging files..."
 
 # Wheel (installed by postinst into the venv)
 cp "${WHEEL_FILE}" "${STAGING_DIR}${INSTALL_PREFIX}/lib/"
@@ -163,7 +168,7 @@ WantedBy=multi-user.target
 UNIT
 
 # ── Maintainer scripts ────────────────────────────────────────────────────
-echo "[5/6] Writing maintainer scripts..."
+echo "[6/7] Writing maintainer scripts..."
 
 POSTINST="${SCRIPT_DIR}/postinst"
 BUILT_WHEEL="$(basename "${WHEEL_FILE}")"
@@ -261,7 +266,7 @@ chmod 755 "${POSTRM}"
 
 # ── Build with fpm ────────────────────────────────────────────────────────
 echo ""
-echo "[6/6] Building .deb with fpm..."
+echo "[7/7] Building .deb with fpm..."
 
 rm -f "${OUTPUT}"
 fpm \
