@@ -31,6 +31,34 @@ CREATE POLICY "org_admins: manage org logos"
     AND ((SELECT internal.current_organization_id()::text) = (storage.foldername(name))[1])
   );
 
+-- Allow users to upload a temp logo during onboarding (before org exists)
+CREATE POLICY "users: upload temp logo"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'org-logos'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
+CREATE POLICY "users: select own temp logos"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'org-logos'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
+CREATE POLICY "users: delete own temp logos"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'org-logos'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
 -- ─── User Avatar Storage ─────────────────────────────────────────────────────
 INSERT INTO
     storage.buckets (

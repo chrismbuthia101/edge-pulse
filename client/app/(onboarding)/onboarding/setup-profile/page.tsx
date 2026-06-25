@@ -7,15 +7,13 @@ import { User, ArrowRight, X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Logo } from "@/components/ui/logo";
+import { AuthBrandMark } from "@/components/auth/auth-visual-panel";
 import { useAuth } from "@/lib/auth/useAuth";
 import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 import { createClient } from "@/lib/config/client";
 import { StorageRepository } from "@/lib/repositories/storage-repository";
+import { validateFile } from "@/lib/utils/file-validation";
 import { toast } from "sonner";
-
-const ALLOWED_TYPES = ["image/png", "image/jpeg"];
-const MAX_SIZE = 2 * 1024 * 1024;
 
 const storageRepository = new StorageRepository(createClient());
 
@@ -29,6 +27,7 @@ export default function SetupProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,20 +36,11 @@ export default function SetupProfilePage() {
     }
   }, [user, loading, router]);
 
-  const validateFile = (file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return "Only PNG, JPEG, and WebP images are accepted";
-    }
-    if (file.size > MAX_SIZE) {
-      return "File must be under 2MB";
-    }
-    return null;
-  };
-
   const handleFileSelect = async (file: File) => {
-    const error = validateFile(file);
+    setAvatarError(null);
+    const error = await validateFile(file);
     if (error) {
-      toast.error(error);
+      setAvatarError(error);
       return;
     }
 
@@ -70,14 +60,14 @@ export default function SetupProfilePage() {
       );
 
       if (uploadError) {
-        toast.error(uploadError.message);
+        setAvatarError(uploadError.message);
         return;
       }
 
       const publicUrl = storageRepository.getPublicUrl("avatars", path!);
       setAvatarUrl(publicUrl);
     } catch {
-      toast.error("Upload failed. You can continue without an avatar.");
+      setAvatarError("Upload failed. You can continue without an avatar.");
     } finally {
       setIsUploading(false);
     }
@@ -93,11 +83,13 @@ export default function SetupProfilePage() {
 
     setIsSubmitting(true);
     try {
-      const profileResult = await useAuthStore.getState().updateProfile(user!.id, {
-        full_name: fullName.trim() || user?.full_name || undefined,
-        username: username.trim(),
-        avatar_url: avatarUrl,
-      });
+      const profileResult = await useAuthStore
+        .getState()
+        .updateProfile(user!.id, {
+          full_name: fullName.trim() || user?.full_name || undefined,
+          username: username.trim(),
+          avatar_url: avatarUrl,
+        });
 
       if (!profileResult.success) {
         throw new Error(profileResult.error);
@@ -119,7 +111,9 @@ export default function SetupProfilePage() {
       );
       router.push(destination);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save profile");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save profile",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -127,8 +121,8 @@ export default function SetupProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
       </div>
     );
   }
@@ -136,28 +130,34 @@ export default function SetupProfilePage() {
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="text-center mb-8">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-          <Logo className="h-6 w-6 text-primary" />
+        <div className="flex justify-center mb-4">
+          <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-foreground mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
           Set Up Your Profile
         </h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-slate-400 text-sm">
           Choose a username and optional avatar to get started
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <div className="relative">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-full bg-muted border-2 border-dashed border-muted-foreground/30 flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors overflow-hidden"
+              className="w-20 h-20 rounded-full bg-white/3 border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-cyan-400/50 transition-colors overflow-hidden"
             >
               {avatarPreview ? (
-                <Image src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" width={80} height={80} />
+                <Image
+                  src={avatarPreview}
+                  alt="Avatar preview"
+                  className="w-full h-full object-cover"
+                  width={80}
+                  height={80}
+                />
               ) : (
-                <User className="h-8 w-8 text-muted-foreground" />
+                <User className="h-8 w-8 text-slate-500" />
               )}
             </div>
             {avatarPreview && (
@@ -167,8 +167,9 @@ export default function SetupProfilePage() {
                   setAvatarFile(null);
                   setAvatarPreview(null);
                   setAvatarUrl(null);
+                  setAvatarError(null);
                 }}
-                className="absolute -top-1 -right-1 rounded-full bg-destructive text-destructive-foreground p-0.5 shadow-sm"
+                className="absolute -top-1 -right-1 rounded-full bg-red-500/80 text-white p-0.5 shadow-sm hover:bg-red-500 transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -184,40 +185,61 @@ export default function SetupProfilePage() {
               className="hidden"
             />
           </div>
+          {avatarError && (
+            <p className="text-sm text-red-400 text-center">{avatarError}</p>
+          )}
+          {avatarUrl && !avatarError && (
+            <p className="text-sm text-emerald-400 flex items-center gap-1.5 justify-center">
+              <CheckCircle2 className="h-3 w-3" />
+              Avatar uploaded
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="username">Username</Label>
+          <Label
+            htmlFor="username"
+            className="text-sm font-medium text-slate-200"
+          >
+            Username
+          </Label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <Input
               id="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value.replace(/[^a-z0-9_-]/g, ""))}
-              className="pl-10 h-10"
+              onChange={(e) =>
+                setUsername(e.target.value.replace(/[^a-z0-9_-]/g, ""))
+              }
+              className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
               placeholder="johndoe"
               required
             />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-slate-500">
             Letters, numbers, underscores, and hyphens only
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="fullName">Full Name</Label>
+          <Label
+            htmlFor="fullName"
+            className="text-sm font-medium text-slate-200"
+          >
+            Full Name
+          </Label>
           <Input
             id="fullName"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="h-10"
+            className="h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
             placeholder={user?.full_name ?? "Your full name"}
           />
         </div>
 
         <Button
           type="submit"
-          className="w-full h-10 gap-2"
+          className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200"
           disabled={isSubmitting || isUploading || !username.trim()}
         >
           {isSubmitting ? (
@@ -230,13 +252,6 @@ export default function SetupProfilePage() {
           )}
         </Button>
       </form>
-
-      {avatarUrl && (
-        <div className="mt-4 flex items-center gap-2 text-xs text-emerald-500 justify-center">
-          <CheckCircle2 className="h-3 w-3" />
-          Avatar uploaded
-        </div>
-      )}
     </div>
   );
 }

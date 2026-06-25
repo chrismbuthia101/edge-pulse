@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, Suspense } from "react";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
@@ -10,26 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Logo } from "@/components/ui/logo";
 import { toast } from "sonner";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-
-const securityQuotes = [
-  {
-    text: "Security is not a product, but a process.",
-    author: "Bruce Schneier",
-  },
-  {
-    text: "The only truly secure system is one that is powered off.",
-    author: "Gene Spafford",
-  },
-  { text: "Trust, but verify.", author: "Ronald Reagan" },
-  {
-    text: "Privacy is not an option — it's a prerequisite.",
-    author: "EdgePulse",
-  },
-];
+import {
+  AuthBrandMark,
+  AuthPageBackground,
+  AuthPanelChrome,
+  LoginVisual,
+} from "@/components/auth/auth-visual-panel";
 
 export function LoginPage() {
   const router = useRouter();
@@ -37,17 +25,8 @@ export function LoginPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentQuote, setCurrentQuote] = useState(0);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        setCurrentQuote((prev) => (prev + 1) % securityQuotes.length);
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -84,7 +63,7 @@ export function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
+    setIsGoogleLoading(true);
 
     const next = searchParams.get("next") ?? undefined;
     const callbackTarget = next
@@ -98,146 +77,59 @@ export function LoginPage() {
 
     if (!result.success) {
       toast.error(result.error ?? "Failed to sign in with Google");
-      setIsLoading(false);
+      setIsGoogleLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Grid pattern */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        <defs>
-          <pattern
-            id="login-grid"
-            width="48"
-            height="48"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M 48 0 L 0 0 0 48"
-              fill="none"
-              stroke="hsl(var(--grid-light))"
-              strokeWidth="0.8"
-              opacity="0.3"
-            />
-            <path
-              d="M 48 0 L 0 0 0 48"
-              fill="none"
-              stroke="hsl(var(--grid-dark))"
-              strokeWidth="0.4"
-              opacity="0.2"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#login-grid)" />
-      </svg>
+    <div className="relative min-h-screen lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      <AuthPageBackground variant="login" />
 
-      {/* Ambient glow */}
-      <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-primary/20 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-56 h-56 bg-violet-500/10 rounded-full blur-[80px] pointer-events-none" />
+      {/* ── Left: live product visual (desktop only) ── */}
+      <div className="hidden lg:block sticky top-0 h-screen">
+        <AuthPanelChrome>
+          <LoginVisual />
+        </AuthPanelChrome>
+      </div>
 
-      <div className="relative z-10 min-h-screen flex">
-        {/* ── Left decorative panel ── */}
-        <div className="hidden lg:flex lg:w-[52%] relative">
-          {/* Logo */}
-          <div className="absolute top-8 left-8 flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Logo className="h-5 w-5 text-primary" />
-            </div>
-            <span className="text-xl font-display font-bold text-foreground">
-              Edge<span className="text-primary">Pulse</span>
-            </span>
-          </div>
-
-          {/* Center visual — login image */}
-          <div className="absolute top-24 left-12 right-12 bottom-24 flex items-center justify-center">
-            <Image
-              src="/images/login-img.png"
-              alt="Login illustration"
-              className="w-full h-full object-cover rounded-2xl"
-              width={500}
-              height={500}
-              priority
-            />
-          </div>
-
-          {/* Quote rotator */}
-          <div className="absolute bottom-12 left-8 right-8">
-            <div className="bg-card/60 backdrop-blur-sm border border-border rounded-2xl p-5">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentQuote}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.45 }}
-                >
-                  <p className="text-sm text-foreground leading-relaxed mb-2">
-                    &ldquo;{securityQuotes[currentQuote].text}&rdquo;
-                  </p>
-                  <p className="text-xs text-primary font-medium">
-                    — {securityQuotes[currentQuote].author}
-                  </p>
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Quote dots */}
-              <div className="flex gap-1.5 mt-4">
-                {securityQuotes.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1 rounded-full transition-all duration-500 ${
-                      i === currentQuote ? "w-5 bg-primary" : "w-1.5 bg-border"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
+      {/* ── Right: form panel ── */}
+      <div className="flex flex-col min-h-screen">
+        {/* Top bar */}
+        <div className="flex items-center px-6 sm:px-10 py-5">
+          <div className="lg:hidden">
+            <AuthBrandMark light />
           </div>
         </div>
 
-        {/* ── Right form panel ── */}
-        <div className="flex-1 flex flex-col">
-          {/* Top bar */}
-          <div className="flex items-center justify-between px-8 py-5">
-            {/* Mobile logo */}
-            <Link href="/" className="flex items-center gap-2 lg:hidden">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <Logo className="h-4 w-4 text-primary" />
-              </div>
-              <span className="text-lg font-display font-bold">
-                Edge<span className="text-primary">Pulse</span>
-              </span>
-            </Link>
-            <div className="hidden lg:block" />
-          </div>
+        {/* Form area */}
+        <div className="flex-1 flex flex-col px-6 sm:px-10 pb-10 lg:items-center lg:justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="w-full max-w-100 mx-auto"
+          >
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-display font-bold text-white mb-2">
+                Welcome back
+              </h1>
+              <p className="text-slate-400 text-sm">
+                Sign in to your EdgePulse account
+              </p>
+            </div>
 
-          {/* Form area */}
-          <div className="flex-1 flex flex-col p-8 pt-4 lg:items-center lg:justify-center">
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: "easeOut" }}
-              className="w-full max-w-100 mx-auto"
+            {/* Google OAuth */}
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full h-11 mb-6 gap-2.5 border-white/15 bg-white/3 text-white hover:bg-white/[0.07] hover:text-white"
+              onClick={handleGoogleLogin}
+              disabled={isGoogleLoading || isLoading}
             >
-              {/* Header */}
-              <div className="mb-8">
-                <h1 className="text-3xl font-display font-bold text-foreground mb-1.5">
-                  Welcome back
-                </h1>
-                <p className="text-muted-foreground text-sm">
-                  Sign in to your EdgePulse account
-                </p>
-              </div>
-
-              {/* Google OAuth */}
-              <Button
-                variant="outline"
-                type="button"
-                className="w-full h-10 mb-6 gap-2.5"
-                onClick={handleGoogleLogin}
-                disabled={isLoading}
-              >
+              {isGoogleLoading ? (
+                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
@@ -256,157 +148,134 @@ export function LoginPage() {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google
-              </Button>
+              )}
+              Continue with Google
+            </Button>
 
-              {/* Divider */}
-              <div className="relative mb-6">
-                <div className="relative flex justify-center">
-                  <span className="bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider">
-                    or sign in with email
-                  </span>
+            {/* Divider */}
+            <div className="relative mb-6 flex items-center gap-3">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-[11px] text-slate-500 uppercase tracking-wider font-mono">
+                or sign in with email
+              </span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Email */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="email"
+                  className="text-sm font-medium text-slate-200"
+                >
+                  Email address
+                </Label>
+                <div className="relative">
+                  <Mail
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-cyan-400" : "text-slate-500"}`}
+                  />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                    required
+                    onFocus={() => setFocusedField("email")}
+                    onBlur={() => setFocusedField(null)}
+                  />
                 </div>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Email */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm font-medium">
-                    Email address
-                  </Label>
-                  <div className="relative">
-                    <Mail
-                      className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-primary" : "text-muted-foreground"}`}
-                    />
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="you@company.com"
-                      className="pl-10 h-10"
-                      required
-                      onFocus={() => setFocusedField("email")}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-sm font-medium">
-                      Password
-                    </Label>
-                    <Link
-                      href="/auth/forgot-password"
-                      className="text-xs text-primary hover:underline underline-offset-4"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-                  <div className="relative">
-                    <Lock
-                      className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-primary" : "text-muted-foreground"}`}
-                    />
-                    <Input
-                      id="password"
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      className="pl-10 pr-10 h-10"
-                      required
-                      onFocus={() => setFocusedField("password")}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Remember me */}
-                <div className="flex items-center gap-2">
-                  <Checkbox id="remember" />
+              {/* Password */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
                   <Label
-                    htmlFor="remember"
-                    className="text-sm font-normal text-muted-foreground cursor-pointer"
+                    htmlFor="password"
+                    className="text-sm font-medium text-slate-200"
                   >
-                    Keep me signed in for 30 days
+                    Password
                   </Label>
-                </div>
-
-                {/* Submit and Register */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    type="submit"
-                    className="flex-1 h-10 gap-2 text-sm sm:text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:shadow-lg hover:shadow-primary/20"
-                    disabled={isLoading}
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline underline-offset-4"
                   >
-                    {isLoading ? (
-                      <motion.div
-                        className="w-4 h-4 border-2 border-current border-t-transparent rounded-full"
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      />
-                    ) : (
-                      <motion.div
-                        className="flex items-center gap-2"
-                        whileHover={{ x: 2 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <span className="hidden sm:inline">Sign In</span>
-                        <span className="sm:hidden">Sign</span>
-                        <motion.div
-                          whileHover={{ scale: 1.1, rotate: 15 }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          <ArrowRight className="h-4 w-4 shrink-0" />
-                        </motion.div>
-                      </motion.div>
-                    )}
-                  </Button>
-
-                  {/* No account + register always side by side */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      No account?
-                    </span>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs sm:text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:border-primary/50 hover:bg-primary/5 hover:shadow-md"
-                      asChild
-                    >
-                      <Link href="/auth/register">
-                        <motion.span
-                          className="flex items-center gap-3"
-                          whileHover={{ x: 1 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <span className="hidden sm:inline">Register →</span>
-                          <span className="sm:hidden">Create one →</span>
-                        </motion.span>
-                      </Link>
-                    </Button>
-                  </div>
+                    Forgot password?
+                  </Link>
                 </div>
-              </form>
-            </motion.div>
-          </div>
+                <div className="relative">
+                  <Lock
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : "text-slate-500"}`}
+                  />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    className="pl-10 pr-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                    required
+                    onFocus={() => setFocusedField("password")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember me */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember"
+                  className="border-white/20 data-[state=checked]:bg-cyan-500 data-[state=checked]:border-cyan-500"
+                />
+                <Label
+                  htmlFor="remember"
+                  className="text-sm font-normal text-slate-400 cursor-pointer"
+                >
+                  Keep me signed in for 30 days
+                </Label>
+              </div>
+
+              {/* Submit */}
+              <Button
+                type="submit"
+                className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-slate-400 mt-6">
+              No account?{" "}
+              <Link
+                href="/auth/register"
+                className="text-cyan-400 hover:text-cyan-300 font-medium"
+              >
+                Create account
+              </Link>
+            </p>
+          </motion.div>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { serve } from "std/http/server.ts";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseContext } from "@supabase/server";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +24,8 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  let createdOrgId: string | null = null;
+
   try {
     if (req.method !== "POST") {
       return new Response(
@@ -31,28 +34,18 @@ serve(async (req: Request) => {
       );
     }
 
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const { data: ctx, error: authError } = await createSupabaseContext(req, {
+      auth: "user",
+    });
+    if (authError) {
       return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized" }),
-        { status: 401, headers: corsHeaders },
+        JSON.stringify({ success: false, error: authError.message }),
+        { status: authError.status, headers: corsHeaders },
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseSecretKey = Deno.env.get("SB_SECRET_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseSecretKey);
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Invalid authentication" }),
-        { status: 401, headers: corsHeaders },
-      );
-    }
+    const user = { id: ctx.userClaims!.id!, email: ctx.userClaims!.email! };
+    const supabase = ctx.supabaseAdmin;
 
     const { data: existingProfile, error: profileError } = await supabase
       .schema("organization")
@@ -128,10 +121,18 @@ serve(async (req: Request) => {
       );
     }
 
-    await supabase.schema("organization").from("billing").insert({
-      organization_id: org.id,
-      plan_tier: "trial",
-    });
+    createdOrgId = org.id;
+
+    const { error: billingError } = await supabase
+      .schema("organization")
+      .from("billing")
+      .insert({
+        organization_id: org.id,
+        plan_tier: "trial",
+      });
+    if (billingError) {
+      console.error("Billing insert error:", billingError);
+    }
 
     // ── Logo: move from temp to permanent path ──────────────────────────
     let logo_url: string | null = null;
@@ -152,16 +153,47 @@ serve(async (req: Request) => {
             .remove([logo_temp_path])
             .catch(() => {});
         } else {
-          logo_url = `${supabaseUrl}/storage/v1/object/public/org-logos/${newPath}`;
+          const { data: fileData, error: downloadError } =
+            await supabase.storage.from("org-logos").download(newPath);
 
-          const { error: logoUpdateError } = await supabase
-            .schema("organization")
-            .from("organizations")
-            .update({ logo_url })
-            .eq("id", org.id);
+          if (downloadError || !fileData) {
+            console.error("Logo download error:", downloadError);
+            await supabase.storage
+              .from("org-logos")
+              .remove([newPath])
+              .catch(() => {});
+          } else {
+            const bytes = await fileData.arrayBuffer();
+            const header = new Uint8Array(bytes.slice(0, 8));
 
-          if (logoUpdateError) {
-            console.error("Logo URL update error:", logoUpdateError);
+            const isPng =
+              header[0] === 0x89 &&
+              header[1] === 0x50 &&
+              header[2] === 0x4e &&
+              header[3] === 0x47;
+
+            const isJpeg =
+              header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+
+            if (!isPng && !isJpeg) {
+              await supabase.storage
+                .from("org-logos")
+                .remove([newPath])
+                .catch(() => {});
+              console.error("Logo validation failed: invalid file signature");
+            } else {
+              logo_url = `${supabaseUrl}/storage/v1/object/public/org-logos/${newPath}`;
+
+              const { error: logoUpdateError } = await supabase
+                .schema("organization")
+                .from("organizations")
+                .update({ logo_url })
+                .eq("id", org.id);
+
+              if (logoUpdateError) {
+                console.error("Logo URL update error:", logoUpdateError);
+              }
+            }
           }
         }
       } catch (logoError) {
@@ -169,12 +201,15 @@ serve(async (req: Request) => {
       }
     }
 
-    await supabase
+    const { error: userInsertError } = await supabase
       .from("users")
       .insert({ id: user.id, full_name: user.email?.split("@")[0] ?? "Admin" })
       .onConflict("id")
       .ignore()
-      .then();
+      .select();
+    if (userInsertError) {
+      console.error("User insert error:", userInsertError);
+    }
 
     const { error: profileInsertError } = await supabase
       .schema("organization")
@@ -229,8 +264,24 @@ serve(async (req: Request) => {
     );
   } catch (error) {
     console.error("Setup organization error:", error);
+    if (createdOrgId) {
+      const SUPABASE_SECRET_KEYS = JSON.parse(
+        Deno.env.get("SUPABASE_SECRET_KEYS")!,
+      );
+      const cleanupSupabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        SUPABASE_SECRET_KEYS["default"],
+      );
+      await cleanupSupabase
+        .schema("organization")
+        .from("organizations")
+        .delete()
+        .eq("id", createdOrgId)
+        .catch(() => {});
+    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ success: false, error: "Internal server error" }),
+      JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: corsHeaders },
     );
   }

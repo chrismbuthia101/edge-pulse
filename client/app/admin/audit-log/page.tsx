@@ -426,7 +426,7 @@ export default function PlatformAuditLogPage() {
             placeholder="Search by action or resource type..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-card border-border"
+            className="pl-10 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
           />
         </div>
         <div className="flex gap-2">
@@ -437,8 +437,8 @@ export default function PlatformAuditLogPage() {
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
                 severityFilter === sev
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
+                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                  : "bg-white/3 border-white/10 text-slate-400 hover:text-white hover:border-white/20",
               )}
             >
               {sev ?? "All"}
@@ -448,7 +448,7 @@ export default function PlatformAuditLogPage() {
         <select
           value={resourceFilter ?? ""}
           onChange={(e) => setResourceFilter(e.target.value || null)}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-card border border-border text-muted-foreground hover:text-foreground transition-colors outline-none"
+          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/3 border border-white/10 text-slate-400 hover:text-white transition-colors outline-none"
         >
           <option value="">All Resources</option>
           {resourceTypes.map((rt) => (

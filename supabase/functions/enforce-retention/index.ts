@@ -2,6 +2,7 @@
 // Run on a schedule (e.g. daily via pg_cron) or trigger on-demand via POST.
 import { serve } from "std/http/server.ts";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseContext } from "@supabase/server";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,44 +62,38 @@ serve(async (req: Request) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseSecretKey = Deno.env.get("SB_SECRET_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseSecretKey);
-
     // Auth is optional — when invoked via cron/schedule, no user context exists.
     // When invoked on-demand with a JWT, validate the caller has admin rights.
+    const { data: ctx } = await createSupabaseContext(req, {
+      auth: ["user", "none"],
+    });
+    const supabase = ctx.supabaseAdmin;
+
     let effectiveUserId: string | null = null;
     let effectiveOrgId: string | null = null;
 
-    const authHeader = req.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-      if (!authError && user) {
-        const { data: caller } = await supabase
-          .schema("organization")
-          .from("profiles")
-          .select("user_id, role, organization_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
+    if (ctx?.userClaims) {
+      const { data: caller } = await supabase
+        .schema("organization")
+        .from("profiles")
+        .select("user_id, role, organization_id")
+        .eq("user_id", ctx.userClaims.id)
+        .maybeSingle();
 
-        if (
-          caller &&
-          (caller.role === "ORG_ADMIN" || caller.role === "PLATFORM_ADMIN")
-        ) {
-          effectiveUserId = caller.user_id;
-          effectiveOrgId = caller.organization_id;
-        } else {
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: "Insufficient permissions",
-            }),
-            { status: 403, headers: corsHeaders },
-          );
-        }
+      if (
+        caller &&
+        (caller.role === "ORG_ADMIN" || caller.role === "PLATFORM_ADMIN")
+      ) {
+        effectiveUserId = caller.user_id;
+        effectiveOrgId = caller.organization_id;
+      } else {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Insufficient permissions",
+          }),
+          { status: 403, headers: corsHeaders },
+        );
       }
     }
 

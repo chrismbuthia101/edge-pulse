@@ -234,13 +234,18 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
       <div className="relative">
         <AnimatePresence>
           {searchOpen ? (
-            <motion.div
-              key="search-open"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: "calc(100vw - 2rem)", opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 overflow-hidden sm:relative sm:top-0 sm:translate-y-0 sm:w-auto"
+            <>
+              <div
+                className="fixed inset-0 z-40 bg-blue-950/80 sm:hidden"
+                onClick={() => setSearchOpen(false)}
+              />
+              <motion.div
+                key="search-open"
+                initial={{ scaleX: 0, opacity: 0 }}
+                animate={{ scaleX: 1, opacity: 1 }}
+                exit={{ scaleX: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed left-4 right-4 top-3 z-50 origin-right overflow-hidden sm:relative sm:left-auto sm:right-auto sm:top-0 sm:z-auto sm:w-64"
             >
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -261,6 +266,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 </button>
               </div>
             </motion.div>
+          </>
           ) : (
             <Button
               key="search-closed"

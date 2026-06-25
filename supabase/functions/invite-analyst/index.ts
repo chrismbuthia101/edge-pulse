@@ -1,6 +1,7 @@
 // EdgePulse Invite Analyst Function v1.1.0
 import { serve } from "std/http/server.ts";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseContext } from "@supabase/server";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,28 +43,18 @@ serve(async (req: Request) => {
       );
     }
 
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const { data: ctx, error: authError } = await createSupabaseContext(req, {
+      auth: "user",
+    });
+    if (authError) {
       return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized" }),
-        { status: 401, headers: corsHeaders },
+        JSON.stringify({ success: false, error: authError.message }),
+        { status: authError.status, headers: corsHeaders },
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseSecretKey = Deno.env.get("SB_SECRET_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseSecretKey);
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Invalid authentication" }),
-        { status: 401, headers: corsHeaders },
-      );
-    }
+    const user = { id: ctx.userClaims!.id!, email: ctx.userClaims!.email! };
+    const supabase = ctx.supabaseAdmin;
 
     const { data: inviterProfile, error: userError } = await supabase
       .schema("organization")
@@ -79,7 +70,10 @@ serve(async (req: Request) => {
       );
     }
 
-    if (inviterProfile.role !== "ORG_ADMIN" || inviterProfile.account_status !== "ACTIVE") {
+    if (
+      inviterProfile.role !== "ORG_ADMIN" ||
+      inviterProfile.account_status !== "ACTIVE"
+    ) {
       return new Response(
         JSON.stringify({ success: false, error: "Insufficient permissions" }),
         { status: 403, headers: corsHeaders },
@@ -211,7 +205,11 @@ serve(async (req: Request) => {
             account_status: "PENDING",
           });
         if (profileInsertError) {
-          await supabase.from("users").delete().eq("id", entry.userId).catch(() => {});
+          await supabase
+            .from("users")
+            .delete()
+            .eq("id", entry.userId)
+            .catch(() => {});
           await supabase.auth.admin.deleteUser(entry.userId).catch(() => {});
           return {
             email: entry.email,

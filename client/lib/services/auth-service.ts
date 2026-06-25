@@ -43,8 +43,9 @@ export class AuthService {
     email: string,
     password: string,
     fullName: string,
+    redirectTo?: string,
   ): Promise<Result<{ user: User | null; session: Session | null }>> {
-    const result = await this.repository.signUp(email, password, fullName);
+    const result = await this.repository.signUp(email, password, fullName, redirectTo);
     if (result.error) return { success: false, error: result.error.message };
     return {
       success: true,

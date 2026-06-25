@@ -59,6 +59,7 @@ export class AuthRepository {
     email: string,
     password: string,
     fullName: string,
+    redirectTo?: string,
   ): Promise<{
     user: User | null;
     session: Session | null;
@@ -68,7 +69,10 @@ export class AuthRepository {
       const { data, error } = await this.supabaseClient.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: redirectTo,
+        },
       });
       
       if (error) throw error;

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { AuthPageBackground } from "@/components/auth/auth-visual-panel";
 
 export default function OnboardingLayout({
   children,
@@ -8,17 +9,8 @@ export default function OnboardingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        <defs>
-          <pattern id="onboarding-grid" width="48" height="48" patternUnits="userSpaceOnUse">
-            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-light))" strokeWidth="0.8" opacity="0.3" />
-            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="hsl(var(--grid-dark))" strokeWidth="0.4" opacity="0.2" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#onboarding-grid)" />
-      </svg>
-      <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-primary/20 rounded-full blur-[90px] pointer-events-none" />
+    <div className="relative min-h-screen overflow-hidden flex items-center justify-center">
+      <AuthPageBackground variant="register" />
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}

@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { Shield, Zap, Brain, ArrowRight, Play } from "lucide-react";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useReducedMotion,
+} from "framer-motion";
+import { Shield, Zap, Brain, ArrowRight, Play, Radar } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
+import { BackgroundLayers } from "@/components/landing/background-layers";
 
 const ANOMALY_EVENTS = [
   {
@@ -43,8 +49,17 @@ const SHAP_FEATURES = [
   { label: "Process tree", pct: 38, positive: false },
 ];
 
+const TRUST_LOGOS = [
+  { name: "Meridian", icon: Radar },
+  { name: "TechCorp", icon: Shield },
+  { name: "Axiom Global", icon: Zap },
+  { name: "Sentinel", icon: Shield },
+  { name: "Nexus Sec", icon: Radar },
+];
+
 export function Hero() {
   const ref = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ["start start", "end start"],
@@ -64,74 +79,53 @@ export function Hero() {
   return (
     <section
       ref={ref}
-      className="relative min-h-screen flex items-center overflow-hidden bg-[#020617]"
+      aria-label="Hero"
+      className="relative min-h-screen flex items-center overflow-hidden bg-(--landing-bg)"
     >
-      {/* ── Deep background layers ── */}
-      {/* Noise grain overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.015] pointer-events-none"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-          backgroundSize: "200px 200px",
-        }}
-      />
+      <BackgroundLayers grid noise glow={null} />
 
-      {/* Grid */}
+      {/* Radial glows — extra positioning overrides */}
       <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-          backgroundSize: "72px 72px",
-        }}
-      />
-
-      {/* Radial glows */}
-      <div
-        className="absolute top-[-20%] left-[-10%] w-56.25 h-56.25 rounded-full opacity-20 pointer-events-none"
-        style={{
-          background: "radial-gradient(circle, #0891b2 0%, transparent 70%)",
-          filter: "blur(80px)",
-        }}
-      />
-      <div
-        className="absolute bottom-[-20%] right-[-10%] w-175 h-175 rounded-full opacity-15 pointer-events-none"
+        className="absolute bottom-[-20%] right-[-10%] w-700 h-700 rounded-full opacity-15 pointer-events-none"
         style={{
           background: "radial-gradient(circle, #1d4ed8 0%, transparent 70%)",
           filter: "blur(80px)",
         }}
+        aria-hidden="true"
       />
       <div
-        className="absolute top-[40%] left-[40%] w-100 h-100 rounded-full opacity-10 pointer-events-none"
+        className="absolute top-[40%] left-[40%] w-400 h-400 rounded-full opacity-10 pointer-events-none"
         style={{
           background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)",
           filter: "blur(60px)",
         }}
+        aria-hidden="true"
       />
 
       {/* Animated rings */}
-      {[0, 1, 2].map((i) => (
-        <motion.div
-          key={i}
-          className="absolute top-1/2 left-1/2 rounded-full border border-cyan-500/10 pointer-events-none"
-          style={{
-            width: `${500 + i * 250}px`,
-            height: `${500 + i * 250}px`,
-            x: "-50%",
-            y: "-50%",
-          }}
-          animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.1, 0.3] }}
-          transition={{
-            duration: 4 + i * 1.5,
-            repeat: Infinity,
-            delay: i * 0.8,
-          }}
-        />
-      ))}
+      {!prefersReducedMotion &&
+        [0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="absolute top-1/2 left-1/2 rounded-full border border-cyan-500/10 pointer-events-none"
+            style={{
+              width: `${500 + i * 250}px`,
+              height: `${500 + i * 250}px`,
+              x: "-50%",
+              y: "-50%",
+            }}
+            animate={{ scale: [1, 1.05, 1], opacity: [0.3, 0.1, 0.3] }}
+            transition={{
+              duration: 4 + i * 1.5,
+              repeat: Infinity,
+              delay: i * 0.8,
+            }}
+            aria-hidden="true"
+          />
+        ))}
 
       <motion.div
-        style={{ y, opacity }}
+        style={prefersReducedMotion ? {} : { y, opacity }}
         className="relative z-10 w-full max-w-7xl mx-auto px-6 pt-28 pb-16"
       >
         <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -142,7 +136,7 @@ export function Hero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-8"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-(--landing-card) border border-(--landing-border-light) backdrop-blur-sm mb-8"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -175,7 +169,7 @@ export function Hero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
-              className="text-lg text-white/50 leading-relaxed mb-10 max-w-lg"
+              className="text-lg text-(--landing-text-secondary) leading-relaxed mb-10 max-w-lg"
             >
               ML-powered behavioral detection running entirely at the edge. Zero
               cloud round-trips. Full explainability. Sub-500ms response — even
@@ -191,7 +185,7 @@ export function Hero() {
             >
               <Link
                 href="/auth/register"
-                className="group relative inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold text-white overflow-hidden"
+                className="group relative inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold text-white overflow-hidden cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 <div className="absolute inset-0 bg-linear-to-r from-cyan-500 to-blue-600" />
                 <div className="absolute inset-0 bg-linear-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -202,7 +196,7 @@ export function Hero() {
 
               <Link
                 href="/auth/login"
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold text-white/80 border border-white/10 hover:bg-white/5 hover:text-white hover:border-white/20 transition-all duration-200"
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold text-white/80 border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:text-white hover:border-white/20 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 <Play className="h-3.5 w-3.5 fill-current" />
                 Watch Demo
@@ -221,9 +215,16 @@ export function Hero() {
                 { val: "99.9%", label: "Accuracy rate" },
                 { val: "2MB", label: "Agent footprint" },
               ].map((s) => (
-                <div key={s.label} className="border-l border-white/10 pl-4">
-                  <div className="text-2xl font-black text-white">{s.val}</div>
-                  <div className="text-xs text-white/40 mt-0.5">{s.label}</div>
+                <div
+                  key={s.label}
+                  className="border-l border-(--landing-border) pl-4"
+                >
+                  <div className="text-2xl font-black text-(--landing-text)">
+                    {s.val}
+                  </div>
+                  <div className="text-xs text-(--landing-text-muted) mt-0.5">
+                    {s.label}
+                  </div>
                 </div>
               ))}
             </motion.div>
@@ -240,7 +241,7 @@ export function Hero() {
             <div className="absolute inset-4 bg-linear-to-br from-cyan-500/20 to-blue-600/20 rounded-3xl blur-3xl pointer-events-none" />
 
             {/* Main card */}
-            <div className="relative rounded-2xl border border-white/10 bg-[#0a1628]/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60">
+            <div className="relative rounded-2xl border border-(--landing-border-light) bg-[#0a1628]/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60">
               {/* Window bar */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 bg-white/2">
                 <div className="flex items-center gap-1.5">
@@ -405,15 +406,20 @@ export function Hero() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.1 }}
-              className="absolute -top-5 -right-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-white/10 backdrop-blur-xl shadow-xl"
+              className="hidden lg:block absolute -top-5 -right-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-(--landing-border-light) backdrop-blur-xl shadow-xl"
             >
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-linear-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                  <Zap className="h-3.5 w-3.5 text-white fill-white" />
+                  <Zap
+                    className="h-3.5 w-3.5 text-white fill-white"
+                    aria-hidden="true"
+                  />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-white">Edge Agent</div>
-                  <div className="text-[10px] text-white/40">
+                  <div className="text-xs font-bold text-(--landing-text)">
+                    Edge Agent
+                  </div>
+                  <div className="text-[10px] text-(--landing-text-muted)">
                     2MB · Offline ready
                   </div>
                 </div>
@@ -424,17 +430,20 @@ export function Hero() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.25 }}
-              className="absolute -bottom-5 -left-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-white/10 backdrop-blur-xl shadow-xl"
+              className="hidden lg:block absolute -bottom-5 -left-5 px-3 py-2 rounded-xl bg-[#0a1628]/90 border border-(--landing-border-light) backdrop-blur-xl shadow-xl"
             >
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                  <Brain className="h-3.5 w-3.5 text-white" />
+                  <Brain
+                    className="h-3.5 w-3.5 text-white"
+                    aria-hidden="true"
+                  />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-white">
+                  <div className="text-xs font-bold text-(--landing-text)">
                     SHAP Explained
                   </div>
-                  <div className="text-[10px] text-white/40">
+                  <div className="text-[10px] text-(--landing-text-muted)">
                     Every decision transparent
                   </div>
                 </div>
@@ -448,26 +457,26 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8 }}
-          className="mt-24 pt-12 border-t border-white/5"
+          className="mt-24 pt-12 border-t border-(--landing-border)"
         >
-          <p className="text-center text-xs text-white/25 uppercase tracking-widest mb-8">
+          <p className="text-center text-xs text-(--landing-text-muted) uppercase tracking-widest mb-8">
             Trusted by security teams at
           </p>
-          <div className="flex items-center justify-center gap-12 flex-wrap opacity-30">
-            {[
-              "MERIDIAN",
-              "TECHCORP",
-              "AXIOM GLOBAL",
-              "SENTINEL",
-              "NEXUS SEC",
-            ].map((name) => (
-              <span
-                key={name}
-                className="text-sm font-bold tracking-widest text-white"
-              >
-                {name}
-              </span>
-            ))}
+          <div className="flex items-center justify-center gap-8 md:gap-14 flex-wrap">
+            {TRUST_LOGOS.map((logo) => {
+              const Icon = logo.icon;
+              return (
+                <div
+                  key={logo.name}
+                  className="flex items-center gap-2 text-white/30 hover:text-white/60 transition-colors duration-300"
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span className="text-sm font-bold tracking-widest">
+                    {logo.name}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </motion.div>
       </motion.div>

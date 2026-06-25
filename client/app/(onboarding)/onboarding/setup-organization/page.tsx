@@ -7,16 +7,14 @@ import { Building2, ArrowRight, CheckCircle2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Logo } from "@/components/ui/logo";
+import { AuthBrandMark } from "@/components/auth/auth-visual-panel";
 import { useAuth } from "@/lib/auth/useAuth";
 import { resolvePostLoginRoute, useAuthStore } from "@/lib/stores/auth-store";
 import { createClient } from "@/lib/config/client";
 import { useOrganizationStore } from "@/lib/stores/organization-store";
 import { StorageRepository } from "@/lib/repositories/storage-repository";
+import { validateFile } from "@/lib/utils/file-validation";
 import { toast } from "sonner";
-
-const ALLOWED_TYPES = ["image/png", "image/jpeg"];
-const MAX_SIZE = 2 * 1024 * 1024;
 
 const storageRepository = new StorageRepository(createClient());
 
@@ -47,11 +45,13 @@ export default function SetupOrganizationPage() {
   }, [user, loading, router]);
 
   const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "org";
+    return (
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 48) || "org"
+    );
   };
 
   const handleNameChange = (value: string) => {
@@ -61,19 +61,9 @@ export default function SetupOrganizationPage() {
     }
   };
 
-  const validateFile = (file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return "Only PNG, JPEG, and WebP images are accepted";
-    }
-    if (file.size > MAX_SIZE) {
-      return "File must be under 2MB";
-    }
-    return null;
-  };
-
   const handleFileSelect = async (file: File) => {
     setLogoError(null);
-    const error = validateFile(file);
+    const error = await validateFile(file);
     if (error) {
       setLogoError(error);
       return;
@@ -208,8 +198,8 @@ export default function SetupOrganizationPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
       </div>
     );
   }
@@ -217,27 +207,32 @@ export default function SetupOrganizationPage() {
   return (
     <div className="w-full max-w-lg mx-auto">
       <div className="text-center mb-8">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-          <Logo className="h-6 w-6 text-primary" />
+        <div className="flex justify-center mb-4">
+          <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-foreground mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
           Set Up Your Organization
         </h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-slate-400 text-sm">
           Create your organization to get started with EdgePulse
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <Label htmlFor="orgName">Organization Name</Label>
+          <Label
+            htmlFor="orgName"
+            className="text-sm font-medium text-slate-200"
+          >
+            Organization Name
+          </Label>
           <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <Input
               id="orgName"
               value={orgName}
               onChange={(e) => handleNameChange(e.target.value)}
-              className="pl-10 h-10"
+              className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
               placeholder="Acme Corp"
               required
             />
@@ -245,7 +240,12 @@ export default function SetupOrganizationPage() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="orgSlug">Organization Slug</Label>
+          <Label
+            htmlFor="orgSlug"
+            className="text-sm font-medium text-slate-200"
+          >
+            Organization Slug
+          </Label>
           <Input
             id="orgSlug"
             value={orgSlug}
@@ -253,17 +253,19 @@ export default function SetupOrganizationPage() {
               setOrgSlug(e.target.value.replace(/[^a-z0-9-]/g, ""));
               setSlugTouched(true);
             }}
-            className="h-10 font-mono"
+            className="h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 font-mono"
             placeholder="acme-corp"
             required
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-slate-500">
             Used in URLs and API references. Must be unique.
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label>Organization Logo</Label>
+          <Label className="text-sm font-medium text-slate-200">
+            Organization Logo
+          </Label>
           <div
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -271,16 +273,16 @@ export default function SetupOrganizationPage() {
             onClick={() => fileInputRef.current?.click()}
             className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
               dragOver
-                ? "border-primary bg-primary/5"
+                ? "border-cyan-400 bg-cyan-500/5"
                 : logoPreview
-                  ? "border-muted-foreground/30"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/40"
+                  ? "border-white/10"
+                  : "border-white/10 hover:border-white/20"
             }`}
           >
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg"
               onChange={handleInputChange}
               className="hidden"
             />
@@ -301,41 +303,37 @@ export default function SetupOrganizationPage() {
                       e.stopPropagation();
                       removeLogo();
                     }}
-                    className="absolute -top-2 -right-2 rounded-full bg-destructive text-destructive-foreground p-0.5 shadow-sm"
+                    className="absolute -top-2 -right-2 rounded-full bg-red-500/80 text-white p-0.5 shadow-sm hover:bg-red-500 transition-colors"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
+                <p className="text-xs text-slate-400 text-center">
                   {logoFile?.name}
                 </p>
                 {isUploadingLogo && (
                   <div className="flex items-center gap-2 mt-2 justify-center">
-                    <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs text-muted-foreground">
-                      Uploading...
-                    </span>
+                    <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-slate-400">Uploading...</span>
                   </div>
                 )}
               </div>
             ) : (
               <>
-                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground mb-1">
-                  <span className="text-primary">Click to upload</span> or
-                  drag and drop
+                <Upload className="h-8 w-8 text-slate-500 mb-2" />
+                <p className="text-sm text-slate-400 mb-1">
+                  <span className="text-cyan-400">Click to upload</span> or drag
+                  and drop
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  PNG, JPEG, or WebP (max 2MB)
-                </p>
+                <p className="text-xs text-slate-500">PNG or JPEG (max 2MB)</p>
               </>
             )}
           </div>
           {logoError && (
-            <p className="text-xs text-destructive mt-1">{logoError}</p>
+            <p className="text-sm text-red-400 mt-1">{logoError}</p>
           )}
           {logoTempPath && !logoError && (
-            <p className="text-xs text-emerald-500 flex items-center gap-1.5 mt-1">
+            <p className="text-xs text-emerald-400 flex items-center gap-1.5 mt-1">
               <CheckCircle2 className="h-3 w-3" />
               Logo uploaded
             </p>
@@ -344,8 +342,13 @@ export default function SetupOrganizationPage() {
 
         <Button
           type="submit"
-          className="w-full h-10 gap-2"
-          disabled={isSubmitting || isUploadingLogo || !orgName.trim() || !orgSlug.trim()}
+          className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200"
+          disabled={
+            isSubmitting ||
+            isUploadingLogo ||
+            !orgName.trim() ||
+            !orgSlug.trim()
+          }
         >
           {isSubmitting ? (
             <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -358,9 +361,9 @@ export default function SetupOrganizationPage() {
         </Button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-border">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+      <div className="mt-8 pt-6 border-t border-white/10">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
           You will be set as the organization administrator
         </div>
       </div>

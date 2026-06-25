@@ -44,7 +44,10 @@ serve(async (req: Request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseSecretKey = Deno.env.get("SB_SECRET_KEY")!;
+    const SUPABASE_SECRET_KEYS = JSON.parse(
+      Deno.env.get("SUPABASE_SECRET_KEYS")!,
+    );
+    const supabaseSecretKey = SUPABASE_SECRET_KEYS["default"];
     const supabase = createClient(supabaseUrl, supabaseSecretKey);
 
     const apiKeyHash = await hashApiKey(apiKey, deviceId);

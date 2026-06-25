@@ -96,6 +96,12 @@ supabase db reset --linked
 
 ## Edge Functions Deployment
 
+### Deploy all Functions at once
+
+```bash
+supabase functions deploy
+```
+
 ### Deploy Individual Functions
 
 ```bash

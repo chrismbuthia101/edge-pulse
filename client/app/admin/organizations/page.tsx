@@ -197,7 +197,7 @@ export default function PlatformOrganizationsPage() {
             placeholder="Search organizations by name or slug..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-card border-border"
+            className="pl-10 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
           />
         </div>
       </motion.div>

@@ -60,6 +60,7 @@ interface AuthActions {
     email: string,
     password: string,
     fullName: string,
+    redirectTo?: string,
   ) => Promise<Result<void>>;
   resetPassword: (email: string, redirectTo?: string) => Promise<Result<void>>;
   updatePassword: (password: string) => Promise<Result<void>>;
@@ -393,13 +394,13 @@ export const useAuthStore = create<AuthStore>()(
           : { success: false, error: result.error };
       },
 
-      signUp: async (email, password, fullName) => {
+      signUp: async (email, password, fullName, redirectTo) => {
         set(
           { status: "loading", loading: true, error: null },
           undefined,
           "auth/signUp/start",
         );
-        const result = await authService.signUp(email, password, fullName);
+        const result = await authService.signUp(email, password, fullName, redirectTo);
 
         if (!result.success) {
           set(

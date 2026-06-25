@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/sidebar";
 import { AdminTopBar } from "@/components/admin/topbar";
 import { useAuth } from "@/lib/auth/useAuth";
+import { AuthPageBackground } from "@/components/auth/auth-visual-panel";
 
 export default function AdminLayout({
   children,
@@ -43,34 +44,9 @@ export default function AdminLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          <defs>
-            <pattern
-              id="admin-loading-grid"
-              width="48"
-              height="48"
-              patternUnits="userSpaceOnUse"
-            >
-              <path
-                d="M 48 0 L 0 0 0 48"
-                fill="none"
-                stroke="hsl(var(--grid-light))"
-                strokeWidth="0.8"
-                opacity="0.3"
-              />
-              <path
-                d="M 48 0 L 0 0 0 48"
-                fill="none"
-                stroke="hsl(var(--grid-dark))"
-                strokeWidth="0.4"
-                opacity="0.2"
-              />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#admin-loading-grid)" />
-        </svg>
-        <div className="relative z-10 animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="relative min-h-screen overflow-hidden flex items-center justify-center">
+        <AuthPageBackground variant="login" />
+        <div className="relative z-10 animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
       </div>
     );
   }
@@ -78,33 +54,41 @@ export default function AdminLayout({
   if (!hasRole(["PLATFORM_ADMIN"])) return null;
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex">
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        <defs>
-          <pattern
-            id="admin-grid"
-            width="48"
-            height="48"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M 48 0 L 0 0 0 48"
-              fill="none"
-              stroke="hsl(var(--grid-light))"
-              strokeWidth="0.8"
-              opacity="0.3"
-            />
-            <path
-              d="M 48 0 L 0 0 0 48"
-              fill="none"
-              stroke="hsl(var(--grid-dark))"
-              strokeWidth="0.4"
-              opacity="0.2"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#admin-grid)" />
-      </svg>
+    <div
+      className="relative min-h-screen overflow-hidden flex"
+      style={{
+        "--background": "218 33% 6%",
+        "--foreground": "210 20% 90%",
+        "--card": "218 30% 9%",
+        "--card-foreground": "210 20% 90%",
+        "--popover": "216 25% 10%",
+        "--popover-foreground": "210 20% 90%",
+        "--primary": "199 95% 50%",
+        "--primary-foreground": "216 28% 7%",
+        "--secondary": "216 22% 15%",
+        "--secondary-foreground": "210 20% 80%",
+        "--muted": "218 25% 13%",
+        "--muted-foreground": "215 15% 52%",
+        "--accent": "194 40% 18%",
+        "--accent-foreground": "194 100% 70%",
+        "--destructive": "0 75% 55%",
+        "--destructive-foreground": "0 0% 100%",
+        "--border": "215 50% 20%",
+        "--input": "216 20% 16%",
+        "--ring": "194 100% 50%",
+        "--sidebar": "216 25% 10%",
+        "--sidebar-foreground": "210 20% 90%",
+        "--sidebar-primary": "194 100% 50%",
+        "--sidebar-primary-foreground": "216 28% 7%",
+        "--sidebar-accent": "216 22% 15%",
+        "--sidebar-accent-foreground": "210 20% 80%",
+        "--sidebar-border": "216 20% 18%",
+        "--sidebar-ring": "194 100% 50%",
+        "--grid-light": "215 35% 25%",
+        "--grid-dark": "215 25% 85%",
+      } as React.CSSProperties}
+    >
+      <AuthPageBackground variant="login" />
       <AdminSidebar
         collapsed={sidebarCollapsed}
         onToggle={() => {

@@ -19,8 +19,8 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ["var(--font-plex-sans)", "system-ui"],
-        display: ["var(--font-syne)", "system-ui"],
+        sans: ["var(--font-jakarta)", "system-ui"],
+        display: ["var(--font-jakarta)", "system-ui"],
         mono: ["var(--font-plex-mono)", "monospace"],
       },
       colors: {

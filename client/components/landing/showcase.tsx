@@ -11,6 +11,7 @@ import {
   Activity,
 } from "lucide-react";
 import Link from "next/link";
+import { BackgroundLayers } from "@/components/landing/background-layers";
 
 const steps = [
   {
@@ -34,8 +35,8 @@ const steps = [
     title: "Explain & Respond",
     desc: "SHAP values surface the top features driving each anomaly. Auto-block critical threats. Full forensic export for investigations.",
     icon: Shield,
-    color: "from-emerald-500 to-teal-600",
-    glow: "rgba(16,185,129,0.2)",
+    color: "from-cyan-500 to-blue-600",
+    glow: "rgba(6,182,212,0.2)",
   },
 ];
 
@@ -48,6 +49,36 @@ const dashboardFeatures = [
   "Explainable AI comparison across methods",
 ];
 
+const CHART_DATA = [
+  12, 8, 15, 6, 22, 18, 9, 31, 14, 7, 19, 25, 11, 8, 13, 27, 16, 10, 21, 17, 6,
+  14, 29, 11,
+];
+
+function ConnectorLine() {
+  return (
+    <svg
+      className="hidden lg:block absolute top-8 left-[calc(100%+12px)] w-6 z-20"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M0 12h20"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="1.5"
+        strokeDasharray="3 3"
+      />
+      <path
+        d="M18 8l4 4-4 4"
+        stroke="rgba(6,182,212,0.4)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function Showcase() {
   const ref = React.useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-80px" });
@@ -56,19 +87,12 @@ export function Showcase() {
     <section
       ref={ref}
       id="how-it-works"
-      className="relative py-32 bg-[#030918] overflow-hidden"
+      className="relative py-32 bg-(--landing-bg-alt) overflow-hidden scroll-mt-24"
+      aria-labelledby="showcase-heading"
     >
-      <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-white/8 to-transparent" />
+      <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-(--landing-border-light) to-transparent" />
 
-      {/* Grid */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)",
-          backgroundSize: "72px 72px",
-        }}
-      />
+      <BackgroundLayers grid noise={false} glow={null} />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         {/* Header */}
@@ -78,16 +102,19 @@ export function Showcase() {
           transition={{ duration: 0.6 }}
           className="text-center mb-24"
         >
-          <span className="inline-block text-xs font-bold uppercase tracking-widest text-emerald-400 mb-4">
+          <span className="inline-block text-xs font-bold uppercase tracking-widest text-cyan-400 mb-4">
             How It Works
           </span>
-          <h2 className="text-4xl md:text-5xl font-black text-white mb-5">
+          <h2
+            id="showcase-heading"
+            className="text-4xl md:text-5xl font-black text-(--landing-text) mb-5"
+          >
             From install to protected
-            <span className="block text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-teal-400">
+            <span className="block text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">
               in 30 seconds.
             </span>
           </h2>
-          <p className="text-lg text-white/40 max-w-2xl mx-auto">
+          <p className="text-lg text-(--landing-text-secondary) max-w-2xl mx-auto">
             Zero configuration. No cloud dependencies. Just install the agent
             and EdgePulse starts protecting.
           </p>
@@ -103,18 +130,16 @@ export function Showcase() {
               transition={{ duration: 0.6, delay: i * 0.15 }}
               className="group relative"
             >
-              {/* Connector line */}
-              {i < 2 && (
-                <div className="hidden lg:block absolute top-8 left-[calc(100%+12px)] w-6 border-t border-dashed border-white/15 z-20" />
-              )}
+              {i < 2 && <ConnectorLine />}
 
-              <div className="relative rounded-2xl p-8 border border-white/5 bg-white/2 hover:bg-white/4 transition-all duration-500 h-full overflow-hidden">
+              <div className="relative rounded-2xl p-8 border border-(--landing-border) bg-(--landing-card) hover:bg-(--landing-card-hover) hover:scale-[1.02] transition-all duration-500 h-full overflow-hidden cursor-pointer">
                 {/* Glow */}
                 <div
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
                   style={{
                     background: `radial-gradient(circle at 30% 20%, ${s.glow}, transparent 65%)`,
                   }}
+                  aria-hidden="true"
                 />
 
                 {/* Step number */}
@@ -127,11 +152,13 @@ export function Showcase() {
                   className={`w-12 h-12 rounded-xl bg-linear-to-br ${s.color} flex items-center justify-center mb-5 shadow-lg`}
                   style={{ boxShadow: `0 0 20px ${s.glow}` }}
                 >
-                  <s.icon className="w-5 h-5 text-white" />
+                  <s.icon className="w-5 h-5 text-white" aria-hidden="true" />
                 </div>
 
-                <h3 className="text-lg font-bold text-white mb-3">{s.title}</h3>
-                <p className="text-sm text-white/45 leading-relaxed">
+                <h3 className="text-lg font-bold text-(--landing-text) mb-3">
+                  {s.title}
+                </h3>
+                <p className="text-sm text-(--landing-text-secondary) leading-relaxed">
                   {s.desc}
                 </p>
               </div>
@@ -148,36 +175,44 @@ export function Showcase() {
             transition={{ duration: 0.7, delay: 0.4 }}
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-6">
-              <Monitor className="h-3.5 w-3.5 text-cyan-400" />
+              <Monitor
+                className="h-3.5 w-3.5 text-cyan-400"
+                aria-hidden="true"
+              />
               <span className="text-xs font-semibold text-cyan-400">
                 Command Dashboard
               </span>
             </div>
 
-            <h3 className="text-3xl md:text-4xl font-black text-white mb-5 leading-tight">
+            <h3 className="text-3xl md:text-4xl font-black text-(--landing-text) mb-5 leading-tight">
               Everything you need in
               <span className="block text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">
                 one command center.
               </span>
             </h3>
-            <p className="text-base text-white/45 leading-relaxed mb-8">
+            <p className="text-base text-(--landing-text-secondary) leading-relaxed mb-8">
               A unified operations center that surfaces the alerts that matter —
               with full context, SHAP explainability, and one-click device
               isolation.
             </p>
 
-            <ul className="space-y-3 mb-10">
+            <ul className="space-y-3 mb-10" role="list">
               {dashboardFeatures.map((feat) => (
                 <li key={feat} className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
-                  <span className="text-sm text-white/60">{feat}</span>
+                  <CheckCircle2
+                    className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm text-(--landing-text-secondary)">
+                    {feat}
+                  </span>
                 </li>
               ))}
             </ul>
 
             <Link
               href="/auth/register"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white border border-white/10 hover:bg-white/5 hover:border-white/20 transition-all duration-200"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:border-white/20 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
             >
               Explore the Platform
               <ArrowRight className="h-4 w-4" />
@@ -193,9 +228,9 @@ export function Showcase() {
           >
             <div className="absolute inset-4 bg-linear-to-br from-cyan-500/15 to-blue-600/15 rounded-3xl blur-3xl pointer-events-none" />
 
-            <div className="relative rounded-2xl border border-white/8 bg-[#0a1628]/80 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/50">
+            <div className="relative rounded-2xl border border-(--landing-border-light) bg-[#0a1628]/80 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/50">
               {/* Window chrome */}
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-(--landing-border)">
                 <div className="flex gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
@@ -222,48 +257,57 @@ export function Showcase() {
                     {
                       label: "Resolved Today",
                       val: "89",
-                      c: "text-emerald-400",
+                      c: "text-cyan-400",
                     },
                   ].map((s) => (
                     <div
                       key={s.label}
-                      className="rounded-xl p-3 bg-white/3 border border-white/4 text-center"
+                      className="rounded-xl p-3 bg-(--landing-card) border border-(--landing-border) text-center"
                     >
                       <div className={`text-lg font-bold font-mono ${s.c}`}>
                         {s.val}
                       </div>
-                      <div className="text-[10px] text-white/30 mt-0.5">
+                      <div className="text-[10px] text-(--landing-text-muted) mt-0.5">
                         {s.label}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Chart placeholder */}
-                <div className="rounded-xl p-4 bg-white/3 border border-white/4">
-                  <div className="text-xs text-white/40 mb-3">
+                {/* Chart */}
+                <div className="rounded-xl p-4 bg-(--landing-card) border border-(--landing-border)">
+                  <div className="text-xs text-(--landing-text-secondary) mb-3">
                     24h Anomaly Activity
                   </div>
-                  <div className="flex items-end gap-1 h-16">
-                    {[
-                      12, 8, 15, 6, 22, 18, 9, 31, 14, 7, 19, 25, 11, 8, 13, 27,
-                      16, 10, 21, 17, 6, 14, 29, 11,
-                    ].map((v, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 rounded-t-sm"
-                        style={{
-                          height: `${(v / 31) * 100}%`,
-                          background:
-                            v > 20
-                              ? "rgb(239,68,68)"
-                              : v > 14
-                                ? "rgb(249,115,22)"
-                                : "rgb(6,182,212)",
-                          opacity: 0.7,
-                        }}
-                      />
-                    ))}
+                  <div className="flex items-end gap-0.5 h-20">
+                    {CHART_DATA.map((v, i) => {
+                      const h = (v / 31) * 100;
+                      return (
+                        <motion.div
+                          key={i}
+                          className="flex-1 rounded-t-sm relative group/chart"
+                          initial={{ height: 0 }}
+                          animate={isInView ? { height: `${h}%` } : {}}
+                          transition={{
+                            duration: 0.4,
+                            delay: 0.6 + i * 0.02,
+                            ease: "easeOut",
+                          }}
+                          style={{
+                            background:
+                              v > 20
+                                ? "linear-gradient(to top, rgb(239,68,68), rgb(239,68,68,0.6))"
+                                : v > 14
+                                  ? "linear-gradient(to top, rgb(249,115,22), rgb(249,115,22,0.6))"
+                                  : "linear-gradient(to top, rgb(6,182,212), rgb(6,182,212,0.6))",
+                          }}
+                        >
+                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] text-white/40 font-mono opacity-0 group-hover/chart:opacity-100 transition-opacity">
+                            {v}
+                          </span>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -288,19 +332,21 @@ export function Showcase() {
                   ].map((a) => (
                     <div
                       key={a.title}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/2 border border-white/4"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-(--landing-card) border border-(--landing-border)"
                     >
                       <div
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.sev === "critical" ? "bg-red-400" : a.sev === "high" ? "bg-orange-400" : "bg-amber-400"}`}
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.sev === "critical" ? "bg-red-400" : a.sev === "high" ? "bg-orange-400" : "bg-cyan-400"}`}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white/70 truncate">
+                        <div className="text-xs text-(--landing-text-secondary) truncate">
                           {a.title}
                         </div>
-                        <div className="text-[10px] text-white/30">{a.dev}</div>
+                        <div className="text-[10px] text-(--landing-text-muted)">
+                          {a.dev}
+                        </div>
                       </div>
                       <div
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.sev === "critical" ? "bg-red-500/15 text-red-400" : a.sev === "high" ? "bg-orange-500/15 text-orange-400" : "bg-amber-500/15 text-amber-400"}`}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.sev === "critical" ? "bg-red-500/15 text-red-400" : a.sev === "high" ? "bg-orange-500/15 text-orange-400" : "bg-cyan-500/15 text-cyan-400"}`}
                       >
                         {a.sev}
                       </div>
@@ -329,23 +375,23 @@ export function Showcase() {
               backgroundSize: "36px 36px",
             }}
           />
-          <div className="absolute inset-0 border border-white/8 rounded-3xl" />
+          <div className="absolute inset-0 border border-(--landing-border-light) rounded-3xl" />
 
           {/* Top line */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-px bg-linear-to-r from-transparent via-cyan-400/60 to-transparent" />
 
           <div className="relative z-10 text-center py-20 px-8">
-            <h3 className="text-4xl md:text-5xl font-black text-white mb-5">
+            <h3 className="text-4xl md:text-5xl font-black text-(--landing-text) mb-5">
               Ready to secure your edge?
             </h3>
-            <p className="text-lg text-white/45 max-w-xl mx-auto mb-10">
+            <p className="text-lg text-(--landing-text-secondary) max-w-xl mx-auto mb-10">
               Join thousands of organizations trusting EdgePulse for
               intelligent, explainable, privacy-first edge security.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 href="/auth/register"
-                className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold text-white overflow-hidden"
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-bold text-white overflow-hidden cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 <div className="absolute inset-0 bg-linear-to-r from-cyan-500 to-blue-600" />
                 <div className="absolute inset-0 bg-linear-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -354,7 +400,7 @@ export function Showcase() {
               </Link>
               <Link
                 href="/auth/login"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-semibold text-white/70 border border-white/10 hover:bg-white/5 hover:text-white hover:border-white/20 transition-all duration-200"
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-semibold text-white/70 border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:text-white hover:border-white/20 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 Schedule Demo
               </Link>

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Building2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Logo } from "@/components/ui/logo";
+import { AuthBrandMark } from "@/components/auth/auth-visual-panel";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useOrganizationStore } from "@/lib/stores/organization-store";
 import type { Organization } from "@/lib/types/organization";
@@ -68,8 +68,8 @@ export default function OrganizationsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
       </div>
     );
   }
@@ -77,13 +77,13 @@ export default function OrganizationsPage() {
   return (
     <div className="w-full max-w-2xl mx-auto">
       <div className="text-center mb-8">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-          <Logo className="h-6 w-6 text-primary" />
+        <div className="flex justify-center mb-4">
+          <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-foreground mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
           Choose Organization
         </h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-slate-400 text-sm">
           Select which organization to work in
         </p>
       </div>
@@ -96,36 +96,36 @@ export default function OrganizationsPage() {
             animate={{ opacity: 1, y: 0 }}
           >
             <Card
-              className={`cursor-pointer transition-all hover:border-primary/50 hover:shadow-md ${
+              className={`cursor-pointer transition-all border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm ${
                 activeOrganizationId === org.id
-                  ? "border-primary ring-1 ring-primary"
-                  : ""
+                  ? "border-cyan-400 ring-1 ring-cyan-400/50"
+                  : "hover:border-white/20"
               }`}
               onClick={() => handleSelectOrg(org.id)}
             >
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0">
                   {org.logo_url ? (
                     <Image src={org.logo_url} alt="" className="w-8 h-8 object-contain" width={32} height={32} />
                   ) : (
-                    <Building2 className="h-6 w-6 text-primary" />
+                    <Building2 className="h-6 w-6 text-cyan-400" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{org.name}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-semibold text-white">{org.name}</p>
+                  <p className="text-sm text-slate-400">
                     {org.role === "ORG_ADMIN" ? "Administrator" : "Analyst"}
                     {org.domain && <span> · {org.domain}</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {activeOrganizationId === org.id ? (
-                    <span className="flex items-center gap-1 text-xs text-emerald-500 font-medium">
+                    <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
                       <CheckCircle2 className="h-4 w-4" />
                       Active
                     </span>
                   ) : (
-                    <Button variant="ghost" size="sm" className="gap-1">
+                    <Button variant="ghost" size="sm" className="gap-1 text-slate-300 hover:text-white hover:bg-white/5">
                       Switch
                       <ArrowRight className="h-3 w-3" />
                     </Button>
@@ -138,7 +138,11 @@ export default function OrganizationsPage() {
       </div>
 
       <div className="mt-8 text-center">
-        <Button variant="outline" onClick={() => router.push("/dashboard")}>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/dashboard")}
+          className="border-white/10 text-slate-300 hover:text-white hover:bg-white/5"
+        >
           Go to Dashboard
         </Button>
       </div>
