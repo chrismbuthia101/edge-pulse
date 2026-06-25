@@ -1,6 +1,6 @@
 import { serve } from "std/http/server.ts";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseContext } from "@supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +25,7 @@ serve(async (req: Request) => {
   }
 
   let createdOrgId: string | null = null;
+  let supabase: SupabaseClient;
 
   try {
     if (req.method !== "POST") {
@@ -45,7 +46,7 @@ serve(async (req: Request) => {
     }
 
     const user = { id: ctx.userClaims!.id!, email: ctx.userClaims!.email! };
-    const supabase = ctx.supabaseAdmin;
+    supabase = ctx.supabaseAdmin;
 
     const { data: existingProfile, error: profileError } = await supabase
       .schema("organization")
@@ -134,7 +135,6 @@ serve(async (req: Request) => {
       console.error("Billing insert error:", billingError);
     }
 
-    // ── Logo: move from temp to permanent path ──────────────────────────
     let logo_url: string | null = null;
     if (logo_temp_path) {
       try {
@@ -265,19 +265,16 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error("Setup organization error:", error);
     if (createdOrgId) {
-      const SUPABASE_SECRET_KEYS = JSON.parse(
-        Deno.env.get("SUPABASE_SECRET_KEYS")!,
-      );
-      const cleanupSupabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        SUPABASE_SECRET_KEYS["default"],
-      );
-      await cleanupSupabase
-        .schema("organization")
-        .from("organizations")
-        .delete()
-        .eq("id", createdOrgId)
-        .catch(() => {});
+      try {
+        await supabase
+          .schema("organization")
+          .from("organizations")
+          .delete()
+          .eq("id", createdOrgId)
+          .catch(() => {});
+      } catch (cleanupError) {
+        console.error("Cleanup failed:", cleanupError);
+      }
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
