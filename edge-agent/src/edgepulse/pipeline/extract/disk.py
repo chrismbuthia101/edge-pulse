@@ -3,7 +3,6 @@ import numpy as np
 
 from edgepulse.pipeline.extract.history import get_window_data, trim_history
 
-
 _EMPTY = {
     "disk_write_burst_1min": 0.0,
     "disk_io_spike_1min": 0.0,

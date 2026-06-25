@@ -3,7 +3,6 @@ import hashlib
 import json
 from typing import Any, Dict, Optional, Set
 
-
 RECORD_TYPE_EXCLUSIONS: Dict[str, Set[str]] = {
     "alert": {"device_id", "organization_id", "created_at", "updated_at"},
     "telemetry": {"device_id", "organization_id", "received_at"},

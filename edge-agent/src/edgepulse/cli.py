@@ -165,7 +165,7 @@ def _handle_run(args: argparse.Namespace) -> int:
             print()
             print("⚠  Device not enrolled — running in local-only mode.")
             print("   Anomaly detection is active but events will NOT be synced to the cloud.")
-            print(f"   To enroll: sudo /opt/edgepulse/bin/edge-agent enroll")
+            print("   To enroll: sudo /opt/edgepulse/bin/edge-agent enroll")
             print()
 
         agent = EdgePulseAgent(settings=settings)
@@ -282,7 +282,7 @@ def _handle_status(args: argparse.Namespace) -> int:
                 print(f"  Backend URL : {url}")
         else:
             print("  Enrollment  : ✗ Not enrolled")
-            print(f"  Run: sudo /opt/edgepulse/bin/edge-agent enroll")
+            print("  Run: sudo /opt/edgepulse/bin/edge-agent enroll")
     except Exception as e:
         print(f"  Enrollment  : ✗ Error reading credentials: {e}")
 

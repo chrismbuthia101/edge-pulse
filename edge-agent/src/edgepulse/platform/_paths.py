@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 
-
 _BASE_DIR = Path("/opt/edgepulse")
 _CONFIG_DIR = Path("/etc/edgepulse")
 _LOG_DIR = Path("/var/log/edgepulse")

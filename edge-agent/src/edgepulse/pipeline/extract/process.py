@@ -2,7 +2,6 @@ from typing import Dict, List, Any
 
 from edgepulse.pipeline.extract.history import get_window_data, trim_history
 
-
 _EMPTY = {
     "process_spawn_frequency_1min": 0.0,
     "process_unique_count_1min": 0,
