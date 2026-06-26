@@ -8,6 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA cron;
+
 CREATE SCHEMA IF NOT EXISTS extensions;
 
 CREATE SCHEMA IF NOT EXISTS devices;
@@ -766,3 +768,43 @@ BEGIN
     RETURN v_count;
 END;
 $$;
+
+-- ─── Sync Queue Cleanup ─────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION internal.cleanup_sync_queue(
+    p_completed_older_than INTERVAL DEFAULT INTERVAL '7 days',
+    p_failed_older_than INTERVAL DEFAULT INTERVAL '30 days'
+) RETURNS INTEGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    DELETE FROM internal.sync_queue
+    WHERE status = 'COMPLETED'
+      AND synced_at < NOW() - p_completed_older_than;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    DELETE FROM internal.sync_queue
+    WHERE status = 'FAILED'
+      AND (next_retry IS NULL OR next_retry < NOW())
+      AND last_attempt < NOW() - p_failed_older_than;
+
+    GET DIAGNOSTICS v_count = v_count + ROW_COUNT;
+
+    DELETE FROM internal.sync_queue
+    WHERE status IN ('PENDING', 'SYNCING')
+      AND created_at < NOW() - INTERVAL '90 days';
+
+    GET DIAGNOSTICS v_count = v_count + ROW_COUNT;
+
+    RETURN v_count;
+END;
+$$;
+
+SELECT cron.schedule(
+    'cleanup-sync-queue',
+    '0 3 * * *',
+    $$SELECT internal.cleanup_sync_queue()$$
+);

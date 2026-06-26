@@ -47,7 +47,7 @@ export function useNotifications() {
     const { count, error } = await supabaseRef.current
       .schema("internal")
       .from("sync_queue")
-      .select("*", { count: "exact", head: true })
+      .select("*", { count: "estimated", head: true })
       .in("status", ["PENDING", "FAILED"]);
 
     if (!error) setQueuedCount(count ?? 0);

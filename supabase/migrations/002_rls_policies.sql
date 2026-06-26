@@ -112,7 +112,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.is_org_admin()
 RETURNS BOOLEAN
-LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+LANGUAGE plpgsql STABLE SECURITY INVOKER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
@@ -992,9 +992,13 @@ REVOKE EXECUTE ON FUNCTION internal.create_monthly_partition () FROM PUBLIC;
 
 REVOKE EXECUTE ON FUNCTION internal.purge_table_data (TEXT, TEXT, TEXT, TIMESTAMPTZ, UUID, UUID) FROM PUBLIC;
 
+REVOKE EXECUTE ON FUNCTION internal.cleanup_sync_queue (INTERVAL, INTERVAL) FROM PUBLIC;
+
 GRANT EXECUTE ON FUNCTION internal.create_monthly_partition () TO service_role;
 
 GRANT EXECUTE ON FUNCTION internal.purge_table_data (TEXT, TEXT, TEXT, TIMESTAMPTZ, UUID, UUID) TO service_role;
+
+GRANT EXECUTE ON FUNCTION internal.cleanup_sync_queue (INTERVAL, INTERVAL) TO service_role;
 
 GRANT EXECUTE ON FUNCTION internal.current_device_id () TO authenticated;
 
