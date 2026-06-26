@@ -778,26 +778,32 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-    v_count INTEGER;
+    v_count INTEGER := 0;
 BEGIN
-    DELETE FROM internal.sync_queue
-    WHERE status = 'COMPLETED'
-      AND synced_at < NOW() - p_completed_older_than;
+    WITH deleted AS (
+        DELETE FROM internal.sync_queue
+        WHERE status = 'COMPLETED'
+          AND synced_at < NOW() - p_completed_older_than
+        RETURNING 1
+    )
+    SELECT COUNT(*) INTO v_count FROM deleted;
 
-    GET DIAGNOSTICS v_count = ROW_COUNT;
+    WITH deleted AS (
+        DELETE FROM internal.sync_queue
+        WHERE status = 'FAILED'
+          AND (next_retry IS NULL OR next_retry < NOW())
+          AND last_attempt < NOW() - p_failed_older_than
+        RETURNING 1
+    )
+    SELECT v_count + COUNT(*) INTO v_count FROM deleted;
 
-    DELETE FROM internal.sync_queue
-    WHERE status = 'FAILED'
-      AND (next_retry IS NULL OR next_retry < NOW())
-      AND last_attempt < NOW() - p_failed_older_than;
-
-    GET DIAGNOSTICS v_count = v_count + ROW_COUNT;
-
-    DELETE FROM internal.sync_queue
-    WHERE status IN ('PENDING', 'SYNCING')
-      AND created_at < NOW() - INTERVAL '90 days';
-
-    GET DIAGNOSTICS v_count = v_count + ROW_COUNT;
+    WITH deleted AS (
+        DELETE FROM internal.sync_queue
+        WHERE status IN ('PENDING', 'SYNCING')
+          AND created_at < NOW() - INTERVAL '90 days'
+        RETURNING 1
+    )
+    SELECT v_count + COUNT(*) INTO v_count FROM deleted;
 
     RETURN v_count;
 END;
