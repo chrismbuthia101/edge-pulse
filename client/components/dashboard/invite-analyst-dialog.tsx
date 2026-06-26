@@ -209,12 +209,28 @@ export function InviteAnalystDialog({
       }}
     >
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Invite Analyst</DialogTitle>
-          <DialogDescription>
-            Send an invitation to join your organization
-          </DialogDescription>
-        </DialogHeader>
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="space-y-4"
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="relative w-12 h-12 rounded-2xl bg-linear-to-br from-cyan-500/15 to-blue-600/15 border border-white/10 flex items-center justify-center overflow-hidden shadow-xl shadow-slate-900/10">
+                  <Mail className="relative z-10 h-5 w-5 text-primary" />
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 opacity-30 blur-2xl -z-10" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <DialogTitle>Invite Analyst</DialogTitle>
+                <DialogDescription>
+                  Send an invitation to join your organization
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         <Tabs
           value={mode}
@@ -262,7 +278,7 @@ export function InviteAnalystDialog({
             <Button
               onClick={handleSingleInvite}
               disabled={isSubmitting || !email || !fullName}
-              className="w-full gap-2"
+              className="w-full gap-2 shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
             >
               {isSubmitting ? (
                 <>
@@ -333,7 +349,7 @@ export function InviteAnalystDialog({
                 parseBulkInput().length === 0 ||
                 parseBulkInput().length > MAX_INVITES
               }
-              className="w-full gap-2"
+              className="w-full gap-2 shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
             >
               {isSubmitting ? (
                 <>
@@ -376,7 +392,7 @@ export function InviteAnalystDialog({
                 </span>
               </div>
 
-              <div className="space-y-1.5 border rounded-lg p-3 max-h-48 overflow-y-auto">
+              <div className="space-y-1.5 border rounded-lg p-3 max-h-48 overflow-y-auto bg-muted/50 border-border">
                 {results.map((r, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm">
                     {r.success ? (
@@ -396,6 +412,7 @@ export function InviteAnalystDialog({
             </motion.div>
           )}
         </AnimatePresence>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );

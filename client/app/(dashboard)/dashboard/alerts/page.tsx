@@ -148,49 +148,74 @@ function AlertRulesModal({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Alert Rules</DialogTitle>
-          <DialogDescription>
-            Detection rules that automatically trigger alerts when conditions
-            are met.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {rules.map((rule, i) => (
-            <div
-              key={i}
-              className="p-3 rounded-xl border border-border bg-muted/30 space-y-1.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">
-                  {rule.name}
-                </span>
-                <span
-                  className={cn(
-                    "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                    rule.active
-                      ? "bg-green-500/10 text-green-600 border-green-500/20"
-                      : "bg-muted text-muted-foreground border-border",
-                  )}
-                >
-                  {rule.active ? "Active" : "Disabled"}
-                </span>
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="space-y-4"
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="relative w-12 h-12 rounded-2xl bg-linear-to-br from-cyan-500/15 to-blue-600/15 border border-white/10 flex items-center justify-center overflow-hidden shadow-xl shadow-slate-900/10">
+                  <SlidersHorizontal className="relative z-10 h-5 w-5 text-primary" />
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 opacity-30 blur-2xl -z-10" />
+                </div>
               </div>
-              <p className="text-xs font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded">
-                {rule.condition}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Action: <span className="text-foreground">{rule.action}</span>
-              </p>
+              <div className="space-y-1">
+                <DialogTitle>Alert Rules</DialogTitle>
+                <DialogDescription>
+                  Detection rules that automatically trigger alerts when
+                  conditions are met.
+                </DialogDescription>
+              </div>
             </div>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-          <Button onClick={onClose}>+ New Rule</Button>
-        </DialogFooter>
+          </DialogHeader>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {rules.map((rule, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: i * 0.04 }}
+                className="p-3 rounded-xl border border-border bg-muted/30 space-y-1.5 hover:border-primary/30 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">
+                    {rule.name}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                      rule.active
+                        ? "bg-green-500/10 text-green-600 border-green-500/20"
+                        : "bg-muted text-muted-foreground border-border",
+                    )}
+                  >
+                    {rule.active ? "Active" : "Disabled"}
+                  </span>
+                </div>
+                <p className="text-xs font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+                  {rule.condition}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Action: <span className="text-foreground">{rule.action}</span>
+                </p>
+              </motion.div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              onClick={onClose}
+              className="shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              + New Rule
+            </Button>
+          </DialogFooter>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );

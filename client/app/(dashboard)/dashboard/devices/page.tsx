@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MonitorSmartphone,
   Laptop,
@@ -21,6 +21,7 @@ import {
   Copy,
   Loader2,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -207,53 +208,79 @@ function EnrollDeviceModal({
       }}
     >
       <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {step === "token" && "Generate Enrollment Token"}
-            {step === "install" && "Installation Guide"}
-            {step === "enroll" && "Enroll Device"}
-            {step === "success" && "Device Enrolled"}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "token" &&
-              "Create a one-time enrollment token to secure device registration."}
-            {step === "install" &&
-              "Follow these steps to install and configure the EdgePulse agent."}
-            {step === "enroll" &&
-              "Run the enrollment command on your device to complete registration."}
-            {step === "success" &&
-              "Your device has been successfully enrolled and is now being monitored."}
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Step 1: Generate Token */}
-        {step === "token" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="tokenName">Token Name</Label>
-              <Input
-                id="tokenName"
-                placeholder="e.g., Office Laptops"
-                value={tokenName}
-                onChange={(e) => setTokenName(e.target.value)}
-              />
+        <motion.div
+          key="enroll-modal-wrapper"
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="space-y-4"
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="relative w-12 h-12 rounded-2xl bg-linear-to-br from-cyan-500/15 to-blue-600/15 border border-white/10 flex items-center justify-center overflow-hidden shadow-xl shadow-slate-900/10">
+                  <Activity className="relative z-10 h-5 w-5 text-primary" />
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 opacity-30 blur-2xl -z-10" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <DialogTitle>
+                  {step === "token" && "Generate Enrollment Token"}
+                  {step === "install" && "Installation Guide"}
+                  {step === "enroll" && "Enroll Device"}
+                  {step === "success" && "Device Enrolled"}
+                </DialogTitle>
+                <DialogDescription>
+                  {step === "token" &&
+                    "Create a one-time enrollment token to secure device registration."}
+                  {step === "install" &&
+                    "Follow these steps to install and configure the EdgePulse agent."}
+                  {step === "enroll" &&
+                    "Run the enrollment command on your device to complete registration."}
+                  {step === "success" &&
+                    "Your device has been successfully enrolled and is now being monitored."}
+                </DialogDescription>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="maxUses">Max Uses</Label>
-              <Input
-                id="maxUses"
-                type="number"
-                min="1"
-                max="100"
-                value={maxUses}
-                onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
-              />
-            </div>
-          </div>
-        )}
+          </DialogHeader>
 
-        {/* Step 2: Installation Guide */}
-        {step === "install" && (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="space-y-4"
+            >
+              {/* Step 1: Generate Token */}
+              {step === "token" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tokenName">Token Name</Label>
+                    <Input
+                      id="tokenName"
+                      placeholder="e.g., Office Laptops"
+                      value={tokenName}
+                      onChange={(e) => setTokenName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxUses">Max Uses</Label>
+                    <Input
+                      id="maxUses"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={maxUses}
+                      onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Installation Guide */}
+              {step === "install" && (
           <div className="space-y-4">
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm">
               <p className="font-semibold text-amber-600 dark:text-amber-400 mb-1">
@@ -329,7 +356,7 @@ function EnrollDeviceModal({
         )}
 
         {/* Step 3: Enroll Command */}
-        {step === "enroll" && (
+              {step === "enroll" && (
           <div className="space-y-4">
             <div className="space-y-3">
               <p className="text-sm font-semibold">Step 3: Enroll the device</p>
@@ -411,23 +438,40 @@ function EnrollDeviceModal({
           </div>
         )}
 
-        {/* Step 4: Success */}
-        {step === "success" && (
-          <div className="space-y-4">
-            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-6 text-center">
-              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Enrollment Complete
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Your device is now enrolled and will appear in the device list
-                within 30 seconds.
-              </p>
+        </motion.div>
+        </AnimatePresence>
+
+          {step === "success" && (
+            <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="space-y-4"
+          >
+            <div className="relative overflow-hidden bg-green-500/10 border border-green-500/20 rounded-xl p-6 text-center">
+              <div className="absolute inset-0 bg-linear-to-br from-green-500/5 to-emerald-500/5" />
+              <div className="relative">
+                <div className="mx-auto mb-3 w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center shadow-lg shadow-green-500/20">
+                  <CheckCircle2 className="h-7 w-7 text-green-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  Enrollment Complete
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Your device is now enrolled and will appear in the device list
+                  within 30 seconds.
+                </p>
+              </div>
             </div>
             <div className="text-center">
-              <Button onClick={() => onClose()}>View Device List</Button>
+              <Button
+                onClick={() => onClose()}
+                className="shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
+              >
+                View Device List
+              </Button>
             </div>
-          </div>
+          </motion.div>
         )}
 
         <DialogFooter className="gap-2">
@@ -439,6 +483,7 @@ function EnrollDeviceModal({
               <Button
                 onClick={handleCreateToken}
                 disabled={loading || !tokenName.trim()}
+                className="shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
               >
                 {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -453,7 +498,10 @@ function EnrollDeviceModal({
               <Button variant="outline" onClick={() => setStep("token")}>
                 Back
               </Button>
-              <Button onClick={() => setStep("enroll")}>
+              <Button
+                onClick={() => setStep("enroll")}
+                className="shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
+              >
                 Next: Enroll Device
               </Button>
             </>
@@ -463,10 +511,16 @@ function EnrollDeviceModal({
               <Button variant="outline" onClick={() => setStep("install")}>
                 Back
               </Button>
-              <Button onClick={() => setStep("success")}>Complete</Button>
+              <Button
+                onClick={() => setStep("success")}
+                className="shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:-translate-y-0.5"
+              >
+                Complete
+              </Button>
             </>
           )}
         </DialogFooter>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );
@@ -486,21 +540,41 @@ function IsolateModal({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Isolate Device</DialogTitle>
-          <DialogDescription>
-            This will cut off <strong>{deviceName}</strong> from all network
-            access except the EdgePulse management channel.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={onConfirm}>
-            Isolate Device
-          </Button>
-        </DialogFooter>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="relative w-11 h-11 rounded-xl bg-destructive/10 border border-white/10 flex items-center justify-center overflow-hidden shadow-xl shadow-slate-900/10">
+                  <Shield className="relative z-10 h-5 w-5 text-destructive" />
+                  <div className="pointer-events-none absolute inset-0 rounded-xl bg-linear-to-br from-red-500 to-rose-600 opacity-30 blur-2xl -z-10" />
+                </div>
+              </div>
+              <div>
+                <DialogTitle className="text-lg">Isolate Device</DialogTitle>
+                <DialogDescription className="mt-0.5">
+                  This will cut off <strong>{deviceName}</strong> from all network
+                  access except the EdgePulse management channel.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-4">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              className="shadow-xl shadow-red-500/25 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              Isolate Device
+            </Button>
+          </DialogFooter>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );
@@ -520,21 +594,41 @@ function DeleteDeviceModal({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Delete Device</DialogTitle>
-          <DialogDescription>
-            This will permanently remove <strong>{deviceName}</strong> from the
-            system. This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={onConfirm}>
-            Delete Device
-          </Button>
-        </DialogFooter>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="relative w-11 h-11 rounded-xl bg-destructive/10 border border-white/10 flex items-center justify-center overflow-hidden shadow-xl shadow-slate-900/10">
+                  <Trash2 className="relative z-10 h-5 w-5 text-destructive" />
+                  <div className="pointer-events-none absolute inset-0 rounded-xl bg-linear-to-br from-red-500 to-rose-600 opacity-30 blur-2xl -z-10" />
+                </div>
+              </div>
+              <div>
+                <DialogTitle className="text-lg">Delete Device</DialogTitle>
+                <DialogDescription className="mt-0.5">
+                  This will permanently remove <strong>{deviceName}</strong>{" "}
+                  from the system. This action cannot be undone.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-4">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirm}
+              className="shadow-xl shadow-red-500/25 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              Delete Device
+            </Button>
+          </DialogFooter>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );

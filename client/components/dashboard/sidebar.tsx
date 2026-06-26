@@ -21,7 +21,7 @@ import {
   FileText,
   BarChart3
 } from "lucide-react";
-import { Logo } from "@/components/ui/logo";
+import { AuthBrandMark } from "@/components/auth/auth-visual-panel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useFocusTrap } from "@/lib/use-focus-trap";
@@ -201,7 +201,7 @@ export function Sidebar({
         ref={focusTrapRef}
         initial={false}
         animate={{
-          width: collapsed ? 68 : 240,
+          width: collapsed ? 68 : 200,
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className={`fixed left-0 top-0 h-screen bg-card/90 backdrop-blur-sm border-r border-border z-40 flex flex-col overflow-hidden dark:bg-linear-to-b dark:from-[#0d1420]/95 dark:to-[#0a1118]/95 dark:backdrop-blur-md ${
@@ -212,29 +212,21 @@ export function Sidebar({
       >
         {/* Logo area */}
         <div className="h-16 flex items-center px-4 border-b border-border shrink-0">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2.5 overflow-hidden"
-            aria-label="EdgePulse Dashboard"
-          >
-            <div className="relative w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-              <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Logo className="h-5 w-5 text-primary relative" />
-            </div>
-            <AnimatePresence>
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-base font-display font-bold text-foreground whitespace-nowrap"
-                >
-                  Edge<span className="text-primary">Pulse</span>
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </Link>
+          {collapsed ? (
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2.5 overflow-hidden"
+              aria-label="EdgePulse Dashboard"
+            >
+              <div className="w-8 h-8 rounded-lg bg-linear-to-br from-cyan-400 to-blue-600 flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/30">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="h-4 w-4">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+            </Link>
+          ) : (
+            <AuthBrandMark light={false} href="/dashboard" />
+          )}
           <div className="ml-auto">
             <button
               onClick={onToggle}
@@ -331,7 +323,7 @@ export function Sidebar({
                               animate={{ opacity: 1, x: 0 }}
                               exit={{ opacity: 0, x: -8 }}
                               transition={{ duration: 0.15 }}
-                              className="flex-1 whitespace-nowrap font-medium"
+                              className="flex-1 wrap-break-word font-medium"
                             >
                               {item.label}
                             </motion.span>

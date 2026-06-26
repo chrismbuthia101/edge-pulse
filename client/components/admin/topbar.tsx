@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -16,18 +17,42 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useAuth } from "@/lib/auth/useAuth";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { toast } from "sonner";
 
 interface TopBarProps {
   onMobileMenuToggle?: () => void;
 }
 
 export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const { role: userRole, hasMultipleOrganizations: hasMultipleOrgs, signOut } = useAuth();
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const { role: userRole, hasMultipleOrganizations: hasMultipleOrgs } = useAuth();
+
+  const handleLogout = () => {
+    setAvatarMenuOpen(false);
+    setLogoutDialogOpen(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutLoading(true);
+    const result = await useAuthStore.getState().signOut();
+    setLogoutLoading(false);
+    if (result.success) {
+      toast.success("Logged out successfully");
+      setLogoutDialogOpen(false);
+      router.push("/auth/login");
+    } else {
+      toast.error(result.error || "Failed to sign out");
+    }
+  };
 
   const {
     initials,
@@ -160,8 +185,8 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 initial={{ opacity: 0, y: 8, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
+                transition={{ type: "spring", duration: 0.2, bounce: 0.1 }}
+                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-linear-to-b from-card to-card/80 backdrop-blur-xl border border-border border-t-2 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
                 role="dialog"
                 aria-label="Notifications"
                 onKeyDown={(e) => {
@@ -307,8 +332,8 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 initial={{ opacity: 0, y: 8, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-56 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
+                transition={{ type: "spring", duration: 0.2, bounce: 0.1 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-linear-to-b from-card to-card/80 backdrop-blur-xl border border-border border-t-2 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
               >
                 <div className="p-2 space-y-0.5">
                   <button
@@ -333,9 +358,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                   )}
                   <hr className="my-1 border-border" />
                   <button
-                    onClick={async () => {
-                      await signOut();
-                    }}
+                    onClick={handleLogout}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
@@ -347,6 +370,18 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           )}
         </AnimatePresence>
       </div>
+
+      <ConfirmDialog
+        open={logoutDialogOpen}
+        onOpenChange={setLogoutDialogOpen}
+        title="Sign Out"
+        description="Are you sure you want to sign out? You'll need to sign in again to access the admin panel."
+        confirmLabel="Sign Out"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={confirmLogout}
+        loading={logoutLoading}
+      />
     </header>
   );
 }

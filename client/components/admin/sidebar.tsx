@@ -114,7 +114,7 @@ export function AdminSidebar({
         ref={focusTrapRef}
         initial={false}
         animate={{
-          width: collapsed ? 68 : 240,
+          width: collapsed ? 68 : 200,
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className={`fixed left-0 top-0 h-screen bg-card/90 backdrop-blur-xl border-r border-border z-40 flex flex-col overflow-hidden dark:bg-[#0a0f1d]/90 dark:border-white/10 ${
@@ -210,7 +210,7 @@ export function AdminSidebar({
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -8 }}
                           transition={{ duration: 0.15 }}
-                          className="flex-1 whitespace-nowrap font-medium"
+                          className="flex-1 wrap-break-word font-medium"
                         >
                           {item.label}
                         </motion.span>

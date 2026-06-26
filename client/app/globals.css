@@ -92,8 +92,8 @@
   --sidebar-ring: 194 100% 45%;
   --grid-light: 215 25% 85%;
   --grid-dark: 215 35% 25%;
-  --glow-primary: 194 60% 85%;
-  --glow-accent: 262 60% 85%;
+  --glow-primary: 194 85% 50%;
+  --glow-accent: 262 80% 55%;
   --glow-card: 0 0% 95%;
 }
 
@@ -137,8 +137,8 @@
   --sidebar-ring: 194 100% 50%;
   --grid-light: 215 35% 25%;
   --grid-dark: 215 25% 85%;
-  --glow-primary: 194 100% 50% / 0.15;
-  --glow-accent: 262 80% 55% / 0.12;
+  --glow-primary: 194 100% 55% / 0.25;
+  --glow-accent: 262 80% 60% / 0.2;
   --glow-card: 218 30% 12%;
 }
 
