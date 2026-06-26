@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { useAuth } from "@/lib/auth/useAuth";
 
 interface TopBarProps {
   onMobileMenuToggle?: () => void;
@@ -27,9 +27,7 @@ interface TopBarProps {
 export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const userRole = useAuthStore((s) => s.user?.role);
-  const hasMultipleOrgs = useAuthStore((s) => s.hasMultipleOrganizations());
-  const signOut = useAuthStore((s) => s.signOut);
+  const { role: userRole, hasMultipleOrganizations: hasMultipleOrgs, signOut } = useAuth();
 
   const {
     initials,
@@ -47,10 +45,10 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
   } = useNotifications();
 
   return (
-    <header className="h-16 border-b border-white/10 bg-[#0a0f1d]/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
+    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30 dark:border-white/10 dark:bg-[#0a0f1d]/80 shadow-sm shadow-black/5 dark:shadow-black/20">
       <button
         onClick={onMobileMenuToggle}
-        className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+        className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
         aria-label="Toggle sidebar"
       >
         <svg
@@ -77,7 +75,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           {searchOpen ? (
             <>
               <div
-                className="fixed inset-0 z-40 bg-[#020617]/90 sm:hidden"
+                className="fixed inset-0 z-40 bg-background/90 sm:hidden"
                 onClick={() => setSearchOpen(false)}
               />
               <motion.div
@@ -89,18 +87,17 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 className="fixed left-4 right-4 top-3 z-50 origin-right overflow-hidden sm:relative sm:left-auto sm:right-auto sm:top-0 sm:z-auto sm:w-64"
             >
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   autoFocus
                   placeholder="Search organizations, logs..."
-                  className="pl-9 pr-8 h-9 text-sm w-full sm:w-64 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setSearchOpen(false);
                   }}
                 />
                 <button
                   onClick={() => setSearchOpen(false)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Close search"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -113,7 +110,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
               key="search-closed"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 text-slate-400 hover:text-white hover:bg-white/5"
+              className="h-9 w-9"
               onClick={() => setSearchOpen(true)}
               aria-label="Open search"
             >
@@ -124,7 +121,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
       </div>
 
       <button
-        className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/3 text-xs text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+        className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
         aria-label="Open command palette (Press K)"
         type="button"
       >
@@ -136,7 +133,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 relative text-slate-400 hover:text-white hover:bg-white/5"
+          className="h-9 w-9 relative"
           onClick={toggleNotifications}
           aria-label={`${unreadCount} unread notifications`}
           aria-expanded={notifOpen}
@@ -164,33 +161,33 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-[#0a0f1d]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/40 z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
                 role="dialog"
                 aria-label="Notifications"
                 onKeyDown={(e) => {
                   if (e.key === "Escape") closeNotifications();
                 }}
               >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <span className="text-sm font-semibold text-white">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <span className="text-sm font-semibold text-foreground">
                     Notifications
                     {unreadCount > 0 && (
-                      <span className="ml-2 text-xs font-bold text-red-400">
+                      <span className="ml-2 text-xs font-bold text-destructive">
                         ({unreadCount})
                       </span>
                     )}
                   </span>
                   <button
                     onClick={handleMarkAllRead}
-                    className="text-xs text-cyan-400 hover:underline"
+                    className="text-xs text-primary hover:underline"
                   >
                     Mark all read
                   </button>
                 </div>
 
-                <div className="divide-y divide-white/5 max-h-80 overflow-y-auto">
+                <div className="divide-y divide-border max-h-80 overflow-y-auto">
                   {recentNotifs.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-400">
+                    <div className="px-4 py-6 text-center text-xs text-muted-foreground">
                       No notifications
                     </div>
                   ) : (
@@ -198,7 +195,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                       <div
                         key={alert.id}
                         data-notif-item={index}
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-white/3 transition-colors cursor-pointer focus:bg-white/3 focus:outline-none"
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer focus:bg-muted/30 focus:outline-none"
                         onClick={() => handleNotificationClick(alert.id)}
                         onKeyDown={(e) => handleNotificationKeyDown(e, index)}
                         tabIndex={0}
@@ -237,10 +234,10 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-white truncate">
+                          <p className="text-xs font-medium text-foreground truncate">
                             {alert.title}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-muted-foreground">
                             {alert.device_id} ·{" "}
                             {new Date(alert.created_at).toLocaleTimeString()}
                           </p>
@@ -248,7 +245,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
 
                         {!alert.read && (
                           <span
-                            className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0 mt-1.5"
+                            className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5"
                             aria-label="Unread"
                           />
                         )}
@@ -257,9 +254,9 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                   )}
                 </div>
 
-                <div className="px-4 py-2.5 border-t border-white/10">
+                <div className="px-4 py-2.5 border-t border-border">
                   <button
-                    className="text-xs text-cyan-400 hover:underline w-full text-center"
+                    className="text-xs text-primary hover:underline w-full text-center"
                     onClick={handleViewAllNotifications}
                   >
                     View all notifications
@@ -276,27 +273,27 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
       <div className="relative ml-2">
         <button
           onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
-          className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-muted/40 transition-colors"
           aria-label="User menu"
         >
           <div
-            className="w-8 h-8 rounded-full bg-linear-to-br from-cyan-400 to-blue-600 border border-cyan-500/20 flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/20"
+            className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
             aria-label={`User: ${displayName}`}
           >
-            <span className="text-xs font-bold text-white">{initials}</span>
+            <span className="text-xs font-bold text-primary-foreground">{initials}</span>
           </div>
           <div className="hidden md:block min-w-0 text-left">
-            <p className="text-xs font-medium text-white leading-none mb-0.5 truncate">
+            <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
               {displayName}
             </p>
-            <p className="text-[10px] text-slate-400 leading-none">
+            <p className="text-[10px] text-muted-foreground leading-none">
               {userRole
                 ? userRole.charAt(0).toUpperCase() +
                   userRole.slice(1).toLowerCase()
                 : "Analyst"}
             </p>
           </div>
-          <ChevronDown className="hidden md:block h-3 w-3 text-slate-400" />
+          <ChevronDown className="hidden md:block h-3 w-3 text-muted-foreground" />
         </button>
 
         <AnimatePresence>
@@ -311,16 +308,16 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-56 bg-[#0a0f1d]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/40 z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-56 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
               >
                 <div className="p-2 space-y-0.5">
                   <button
                     onClick={() => {
                       window.location.href = "/dashboard/settings";
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/5 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
                   >
-                    <User className="h-4 w-4 text-slate-400" />
+                    <User className="h-4 w-4 text-muted-foreground" />
                     Profile & Settings
                   </button>
                   {hasMultipleOrgs && (
@@ -328,18 +325,18 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                       onClick={() => {
                         window.location.href = "/onboarding/organizations";
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/5 transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
                     >
-                      <Building2 className="h-4 w-4 text-slate-400" />
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
                       Switch Organization
                     </button>
                   )}
-                  <hr className="my-1 border-white/10" />
+                  <hr className="my-1 border-border" />
                   <button
                     onClick={async () => {
                       await signOut();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign Out

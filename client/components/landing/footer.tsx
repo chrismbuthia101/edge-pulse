@@ -134,7 +134,7 @@ export function Footer() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={social.label}
-                    className="w-9 h-9 rounded-lg bg-(--landing-card) border border-(--landing-border) flex items-center justify-center text-white/40 hover:text-white hover:bg-(--landing-card-hover) hover:border-white/15 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+                    className="w-9 h-9 rounded-lg bg-(--landing-card) border border-(--landing-border) flex items-center justify-center text-(--landing-text-muted) hover:text-(--landing-text) hover:bg-(--landing-card-hover) hover:border-(--landing-border-light) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" />
                   </a>
@@ -146,7 +146,7 @@ export function Footer() {
           {/* Links */}
           {footerLinks.map((section) => (
             <div key={section.title}>
-              <h4 className="text-xs font-bold uppercase tracking-widest text-white/50 mb-5">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-(--landing-text-muted) mb-5">
                 {section.title}
               </h4>
               <ul className="space-y-3" role="list">

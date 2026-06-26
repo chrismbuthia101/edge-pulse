@@ -204,7 +204,7 @@ export function Sidebar({
           width: collapsed ? 68 : 240,
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`fixed left-0 top-0 h-screen bg-card border-r border-border z-40 flex flex-col overflow-hidden dark:bg-linear-to-b dark:from-[#0d1420] dark:to-[#0a1118] ${
+        className={`fixed left-0 top-0 h-screen bg-card/90 backdrop-blur-sm border-r border-border z-40 flex flex-col overflow-hidden dark:bg-linear-to-b dark:from-[#0d1420]/95 dark:to-[#0a1118]/95 dark:backdrop-blur-md ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         role="navigation"
@@ -217,8 +217,9 @@ export function Sidebar({
             className="flex items-center gap-2.5 overflow-hidden"
             aria-label="EdgePulse Dashboard"
           >
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-              <Logo className="h-5 w-5 text-primary" />
+            <div className="relative w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Logo className="h-5 w-5 text-primary relative" />
             </div>
             <AnimatePresence>
               {!collapsed && (
@@ -303,8 +304,8 @@ export function Sidebar({
                         className={cn(
                           "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-all duration-200 group relative",
                           isActive
-                            ? "bg-linear-to-r from-primary/15 to-primary/5 text-primary border-l-2 border-primary"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                            ? "bg-linear-to-r from-primary/15 to-primary/5 text-primary border-l-2 border-primary shadow-sm shadow-primary/5"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
                         )}
                         aria-current={isActive ? "page" : undefined}
                         onClick={handleNavigation}
@@ -383,7 +384,7 @@ export function Sidebar({
         {/* Bottom actions */}
         <div className="border-t border-border py-3 px-2 space-y-1">
           <button
-            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
             aria-label="Help & Support"
           >
             <HelpCircle className="h-4 w-4 shrink-0" />
@@ -402,7 +403,7 @@ export function Sidebar({
           </button>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors"
+            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             aria-label="Sign out"
           >
             <LogOut className="h-4 w-4 shrink-0" />

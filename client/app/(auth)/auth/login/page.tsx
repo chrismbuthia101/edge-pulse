@@ -111,10 +111,10 @@ export function LoginPage() {
           >
             {/* Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-display font-bold text-white mb-2">
+              <h1 className="text-3xl font-display font-bold text-foreground dark:text-white mb-2">
                 Welcome back
               </h1>
-              <p className="text-slate-400 text-sm">
+              <p className="text-muted-foreground dark:text-slate-400 text-sm">
                 Sign in to your EdgePulse account
               </p>
             </div>
@@ -123,7 +123,7 @@ export function LoginPage() {
             <Button
               variant="outline"
               type="button"
-              className="w-full h-11 mb-6 gap-2.5 border-white/15 bg-white/3 text-white hover:bg-white/[0.07] hover:text-white"
+              className="w-full h-11 mb-6 gap-2.5 border-border dark:border-white/15 bg-background dark:bg-white/3 text-foreground dark:text-white hover:bg-accent dark:hover:bg-white/[0.07] hover:text-accent-foreground dark:hover:text-white"
               onClick={handleGoogleLogin}
               disabled={isGoogleLoading || isLoading}
             >
@@ -154,11 +154,11 @@ export function LoginPage() {
 
             {/* Divider */}
             <div className="relative mb-6 flex items-center gap-3">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-[11px] text-slate-500 uppercase tracking-wider font-mono">
+              <div className="flex-1 h-px bg-border dark:bg-white/10" />
+              <span className="text-[11px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider font-mono">
                 or sign in with email
               </span>
-              <div className="flex-1 h-px bg-white/10" />
+              <div className="flex-1 h-px bg-border dark:bg-white/10" />
             </div>
 
             {/* Form */}
@@ -167,20 +167,20 @@ export function LoginPage() {
               <div className="space-y-1.5">
                 <Label
                   htmlFor="email"
-                  className="text-sm font-medium text-slate-200"
+                  className="text-sm font-medium text-foreground dark:text-slate-200"
                 >
                   Email address
                 </Label>
                 <div className="relative">
                   <Mail
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-cyan-400" : "text-slate-500"}`}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-cyan-400" : "text-muted-foreground dark:text-slate-500"}`}
                   />
                   <Input
                     id="email"
                     name="email"
                     type="email"
                     placeholder="you@company.com"
-                    className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                    className="pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                     required
                     onFocus={() => setFocusedField("email")}
                     onBlur={() => setFocusedField(null)}
@@ -193,7 +193,7 @@ export function LoginPage() {
                 <div className="flex items-center justify-between">
                   <Label
                     htmlFor="password"
-                    className="text-sm font-medium text-slate-200"
+                    className="text-sm font-medium text-foreground dark:text-slate-200"
                   >
                     Password
                   </Label>
@@ -206,21 +206,21 @@ export function LoginPage() {
                 </div>
                 <div className="relative">
                   <Lock
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : "text-slate-500"}`}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : "text-muted-foreground dark:text-slate-500"}`}
                   />
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
-                    className="pl-10 pr-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                    className="pl-10 pr-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                     required
                     onFocus={() => setFocusedField("password")}
                     onBlur={() => setFocusedField(null)}
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
@@ -239,11 +239,11 @@ export function LoginPage() {
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="remember"
-                  className="border-white/20 data-[state=checked]:bg-cyan-500 data-[state=checked]:border-cyan-500"
+                  className="border-border dark:border-white/20 data-[state=checked]:bg-cyan-500 data-[state=checked]:border-cyan-500"
                 />
                 <Label
                   htmlFor="remember"
-                  className="text-sm font-normal text-slate-400 cursor-pointer"
+                  className="text-sm font-normal text-muted-foreground dark:text-slate-400 cursor-pointer"
                 >
                   Keep me signed in for 30 days
                 </Label>
@@ -266,7 +266,7 @@ export function LoginPage() {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-slate-400 mt-6">
+            <p className="text-center text-sm text-muted-foreground dark:text-slate-400 mt-6">
               No account?{" "}
               <Link
                 href="/auth/register"

@@ -210,10 +210,10 @@ export default function SetupOrganizationPage() {
         <div className="flex justify-center mb-4">
           <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-foreground dark:text-white mb-1.5">
           Set Up Your Organization
         </h1>
-        <p className="text-slate-400 text-sm">
+        <p className="text-muted-foreground dark:text-slate-400 text-sm">
           Create your organization to get started with EdgePulse
         </p>
       </div>
@@ -222,17 +222,17 @@ export default function SetupOrganizationPage() {
         <div className="space-y-1.5">
           <Label
             htmlFor="orgName"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-foreground dark:text-slate-200"
           >
             Organization Name
           </Label>
           <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-slate-500" />
             <Input
               id="orgName"
               value={orgName}
               onChange={(e) => handleNameChange(e.target.value)}
-              className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+              className="pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
               placeholder="Acme Corp"
               required
             />
@@ -242,7 +242,7 @@ export default function SetupOrganizationPage() {
         <div className="space-y-1.5">
           <Label
             htmlFor="orgSlug"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-foreground dark:text-slate-200"
           >
             Organization Slug
           </Label>
@@ -253,17 +253,17 @@ export default function SetupOrganizationPage() {
               setOrgSlug(e.target.value.replace(/[^a-z0-9-]/g, ""));
               setSlugTouched(true);
             }}
-            className="h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 font-mono"
+            className="h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 font-mono"
             placeholder="acme-corp"
             required
           />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground dark:text-slate-500">
             Used in URLs and API references. Must be unique.
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium text-slate-200">
+          <Label className="text-sm font-medium text-foreground dark:text-slate-200">
             Organization Logo
           </Label>
           <div
@@ -275,8 +275,8 @@ export default function SetupOrganizationPage() {
               dragOver
                 ? "border-cyan-400 bg-cyan-500/5"
                 : logoPreview
-                  ? "border-white/10"
-                  : "border-white/10 hover:border-white/20"
+                  ? "border-border dark:border-white/10"
+                  : "border-border dark:border-white/10 hover:border-border dark:hover:border-white/20"
             }`}
           >
             <input
@@ -308,24 +308,24 @@ export default function SetupOrganizationPage() {
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <p className="text-xs text-slate-400 text-center">
+                <p className="text-xs text-muted-foreground dark:text-slate-400 text-center">
                   {logoFile?.name}
                 </p>
                 {isUploadingLogo && (
                   <div className="flex items-center gap-2 mt-2 justify-center">
                     <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs text-slate-400">Uploading...</span>
+                    <span className="text-xs text-muted-foreground dark:text-slate-400">Uploading...</span>
                   </div>
                 )}
               </div>
             ) : (
               <>
-                <Upload className="h-8 w-8 text-slate-500 mb-2" />
-                <p className="text-sm text-slate-400 mb-1">
+                <Upload className="h-8 w-8 text-muted-foreground dark:text-slate-500 mb-2" />
+                <p className="text-sm text-muted-foreground dark:text-slate-400 mb-1">
                   <span className="text-cyan-400">Click to upload</span> or drag
                   and drop
                 </p>
-                <p className="text-xs text-slate-500">PNG or JPEG (max 2MB)</p>
+                <p className="text-xs text-muted-foreground dark:text-slate-500">PNG or JPEG (max 2MB)</p>
               </>
             )}
           </div>
@@ -361,8 +361,8 @@ export default function SetupOrganizationPage() {
         </Button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-white/10">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="mt-8 pt-6 border-t border-border dark:border-white/10">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
           You will be set as the organization administrator
         </div>

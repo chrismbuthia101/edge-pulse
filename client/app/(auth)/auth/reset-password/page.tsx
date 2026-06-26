@@ -102,10 +102,10 @@ export default function ResetPasswordPage() {
                   transition={{ duration: 0.45 }}
                 >
                   <div className="mb-8">
-                    <h1 className="text-3xl font-display font-bold text-white mb-2">
+                    <h1 className="text-3xl font-display font-bold text-foreground dark:text-white mb-2">
                       New password
                     </h1>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-muted-foreground dark:text-slate-400 text-sm">
                       Choose a strong password to secure your account.
                     </p>
                   </div>
@@ -113,16 +113,16 @@ export default function ResetPasswordPage() {
                   <form onSubmit={handleSubmit} className="space-y-5">
                     {/* New Password */}
                     <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-slate-200">
+                      <Label className="text-sm font-medium text-foreground dark:text-slate-200">
                         New Password
                       </Label>
                       <div className="relative">
                         <Lock
-                          className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : "text-slate-500"}`}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : "text-muted-foreground dark:text-slate-500"}`}
                         />
                         <Input
                           type={showPassword ? "text" : "password"}
-                          className="pl-10 pr-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                          className="pl-10 pr-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="Enter new password"
@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
                         />
                         <button
                           type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                           onClick={() => setShowPassword((p) => !p)}
                           aria-label={
                             showPassword ? "Hide password" : "Show password"
@@ -154,7 +154,7 @@ export default function ResetPasswordPage() {
 
                     {/* Confirm Password */}
                     <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-slate-200">
+                      <Label className="text-sm font-medium text-foreground dark:text-slate-200">
                         Confirm New Password
                       </Label>
                       <div className="relative">
@@ -168,19 +168,19 @@ export default function ResetPasswordPage() {
                                 : confirmPassword.length > 0 &&
                                     password !== confirmPassword
                                   ? "text-red-400"
-                                  : "text-slate-500"
+                                  : "text-muted-foreground dark:text-slate-500"
                           }`}
                         />
                         <Input
                           type={showConfirmPassword ? "text" : "password"}
-                          className={`pl-10 pr-10 h-11 bg-white/3 text-white placeholder:text-slate-500 transition-colors ${
+                          className={`pl-10 pr-10 h-11 bg-background dark:bg-white/3 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 transition-colors ${
                             confirmPassword.length > 0 &&
                             password === confirmPassword
                               ? "border-emerald-500/50 focus-visible:border-emerald-400"
                               : confirmPassword.length > 0 &&
                                   password !== confirmPassword
                                 ? "border-red-500/50 focus-visible:border-red-400"
-                                : "border-white/10 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                                : "border-border dark:border-white/10 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                           }`}
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
@@ -191,7 +191,7 @@ export default function ResetPasswordPage() {
                         />
                         <button
                           type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                           onClick={() => setShowConfirmPassword((p) => !p)}
                           aria-label={
                             showConfirmPassword
@@ -259,7 +259,7 @@ export default function ResetPasswordPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="text-2xl font-display font-bold text-white mb-2"
+                    className="text-2xl font-display font-bold text-foreground dark:text-white mb-2"
                   >
                     Password updated!
                   </motion.h2>
@@ -267,13 +267,13 @@ export default function ResetPasswordPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-sm text-slate-400 mb-8"
+                    className="text-sm text-muted-foreground dark:text-slate-400 mb-8"
                   >
                     Your password has been changed successfully. Redirecting you
                     to login
                   </motion.p>
 
-                  <motion.div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mb-6">
+                  <motion.div className="w-full h-1 bg-border dark:bg-white/10 rounded-full overflow-hidden mb-6">
                     <motion.div
                       className="h-full bg-emerald-500 rounded-full"
                       initial={{ width: 0 }}
@@ -284,7 +284,7 @@ export default function ResetPasswordPage() {
 
                   <Button
                     variant="outline"
-                    className="w-full h-11 border-white/15 bg-white/3 text-white hover:bg-white/[0.07] hover:text-white"
+                    className="w-full h-11 border-border dark:border-white/15 bg-background dark:bg-white/3 text-foreground dark:text-white hover:bg-accent dark:hover:bg-white/[0.07] hover:text-accent-foreground dark:hover:text-white"
                     asChild
                   >
                     <Link href="/dashboard">Go to dashboard now</Link>

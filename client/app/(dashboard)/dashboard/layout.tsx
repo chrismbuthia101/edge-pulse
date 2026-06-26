@@ -54,6 +54,9 @@ export default function DashboardLayout({
     if (loading) {
         return (
             <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+                {/* Ambient glows */}
+                <div className="absolute -top-48 -left-48 w-96 h-96 rounded-full bg-glow-primary blur-[120px] pointer-events-none" />
+                <div className="absolute -bottom-48 -right-48 w-96 h-96 rounded-full bg-glow-accent blur-[120px] pointer-events-none" />
                 {/* Grid pattern */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                     <defs>
@@ -71,6 +74,9 @@ export default function DashboardLayout({
 
     return (
         <div className="min-h-screen bg-background relative overflow-hidden flex">
+            {/* Ambient glows */}
+            <div className="absolute -top-48 -left-48 w-96 h-96 rounded-full bg-glow-primary blur-[120px] pointer-events-none" />
+            <div className="absolute -bottom-48 -right-48 w-96 h-96 rounded-full bg-glow-accent blur-[120px] pointer-events-none" />
             {/* Grid pattern */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 <defs>

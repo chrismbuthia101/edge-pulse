@@ -117,13 +117,13 @@ export function AdminSidebar({
           width: collapsed ? 68 : 240,
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`fixed left-0 top-0 h-screen bg-[#0a0f1d]/90 backdrop-blur-xl border-r border-white/10 z-40 flex flex-col overflow-hidden ${
+        className={`fixed left-0 top-0 h-screen bg-card/90 backdrop-blur-xl border-r border-border z-40 flex flex-col overflow-hidden dark:bg-[#0a0f1d]/90 dark:border-white/10 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         role="navigation"
         aria-label="Admin navigation"
       >
-        <div className="h-16 flex items-center px-4 border-b border-white/10 shrink-0">
+        <div className="h-16 flex items-center px-4 border-b border-border dark:border-white/10 shrink-0">
           {collapsed ? (
             <Link
               href="/admin/overview"
@@ -142,7 +142,7 @@ export function AdminSidebar({
           <div className="ml-auto">
             <button
               onClick={onToggle}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/5 transition-colors"
+              className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? (
@@ -166,7 +166,7 @@ export function AdminSidebar({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="px-3 pt-5 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500/50"
+                    className="px-3 pt-5 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50"
                   >
                     {group.group}
                   </motion.p>
@@ -183,8 +183,8 @@ export function AdminSidebar({
                     className={cn(
                       "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-sm transition-all duration-200 group relative",
                       isActive
-                        ? "bg-linear-to-r from-cyan-500/15 to-cyan-500/5 border-l-2 border-cyan-400"
-                        : "text-slate-400 hover:text-white hover:bg-white/5",
+                        ? "bg-linear-to-r from-primary/15 to-primary/5 border-l-2 border-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
                     )}
                     aria-current={isActive ? "page" : undefined}
                     onClick={handleNavigation}
@@ -192,15 +192,15 @@ export function AdminSidebar({
                     {isActive && (
                       <motion.div
                         layoutId="admin-sidebar-active"
-                        className="absolute left-0 top-0 bottom-0 w-0.5 bg-cyan-400 rounded-r-full"
+                        className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-r-full"
                       />
                     )}
                     <item.icon
                       className={cn(
                         "h-4 w-4 shrink-0 transition-colors",
                         isActive
-                          ? "text-cyan-400"
-                          : "text-slate-500 group-hover:text-white",
+                          ? "text-primary"
+                          : "text-muted-foreground group-hover:text-foreground",
                       )}
                     />
                     <AnimatePresence>
@@ -221,7 +221,7 @@ export function AdminSidebar({
                         initial={{ opacity: 0, scale: 0 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0 }}
-                        className="absolute inset-0 bg-cyan-500/5 rounded-lg border border-cyan-500/20 pointer-events-none"
+                        className="absolute inset-0 bg-primary/5 rounded-lg border border-primary/20 pointer-events-none"
                       />
                     )}
                   </Link>
@@ -231,9 +231,9 @@ export function AdminSidebar({
           ))}
         </nav>
 
-        <div className="border-t border-white/10 py-3 px-2 space-y-1">
+        <div className="border-t border-border dark:border-white/10 py-3 px-2 space-y-1">
           <button
-            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
             aria-label="Help & Support"
           >
             <HelpCircle className="h-4 w-4 shrink-0" />
@@ -252,7 +252,7 @@ export function AdminSidebar({
           </button>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/8 transition-colors"
+            className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             aria-label="Sign out"
           >
             <LogOut className="h-4 w-4 shrink-0" />

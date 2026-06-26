@@ -80,10 +80,10 @@ export default function OrganizationsPage() {
         <div className="flex justify-center mb-4">
           <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-foreground dark:text-white mb-1.5">
           Choose Organization
         </h1>
-        <p className="text-slate-400 text-sm">
+        <p className="text-muted-foreground dark:text-slate-400 text-sm">
           Select which organization to work in
         </p>
       </div>
@@ -96,10 +96,10 @@ export default function OrganizationsPage() {
             animate={{ opacity: 1, y: 0 }}
           >
             <Card
-              className={`cursor-pointer transition-all border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm ${
+              className={`cursor-pointer transition-all border-border dark:border-white/10 bg-card dark:bg-[#0a0f1d]/80 backdrop-blur-sm ${
                 activeOrganizationId === org.id
                   ? "border-cyan-400 ring-1 ring-cyan-400/50"
-                  : "hover:border-white/20"
+                  : "hover:border-border dark:hover:border-white/20"
               }`}
               onClick={() => handleSelectOrg(org.id)}
             >
@@ -112,8 +112,8 @@ export default function OrganizationsPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-white">{org.name}</p>
-                  <p className="text-sm text-slate-400">
+                  <p className="font-semibold text-foreground dark:text-white">{org.name}</p>
+                  <p className="text-sm text-muted-foreground dark:text-slate-400">
                     {org.role === "ORG_ADMIN" ? "Administrator" : "Analyst"}
                     {org.domain && <span> · {org.domain}</span>}
                   </p>
@@ -125,7 +125,7 @@ export default function OrganizationsPage() {
                       Active
                     </span>
                   ) : (
-                    <Button variant="ghost" size="sm" className="gap-1 text-slate-300 hover:text-white hover:bg-white/5">
+                    <Button variant="ghost" size="sm" className="gap-1 text-foreground dark:text-slate-300 hover:text-foreground dark:hover:text-white hover:bg-accent dark:hover:bg-white/5">
                       Switch
                       <ArrowRight className="h-3 w-3" />
                     </Button>
@@ -138,13 +138,13 @@ export default function OrganizationsPage() {
       </div>
 
       <div className="mt-8 text-center">
-        <Button
-          variant="outline"
-          onClick={() => router.push("/dashboard")}
-          className="border-white/10 text-slate-300 hover:text-white hover:bg-white/5"
-        >
-          Go to Dashboard
-        </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/dashboard")}
+            className="border-border dark:border-white/10 text-foreground dark:text-slate-300 hover:text-foreground dark:hover:text-white hover:bg-accent dark:hover:bg-white/5"
+          >
+            Go to Dashboard
+          </Button>
       </div>
     </div>
   );

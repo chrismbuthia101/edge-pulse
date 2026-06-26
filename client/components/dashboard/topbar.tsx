@@ -24,7 +24,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import type { ConnStatus } from "@/lib/hooks/use-notifications";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { useAuth } from "@/lib/auth/useAuth";
 import { useHealthStore } from "@/lib/stores/health-store";
 
 function useConnConfig(
@@ -89,9 +89,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const userRole = useAuthStore((s) => s.user?.role);
-  const hasMultipleOrgs = useAuthStore((s) => s.hasMultipleOrganizations());
-  const signOut = useAuthStore((s) => s.signOut);
+  const { role: userRole, hasMultipleOrganizations: hasMultipleOrgs, signOut } = useAuth();
 
   const {
     initials,
@@ -121,7 +119,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const conn = useConnConfig(connStatus, queuedCount, isLoading, hasError);
 
   return (
-    <header className="h-16 border-b border-border/50 bg-linear-to-r from-card to-card/80 backdrop-blur-md flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30">
+    <header className="h-16 border-b border-border/50 bg-card/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30 shadow-sm shadow-black/5 dark:shadow-black/20">
       {/* Mobile menu toggle */}
       <button
         onClick={onMobileMenuToggle}
@@ -169,7 +167,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-72 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-72 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
               >
                 <div className="p-4 space-y-3">
                   <div className="flex items-center gap-3">
@@ -326,7 +324,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
                 role="dialog"
                 aria-label="Notifications"
                 onKeyDown={(e) => {
@@ -491,7 +489,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-56 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden"
               >
                 <div className="p-2 space-y-0.5">
                   <button

@@ -41,10 +41,10 @@ export function BackgroundLayers({
 
       {grid && (
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-[0.15] dark:opacity-100"
           style={{
             backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+              "linear-gradient(var(--landing-border) 1px, transparent 1px), linear-gradient(90deg, var(--landing-border) 1px, transparent 1px)",
             backgroundSize: "72px 72px",
           }}
         />

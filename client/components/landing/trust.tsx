@@ -139,7 +139,7 @@ export function Trust() {
             >
               {/* Quote mark */}
               <Quote
-                className="absolute top-6 right-6 h-10 w-10 text-white/5 group-hover:text-white/10 transition-colors duration-300"
+                className="absolute top-6 right-6 h-10 w-10 text-(--landing-text-muted) opacity-[0.12] group-hover:opacity-25 transition-opacity duration-300"
                 aria-hidden="true"
               />
 

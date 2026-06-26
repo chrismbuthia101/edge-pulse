@@ -78,10 +78,10 @@ export default function ForgotPasswordPage() {
                   transition={{ duration: 0.45 }}
                 >
                   <div className="mb-8">
-                    <h1 className="text-3xl font-display font-bold text-white mb-2">
+                    <h1 className="text-3xl font-display font-bold text-foreground dark:text-white mb-2">
                       Reset password
                     </h1>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-muted-foreground dark:text-slate-400 text-sm">
                       Enter your email and we&apos;ll send you a secure reset
                       link.
                     </p>
@@ -91,19 +91,19 @@ export default function ForgotPasswordPage() {
                     <div className="space-y-1.5">
                       <Label
                         htmlFor="email"
-                        className="text-sm font-medium text-slate-200"
+                        className="text-sm font-medium text-foreground dark:text-slate-200"
                       >
                         Email address
                       </Label>
                       <div className="relative">
                         <Mail
-                          className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField ? "text-cyan-400" : "text-slate-500"}`}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField ? "text-cyan-400" : "text-muted-foreground dark:text-slate-500"}`}
                         />
                         <Input
                           id="email"
                           type="email"
                           placeholder="you@company.com"
-                          className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                          className="pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
@@ -111,10 +111,10 @@ export default function ForgotPasswordPage() {
                           onBlur={() => setFocusedField(false)}
                         />
                       </div>
-                      <p className="text-xs text-slate-500 pt-1">
-                        If an account with this email exists, we&apos;ll send a
-                        reset link to your inbox
-                      </p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-500 pt-1">
+                      If an account with this email exists, we&apos;ll send a
+                      reset link to your inbox
+                    </p>
                     </div>
 
                     <Button
@@ -133,8 +133,8 @@ export default function ForgotPasswordPage() {
                     </Button>
                   </form>
 
-                  <div className="mt-8 pt-6 border-t border-white/10 text-center">
-                    <p className="text-sm text-slate-400">
+                  <div className="mt-8 pt-6 border-t border-border dark:border-white/10 text-center">
+                    <p className="text-sm text-muted-foreground dark:text-slate-400">
                       Remember your password?{" "}
                       <Link
                         href="/auth/login"
@@ -170,37 +170,37 @@ export default function ForgotPasswordPage() {
                     <CheckCircle2 className="w-10 h-10 text-emerald-500" />
                   </motion.div>
 
-                  <h2 className="text-2xl font-display font-bold text-white mb-2">
+                  <h2 className="text-2xl font-display font-bold text-foreground dark:text-white mb-2">
                     Check your inbox
                   </h2>
-                  <p className="text-sm text-slate-400 mb-2">
+                  <p className="text-sm text-muted-foreground dark:text-slate-400 mb-2">
                     We sent a password reset link to
                   </p>
-                  <p className="text-sm font-semibold text-white mb-6">
+                  <p className="text-sm font-semibold text-foreground dark:text-white mb-6">
                     {email}
                   </p>
 
-                  <div className="bg-white/3 border border-white/10 rounded-xl px-5 py-4 text-left mb-6 space-y-1.5">
-                    <p className="font-medium text-slate-200 text-xs uppercase tracking-widest mb-2">
+                  <div className="bg-background dark:bg-white/3 border border-border dark:border-white/10 rounded-xl px-5 py-4 text-left mb-6 space-y-1.5">
+                    <p className="font-medium text-foreground dark:text-slate-200 text-xs uppercase tracking-widest mb-2">
                       What to do next
                     </p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-muted-foreground dark:text-slate-400">
                       1. Open the email from EdgePulse
                     </p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-muted-foreground dark:text-slate-400">
                       2. Click the &ldquo;Reset Password&rdquo; button
                     </p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-muted-foreground dark:text-slate-400">
                       3. Create a new strong password
                     </p>
-                    <p className="text-xs text-slate-500 pt-1">
+                    <p className="text-xs text-muted-foreground dark:text-slate-500 pt-1">
                       The link expires in 1 hour.
                     </p>
                   </div>
 
                   <Button
                     variant="outline"
-                    className="w-full h-11 border-white/15 bg-white/3 text-white hover:bg-white/[0.07] hover:text-white mb-3"
+                    className="w-full h-11 border-border dark:border-white/15 bg-background dark:bg-white/3 text-foreground dark:text-white hover:bg-accent dark:hover:bg-white/[0.07] hover:text-accent-foreground dark:hover:text-white mb-3"
                     onClick={() => {
                       setSubmitted(false);
                       setEmail("");
@@ -211,7 +211,7 @@ export default function ForgotPasswordPage() {
 
                   <Button
                     variant="ghost"
-                    className="w-full h-11 text-slate-400 hover:text-white"
+                    className="w-full h-11 text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-white"
                     asChild
                   >
                     <Link href="/auth/login">

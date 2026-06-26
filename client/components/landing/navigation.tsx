@@ -6,7 +6,6 @@ import {
   motion,
   AnimatePresence,
   useScroll,
-  useTransform,
   useReducedMotion,
 } from "framer-motion";
 import { Menu, X, Zap } from "lucide-react";
@@ -25,20 +24,9 @@ const itemVariants = {
 
 export function Navigation() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [, setScrolled] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { scrollY } = useScroll();
   const prefersReducedMotion = useReducedMotion();
-
-  const navBg = useTransform(
-    scrollY,
-    [0, 80],
-    ["rgba(2,6,23,0)", "rgba(2,6,23,0.95)"],
-  );
-  const navBorder = useTransform(
-    scrollY,
-    [0, 80],
-    ["rgba(255,255,255,0)", "rgba(255,255,255,0.06)"],
-  );
 
   useEffect(() => {
     return scrollY.on("change", (v) => setScrolled(v > 60));
@@ -51,16 +39,10 @@ export function Navigation() {
   };
 
   return (
-    <motion.nav
+    <nav
       role="navigation"
       aria-label="Main navigation"
-      style={{
-        backgroundColor: prefersReducedMotion ? "rgba(2,6,23,0.95)" : navBg,
-        borderBottomColor: prefersReducedMotion
-          ? "rgba(255,255,255,0.06)"
-          : navBorder,
-      }}
-      className="fixed top-0 left-0 right-0 z-50 border-b border-(--landing-border) backdrop-blur-xl"
+      className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-xl transition-all duration-300 ${scrolled ? "bg-(--landing-bg)/95 border-b border-(--landing-border)" : "bg-transparent border-b border-transparent"}`}
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
@@ -94,7 +76,7 @@ export function Navigation() {
                 key={item.href}
                 role="menuitem"
                 onClick={() => handleNavClick(item.href)}
-                className="px-4 py-2 text-sm font-medium text-white/60 hover:text-white rounded-lg hover:bg-(--landing-card-hover) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+                className="px-4 py-2 text-sm font-medium text-(--landing-text-secondary) hover:text-(--landing-text) rounded-lg hover:bg-(--landing-card-hover) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 {item.label}
               </button>
@@ -105,7 +87,7 @@ export function Navigation() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               href="/auth/login"
-              className="px-4 py-2 text-sm font-medium text-white/70 hover:text-white transition-colors duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-(--landing-text-secondary) hover:text-(--landing-text) transition-colors duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none rounded-lg"
             >
               Sign In
             </Link>
@@ -124,7 +106,7 @@ export function Navigation() {
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
-            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-(--landing-card) text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-(--landing-card) text-(--landing-text) cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             {mobileOpen ? (
               <X className="h-5 w-5" aria-hidden="true" />
@@ -157,7 +139,7 @@ export function Navigation() {
                 >
                   <button
                     onClick={() => handleNavClick(item.href)}
-                    className="block w-full text-left px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-(--landing-card-hover) rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+                    className="block w-full text-left px-4 py-3 text-sm text-(--landing-text-secondary) hover:text-(--landing-text) hover:bg-(--landing-card-hover) rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
                   >
                     {item.label}
                   </button>
@@ -166,7 +148,7 @@ export function Navigation() {
               <div className="pt-3 border-t border-(--landing-border) flex flex-col gap-2">
                 <Link
                   href="/auth/login"
-                  className="px-4 py-3 text-sm text-white/70 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none rounded-lg"
+                  className="px-4 py-3 text-sm text-(--landing-text-secondary) hover:text-(--landing-text) transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none rounded-lg"
                 >
                   Sign In
                 </Link>
@@ -181,6 +163,6 @@ export function Navigation() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.nav>
+    </nav>
   );
 }

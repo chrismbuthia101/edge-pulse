@@ -64,7 +64,7 @@ function ConnectorLine() {
     >
       <path
         d="M0 12h20"
-        stroke="rgba(255,255,255,0.15)"
+        stroke="var(--landing-border)"
         strokeWidth="1.5"
         strokeDasharray="3 3"
       />
@@ -143,7 +143,7 @@ export function Showcase() {
                 />
 
                 {/* Step number */}
-                <div className="text-5xl font-black text-white/4 mb-5 font-mono">
+                <div className="text-5xl font-black text-(--landing-text) opacity-[0.04] mb-5 font-mono">
                   {s.step}
                 </div>
 
@@ -212,7 +212,7 @@ export function Showcase() {
 
             <Link
               href="/auth/register"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:border-white/20 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-(--landing-text) border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:border-(--landing-border-light) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
             >
               Explore the Platform
               <ArrowRight className="h-4 w-4" />
@@ -228,7 +228,7 @@ export function Showcase() {
           >
             <div className="absolute inset-4 bg-linear-to-br from-cyan-500/15 to-blue-600/15 rounded-3xl blur-3xl pointer-events-none" />
 
-            <div className="relative rounded-2xl border border-(--landing-border-light) bg-[#0a1628]/80 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/50">
+            <div className="relative rounded-2xl border border-(--landing-border-light) bg-card dark:bg-[#0a1628]/80 backdrop-blur-xl overflow-hidden shadow-2xl shadow-(--landing-border)">
               {/* Window chrome */}
               <div className="flex items-center gap-2 px-5 py-3 border-b border-(--landing-border)">
                 <div className="flex gap-1.5">
@@ -236,8 +236,8 @@ export function Showcase() {
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
                 </div>
-                <div className="flex-1 mx-4 h-5 rounded bg-white/4 flex items-center px-2">
-                  <span className="text-[10px] font-mono text-white/25">
+                <div className="flex-1 mx-4 h-5 rounded bg-(--landing-card) flex items-center px-2">
+                  <span className="text-[10px] font-mono text-(--landing-text-muted)">
                     edgepulse / dashboard
                   </span>
                 </div>
@@ -302,7 +302,7 @@ export function Showcase() {
                                   : "linear-gradient(to top, rgb(6,182,212), rgb(6,182,212,0.6))",
                           }}
                         >
-                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] text-white/40 font-mono opacity-0 group-hover/chart:opacity-100 transition-opacity">
+                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] text-(--landing-text-muted) font-mono opacity-0 group-hover/chart:opacity-100 transition-opacity">
                             {v}
                           </span>
                         </motion.div>
@@ -368,10 +368,10 @@ export function Showcase() {
           {/* Background */}
           <div className="absolute inset-0 bg-linear-to-br from-cyan-500/15 via-blue-600/10 to-violet-600/15" />
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 opacity-[0.12] dark:opacity-100"
             style={{
               backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
+                "linear-gradient(var(--landing-border) 1px, transparent 1px), linear-gradient(90deg, var(--landing-border) 1px, transparent 1px)",
               backgroundSize: "36px 36px",
             }}
           />
@@ -400,7 +400,7 @@ export function Showcase() {
               </Link>
               <Link
                 href="/auth/login"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-semibold text-white/70 border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:text-white hover:border-white/20 transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-base font-semibold text-(--landing-text-secondary) border border-(--landing-border-light) hover:bg-(--landing-card-hover) hover:text-(--landing-text) hover:border-(--landing-border-light) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 Schedule Demo
               </Link>

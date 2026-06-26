@@ -52,7 +52,7 @@ export default function AcceptInvitePage() {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-background dark:bg-[#020617] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-400 border-t-transparent" />
       </div>
     );
@@ -60,15 +60,15 @@ export default function AcceptInvitePage() {
 
   if (!accepted) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-background dark:bg-[#020617] flex items-center justify-center">
         <div className="text-center max-w-md p-8">
-          <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4 border border-white/10">
-            <div className="h-6 w-6 rounded bg-slate-600" />
+          <div className="w-16 h-16 rounded-full bg-background dark:bg-white/5 flex items-center justify-center mx-auto mb-4 border border-border dark:border-white/10">
+            <div className="h-6 w-6 rounded bg-muted-foreground dark:bg-slate-600" />
           </div>
-          <h1 className="text-xl font-display font-bold text-white mb-2">
+          <h1 className="text-xl font-display font-bold text-foreground dark:text-white mb-2">
             Invalid or Expired Invite
           </h1>
-          <p className="text-sm text-slate-400 mb-6">
+          <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">
             This invitation link is invalid or has expired. Please contact your
             administrator for a new invitation.
           </p>
@@ -115,10 +115,10 @@ export default function AcceptInvitePage() {
               <div className="w-14 h-14 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-5">
                 <CheckCircle2 className="h-7 w-7 text-emerald-500" />
               </div>
-              <h1 className="text-3xl font-display font-bold text-white mb-2">
+              <h1 className="text-3xl font-display font-bold text-foreground dark:text-white mb-2">
                 You&apos;re Invited!
               </h1>
-              <p className="text-slate-400 text-sm">
+              <p className="text-muted-foreground dark:text-slate-400 text-sm">
                 Set your password to activate your analyst account
               </p>
             </div>
@@ -127,23 +127,23 @@ export default function AcceptInvitePage() {
               <div className="space-y-1.5">
                 <Label
                   htmlFor="password"
-                  className="text-sm font-medium text-slate-200"
+                  className="text-sm font-medium text-foreground dark:text-slate-200"
                 >
                   Create Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-slate-500" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                    className="pl-10 pr-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                     placeholder="Create a strong password"
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                     onClick={() => setShowPassword((p) => !p)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >

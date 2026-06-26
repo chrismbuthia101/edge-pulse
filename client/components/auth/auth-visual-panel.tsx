@@ -41,10 +41,10 @@ export function AuthPageBackground({
   variant: "login" | "register" | "forgot-password" | "reset-password" | "accept-invite";
 }) {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden bg-[#020617] pointer-events-none">
+    <div className="fixed inset-0 -z-10 overflow-hidden bg-background dark:bg-[#020617] pointer-events-none">
       {/* Noise grain */}
       <div
-        className="absolute inset-0 opacity-[0.02]"
+        className="absolute inset-0 opacity-[0.015] dark:opacity-[0.02]"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
@@ -56,7 +56,7 @@ export function AuthPageBackground({
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)",
+            "linear-gradient(hsl(var(--foreground)/0.06) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)/0.06) 1px, transparent 1px)",
           backgroundSize: "56px 56px",
         }}
       />
@@ -64,27 +64,27 @@ export function AuthPageBackground({
       <div
         className={`absolute w-130 h-130 rounded-full blur-[130px] ${
           variant === "login"
-            ? "top-[-12%] left-[-6%] bg-cyan-500/15"
+            ? "top-[-12%] left-[-6%] bg-cyan-500/8 dark:bg-cyan-500/15"
             : variant === "register"
-              ? "top-[-12%] right-[-6%] bg-violet-500/15"
+              ? "top-[-12%] right-[-6%] bg-violet-500/8 dark:bg-violet-500/15"
               : variant === "forgot-password"
-                ? "top-[-12%] left-[-6%] bg-amber-500/15"
+                ? "top-[-12%] left-[-6%] bg-amber-500/8 dark:bg-amber-500/15"
                 : variant === "reset-password"
-                  ? "top-[-12%] right-[-6%] bg-teal-500/15"
-                  : "top-[-12%] left-[-6%] bg-emerald-500/15"
+                  ? "top-[-12%] right-[-6%] bg-teal-500/8 dark:bg-teal-500/15"
+                  : "top-[-12%] left-[-6%] bg-emerald-500/8 dark:bg-emerald-500/15"
         }`}
       />
       <div
         className={`absolute w-105 h-105 rounded-full blur-[120px] ${
           variant === "login"
-            ? "bottom-[-10%] right-[10%] bg-blue-600/10"
+            ? "bottom-[-10%] right-[10%] bg-blue-600/5 dark:bg-blue-600/10"
             : variant === "register"
-              ? "bottom-[-10%] left-[10%] bg-emerald-500/10"
+              ? "bottom-[-10%] left-[10%] bg-emerald-500/5 dark:bg-emerald-500/10"
               : variant === "forgot-password"
-                ? "bottom-[-10%] left-[10%] bg-orange-600/10"
+                ? "bottom-[-10%] left-[10%] bg-orange-600/5 dark:bg-orange-600/10"
                 : variant === "reset-password"
-                  ? "bottom-[-10%] right-[10%] bg-cyan-600/10"
-                  : "bottom-[-10%] right-[10%] bg-teal-600/10"
+                  ? "bottom-[-10%] right-[10%] bg-cyan-600/5 dark:bg-cyan-600/10"
+                  : "bottom-[-10%] right-[10%] bg-teal-600/5 dark:bg-teal-600/10"
         }`}
       />
     </div>
@@ -141,30 +141,30 @@ export function LoginVisual() {
             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
           </span>
-          <span className="text-[11px] font-mono font-medium text-emerald-300 tracking-wide uppercase">
+          <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-300 tracking-wide uppercase">
             Fleet online
           </span>
         </div>
-        <h2 className="text-2xl font-display font-bold text-white leading-snug max-w-sm">
+        <h2 className="text-2xl font-display font-bold text-foreground dark:text-white leading-snug max-w-sm">
           Your fleet is being watched while you&apos;re away.
         </h2>
-        <p className="text-sm text-slate-400 mt-2 max-w-sm">
+        <p className="text-sm text-muted-foreground dark:text-slate-400 mt-2 max-w-sm">
           1,247 devices reporting. Detection never sleeps.
         </p>
       </div>
 
       {/* Mockup card */}
-      <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm shadow-2xl shadow-black/40 overflow-hidden">
+      <div className="rounded-2xl border border-border dark:border-white/10 bg-card/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-2xl dark:shadow-black/40 overflow-hidden">
         {/* Title bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 dark:border-white/5">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/30 dark:bg-white/5">
             <span className="relative flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            <span className="text-[11px] font-mono text-slate-300">
+            <span className="text-[11px] font-mono text-foreground/70 dark:text-slate-300">
               edgepulse — live
             </span>
           </div>
@@ -174,7 +174,7 @@ export function LoginVisual() {
           {/* Live feed */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground dark:text-slate-500">
                 Live feed
               </span>
               <Activity className="h-3 w-3 text-cyan-400" />
@@ -189,7 +189,7 @@ export function LoginVisual() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/3 border border-white/5"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-muted/20 dark:bg-white/3 border border-border/40 dark:border-white/5"
                   >
                     <span
                       className={`h-1.5 w-1.5 rounded-full shrink-0 ${
@@ -200,10 +200,10 @@ export function LoginVisual() {
                             : "bg-amber-400"
                       }`}
                     />
-                    <span className="text-xs text-slate-200 truncate flex-1">
+                    <span className="text-xs text-foreground/80 dark:text-slate-200 truncate flex-1">
                       {e.event}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                    <span className="text-[10px] font-mono text-muted-foreground dark:text-slate-500 shrink-0">
                       {e.device}
                     </span>
                   </motion.div>
@@ -213,15 +213,15 @@ export function LoginVisual() {
 
           {/* SHAP bars */}
           <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground dark:text-slate-500">
               Feature attribution
             </span>
             {SHAP_FEATURES.map((f) => (
               <div key={f.label} className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400 w-28 shrink-0">
+                <span className="text-[11px] text-muted-foreground dark:text-slate-400 w-28 shrink-0">
                   {f.label}
                 </span>
-                <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                <div className="flex-1 h-1 rounded-full bg-muted/40 dark:bg-white/5 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${f.pct}%` }}
@@ -229,7 +229,7 @@ export function LoginVisual() {
                     className="h-full rounded-full bg-linear-to-r from-cyan-400 to-blue-500"
                   />
                 </div>
-                <span className="text-[11px] font-mono text-slate-400 w-8 text-right">
+                <span className="text-[11px] font-mono text-muted-foreground dark:text-slate-400 w-8 text-right">
                   {f.pct}%
                 </span>
               </div>
@@ -237,24 +237,24 @@ export function LoginVisual() {
           </div>
 
           {/* Stat strip */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 dark:border-white/5">
             <div>
-              <div className="text-base font-display font-bold text-white">
+              <div className="text-base font-display font-bold text-foreground dark:text-white">
                 1,247
               </div>
-              <div className="text-[10px] text-slate-500">Devices</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Devices</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-emerald-400">
+              <div className="text-base font-display font-bold text-emerald-500 dark:text-emerald-400">
                 99.9%
               </div>
-              <div className="text-[10px] text-slate-500">Uptime</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Uptime</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-cyan-400">
+              <div className="text-base font-display font-bold text-cyan-500 dark:text-cyan-400">
                 312ms
               </div>
-              <div className="text-[10px] text-slate-500">Avg response</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Avg response</div>
             </div>
           </div>
         </div>
@@ -301,21 +301,21 @@ export function RegisterVisual() {
     <div className="space-y-7">
       <div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-5">
-          <ArrowRight className="h-3 w-3 text-cyan-300" />
-          <span className="text-[11px] font-mono font-medium text-cyan-300 tracking-wide uppercase">
+          <ArrowRight className="h-3 w-3 text-cyan-500 dark:text-cyan-300" />
+          <span className="text-[11px] font-mono font-medium text-cyan-600 dark:text-cyan-300 tracking-wide uppercase">
             Onboarding
           </span>
         </div>
-        <h2 className="text-2xl font-display font-bold text-white leading-snug max-w-sm">
+        <h2 className="text-2xl font-display font-bold text-foreground dark:text-white leading-snug max-w-sm">
           One account. Your whole fleet, protected.
         </h2>
-        <p className="text-sm text-slate-400 mt-2 max-w-sm">
+        <p className="text-sm text-muted-foreground dark:text-slate-400 mt-2 max-w-sm">
           Set up in minutes — no credit card, no cloud lock-in.
         </p>
       </div>
 
       {/* Steps card */}
-      <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm shadow-2xl shadow-black/40 p-5 space-y-3">
+      <div className="rounded-2xl border border-border dark:border-white/10 bg-card/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-2xl dark:shadow-black/40 p-5 space-y-3">
         {ONBOARD_STEPS.map((s, i) => {
           const Icon = s.icon;
           const isActive = i === active;
@@ -329,8 +329,8 @@ export function RegisterVisual() {
               transition={{ duration: 0.4 }}
               className={`flex items-center gap-3.5 p-3 rounded-xl border transition-colors duration-300 ${
                 isActive
-                  ? "border-white/15 bg-white/4"
-                  : "border-white/5 bg-transparent"
+                  ? "border-border dark:border-white/15 bg-muted/30 dark:bg-white/4"
+                  : "border-border/50 dark:border-white/5 bg-transparent"
               }`}
             >
               <div
@@ -340,14 +340,14 @@ export function RegisterVisual() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-500">
+                  <span className="text-[10px] font-mono text-muted-foreground dark:text-slate-500">
                     {s.step}
                   </span>
-                  <span className="text-sm font-semibold text-white">
+                  <span className="text-sm font-semibold text-foreground dark:text-white">
                     {s.title}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 truncate">{s.desc}</p>
+                <p className="text-xs text-muted-foreground dark:text-slate-400 truncate">{s.desc}</p>
               </div>
               {isActive && (
                 <motion.div
@@ -361,24 +361,24 @@ export function RegisterVisual() {
         })}
 
         {/* Fleet counter strip */}
-        <div className="grid grid-cols-3 gap-2 pt-3 mt-2 border-t border-white/5">
+        <div className="grid grid-cols-3 gap-2 pt-3 mt-2 border-t border-border/50 dark:border-white/5">
           <div>
-            <div className="text-base font-display font-bold text-white">
+            <div className="text-base font-display font-bold text-foreground dark:text-white">
               30s
             </div>
-            <div className="text-[10px] text-slate-500">To go live</div>
+            <div className="text-[10px] text-muted-foreground dark:text-slate-500">To go live</div>
           </div>
           <div>
-            <div className="text-base font-display font-bold text-white">
+            <div className="text-base font-display font-bold text-foreground dark:text-white">
               2MB
             </div>
-            <div className="text-[10px] text-slate-500">Agent size</div>
+            <div className="text-[10px] text-muted-foreground dark:text-slate-500">Agent size</div>
           </div>
           <div>
-            <div className="text-base font-display font-bold text-white">
+            <div className="text-base font-display font-bold text-foreground dark:text-white">
               0
             </div>
-            <div className="text-[10px] text-slate-500">Cloud round-trips</div>
+            <div className="text-[10px] text-muted-foreground dark:text-slate-500">Cloud round-trips</div>
           </div>
         </div>
       </div>
@@ -408,28 +408,28 @@ export function ForgotPasswordVisual() {
             <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
           </span>
-          <span className="text-[11px] font-mono font-medium text-amber-300 tracking-wide uppercase">
+          <span className="text-[11px] font-mono font-medium text-amber-600 dark:text-amber-300 tracking-wide uppercase">
             Security first
           </span>
         </div>
-        <h2 className="text-2xl font-display font-bold text-white leading-snug max-w-sm">
+        <h2 className="text-2xl font-display font-bold text-foreground dark:text-white leading-snug max-w-sm">
           We take account recovery seriously.
         </h2>
-        <p className="text-sm text-slate-400 mt-2 max-w-sm">
+        <p className="text-sm text-muted-foreground dark:text-slate-400 mt-2 max-w-sm">
           Time-limited, encrypted reset links — no plain-text passwords ever.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm shadow-2xl shadow-black/40 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div className="rounded-2xl border border-border dark:border-white/10 bg-card/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-2xl dark:shadow-black/40 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 dark:border-white/5">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5">
-            <Mail className="h-3 w-3 text-amber-400" />
-            <span className="text-[11px] font-mono text-slate-300">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/30 dark:bg-white/5">
+            <Mail className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+            <span className="text-[11px] font-mono text-foreground/70 dark:text-slate-300">
               recovery — active
             </span>
           </div>
@@ -439,25 +439,25 @@ export function ForgotPasswordVisual() {
           {/* Email sent animation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground dark:text-slate-500">
                 Recovery status
               </span>
-              <span className="text-[10px] font-mono text-emerald-400">
+              <span className="text-[10px] font-mono text-emerald-500 dark:text-emerald-400">
                 {visible ? "Delivered" : "Sending..."}
               </span>
             </div>
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/3 border border-white/5">
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-muted/20 dark:bg-white/3 border border-border/40 dark:border-white/5">
               <motion.div
                 animate={{ rotate: visible ? 0 : 360 }}
                 transition={{ duration: 2, repeat: visible ? 0 : Infinity, ease: "linear" }}
               >
-                <Mail className={`h-5 w-5 ${visible ? "text-emerald-400" : "text-amber-400"}`} />
+                <Mail className={`h-5 w-5 ${visible ? "text-emerald-500 dark:text-emerald-400" : "text-amber-500 dark:text-amber-400"}`} />
               </motion.div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-200 truncate">
+                <p className="text-xs text-foreground/80 dark:text-slate-200 truncate">
                   Password reset link
                 </p>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[10px] text-muted-foreground dark:text-slate-500">
                   Encrypted · Expires in 1 hour
                 </p>
               </div>
@@ -467,7 +467,7 @@ export function ForgotPasswordVisual() {
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 400 }}
                 >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
                 </motion.div>
               )}
             </div>
@@ -475,15 +475,15 @@ export function ForgotPasswordVisual() {
 
           {/* Security features */}
           <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground dark:text-slate-500">
               Security guarantees
             </span>
             {SECURITY_FEATURES.map((f) => (
               <div key={f.label} className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400 w-34 shrink-0">
+                <span className="text-[11px] text-muted-foreground dark:text-slate-400 w-34 shrink-0">
                   {f.label}
                 </span>
-                <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                <div className="flex-1 h-1 rounded-full bg-muted/40 dark:bg-white/5 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${f.pct}%` }}
@@ -496,24 +496,24 @@ export function ForgotPasswordVisual() {
           </div>
 
           {/* Stat strip */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 dark:border-white/5">
             <div>
-              <div className="text-base font-display font-bold text-white">
+              <div className="text-base font-display font-bold text-foreground dark:text-white">
                 99.9%
               </div>
-              <div className="text-[10px] text-slate-500">Uptime SLA</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Uptime SLA</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-amber-400">
+              <div className="text-base font-display font-bold text-amber-500 dark:text-amber-400">
                 &lt;5s
               </div>
-              <div className="text-[10px] text-slate-500">Delivery time</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Delivery time</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-white">
+              <div className="text-base font-display font-bold text-foreground dark:text-white">
                 256-bit
               </div>
-              <div className="text-[10px] text-slate-500">Encryption</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Encryption</div>
             </div>
           </div>
         </div>
@@ -542,20 +542,20 @@ export function ResetPasswordVisual() {
     <div className="space-y-7">
       <div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 mb-5">
-          <Shield className="h-3 w-3 text-teal-300" />
-          <span className="text-[11px] font-mono font-medium text-teal-300 tracking-wide uppercase">
+          <Shield className="h-3 w-3 text-teal-500 dark:text-teal-300" />
+          <span className="text-[11px] font-mono font-medium text-teal-600 dark:text-teal-300 tracking-wide uppercase">
             Password security
           </span>
         </div>
-        <h2 className="text-2xl font-display font-bold text-white leading-snug max-w-sm">
+        <h2 className="text-2xl font-display font-bold text-foreground dark:text-white leading-snug max-w-sm">
           Strong passwords are our thing.
         </h2>
-        <p className="text-sm text-slate-400 mt-2 max-w-sm">
+        <p className="text-sm text-muted-foreground dark:text-slate-400 mt-2 max-w-sm">
           Enterprise-grade password policies enforced at the edge.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm shadow-2xl shadow-black/40 p-5 space-y-3">
+      <div className="rounded-2xl border border-border dark:border-white/10 bg-card/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-2xl dark:shadow-black/40 p-5 space-y-3">
         {PASSWORD_STEPS.map((s, i) => {
           const Icon = s.icon as React.ElementType;
           const isActive = i === active;
@@ -569,8 +569,8 @@ export function ResetPasswordVisual() {
               transition={{ duration: 0.4 }}
               className={`flex items-center gap-3.5 p-3 rounded-xl border transition-colors duration-300 ${
                 isActive
-                  ? "border-white/15 bg-white/4"
-                  : "border-white/5 bg-transparent"
+                  ? "border-border dark:border-white/15 bg-muted/30 dark:bg-white/4"
+                  : "border-border/50 dark:border-white/5 bg-transparent"
               }`}
             >
               <div
@@ -580,14 +580,14 @@ export function ResetPasswordVisual() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-500">
+                  <span className="text-[10px] font-mono text-muted-foreground dark:text-slate-500">
                     {s.step}
                   </span>
-                  <span className="text-sm font-semibold text-white">
+                  <span className="text-sm font-semibold text-foreground dark:text-white">
                     {s.title}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 truncate">{s.desc}</p>
+                <p className="text-xs text-muted-foreground dark:text-slate-400 truncate">{s.desc}</p>
               </div>
               {isActive && (
                 <motion.div
@@ -600,18 +600,18 @@ export function ResetPasswordVisual() {
           );
         })}
 
-        <div className="grid grid-cols-2 gap-3 pt-3 mt-2 border-t border-white/5">
+        <div className="grid grid-cols-2 gap-3 pt-3 mt-2 border-t border-border/50 dark:border-white/5">
           <div>
-            <div className="text-base font-display font-bold text-teal-400">
+            <div className="text-base font-display font-bold text-teal-500 dark:text-teal-400">
               128-bit
             </div>
-            <div className="text-[10px] text-slate-500">Min entropy</div>
+            <div className="text-[10px] text-muted-foreground dark:text-slate-500">Min entropy</div>
           </div>
           <div>
-            <div className="text-base font-display font-bold text-white">
+            <div className="text-base font-display font-bold text-foreground dark:text-white">
               OWASP
             </div>
-            <div className="text-[10px] text-slate-500">Compliant</div>
+            <div className="text-[10px] text-muted-foreground dark:text-slate-500">Compliant</div>
           </div>
         </div>
       </div>
@@ -641,28 +641,28 @@ export function AcceptInviteVisual() {
             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
           </span>
-          <span className="text-[11px] font-mono font-medium text-emerald-300 tracking-wide uppercase">
+          <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-300 tracking-wide uppercase">
             Team access
           </span>
         </div>
-        <h2 className="text-2xl font-display font-bold text-white leading-snug max-w-sm">
+        <h2 className="text-2xl font-display font-bold text-foreground dark:text-white leading-snug max-w-sm">
           You&apos;ve been invited to join a team.
         </h2>
-        <p className="text-sm text-slate-400 mt-2 max-w-sm">
+        <p className="text-sm text-muted-foreground dark:text-slate-400 mt-2 max-w-sm">
           Collaborate on threat detection, alerts, and reports.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/80 backdrop-blur-sm shadow-2xl shadow-black/40 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div className="rounded-2xl border border-border dark:border-white/10 bg-card/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-2xl dark:shadow-black/40 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 dark:border-white/5">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5">
-            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-            <span className="text-[11px] font-mono text-slate-300">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/30 dark:bg-white/5">
+            <CheckCircle2 className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
+            <span className="text-[11px] font-mono text-foreground/70 dark:text-slate-300">
               member — pending
             </span>
           </div>
@@ -673,14 +673,14 @@ export function AcceptInviteVisual() {
           <motion.div
             animate={{ scale: pulse ? 1.02 : 1 }}
             transition={{ duration: 0.4 }}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg bg-white/3 border border-white/5"
+            className="flex items-center gap-3 px-3 py-3 rounded-lg bg-muted/20 dark:bg-white/3 border border-border/40 dark:border-white/5"
           >
             <div className="w-10 h-10 rounded-full bg-linear-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
               <span className="text-sm font-bold text-white">EP</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">EdgePulse Org</p>
-              <p className="text-[10px] text-slate-500">
+              <p className="text-sm font-semibold text-foreground dark:text-white">EdgePulse Org</p>
+              <p className="text-[10px] text-muted-foreground dark:text-slate-500">
                 Security Operations Team
               </p>
             </div>
@@ -688,15 +688,15 @@ export function AcceptInviteVisual() {
 
           {/* Benefits */}
           <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground dark:text-slate-500">
               Your access includes
             </span>
             {TEAM_BENEFITS.map((f) => (
               <div key={f.label} className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400 w-28 shrink-0">
+                <span className="text-[11px] text-muted-foreground dark:text-slate-400 w-28 shrink-0">
                   {f.label}
                 </span>
-                <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                <div className="flex-1 h-1 rounded-full bg-muted/40 dark:bg-white/5 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${f.pct}%` }}
@@ -708,24 +708,24 @@ export function AcceptInviteVisual() {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 dark:border-white/5">
             <div>
-              <div className="text-base font-display font-bold text-white">
+              <div className="text-base font-display font-bold text-foreground dark:text-white">
                 Org
               </div>
-              <div className="text-[10px] text-slate-500">Analyst role</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Analyst role</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-emerald-400">
+              <div className="text-base font-display font-bold text-emerald-500 dark:text-emerald-400">
                 Instant
               </div>
-              <div className="text-[10px] text-slate-500">Activation</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Activation</div>
             </div>
             <div>
-              <div className="text-base font-display font-bold text-white">
+              <div className="text-base font-display font-bold text-foreground dark:text-white">
                 SOC 2
               </div>
-              <div className="text-[10px] text-slate-500">Compliant</div>
+              <div className="text-[10px] text-muted-foreground dark:text-slate-500">Compliant</div>
             </div>
           </div>
         </div>

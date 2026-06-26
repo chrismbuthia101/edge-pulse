@@ -133,10 +133,10 @@ export default function SetupProfilePage() {
         <div className="flex justify-center mb-4">
           <AuthBrandMark light />
         </div>
-        <h1 className="text-2xl font-display font-bold text-white mb-1.5">
+        <h1 className="text-2xl font-display font-bold text-foreground dark:text-white mb-1.5">
           Set Up Your Profile
         </h1>
-        <p className="text-slate-400 text-sm">
+        <p className="text-muted-foreground dark:text-slate-400 text-sm">
           Choose a username and optional avatar to get started
         </p>
       </div>
@@ -146,7 +146,7 @@ export default function SetupProfilePage() {
           <div className="relative">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-full bg-white/3 border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-cyan-400/50 transition-colors overflow-hidden"
+              className="w-20 h-20 rounded-full bg-background dark:bg-white/3 border-2 border-dashed border-border dark:border-white/10 flex items-center justify-center cursor-pointer hover:border-cyan-400/50 transition-colors overflow-hidden"
             >
               {avatarPreview ? (
                 <Image
@@ -157,7 +157,7 @@ export default function SetupProfilePage() {
                   height={80}
                 />
               ) : (
-                <User className="h-8 w-8 text-slate-500" />
+                <User className="h-8 w-8 text-muted-foreground dark:text-slate-500" />
               )}
             </div>
             {avatarPreview && (
@@ -199,24 +199,24 @@ export default function SetupProfilePage() {
         <div className="space-y-1.5">
           <Label
             htmlFor="username"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-foreground dark:text-slate-200"
           >
             Username
           </Label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-slate-500" />
             <Input
               id="username"
               value={username}
               onChange={(e) =>
                 setUsername(e.target.value.replace(/[^a-z0-9_-]/g, ""))
               }
-              className="pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+              className="pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
               placeholder="johndoe"
               required
             />
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground dark:text-slate-500">
             Letters, numbers, underscores, and hyphens only
           </p>
         </div>
@@ -224,7 +224,7 @@ export default function SetupProfilePage() {
         <div className="space-y-1.5">
           <Label
             htmlFor="fullName"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-foreground dark:text-slate-200"
           >
             Full Name
           </Label>
@@ -232,7 +232,7 @@ export default function SetupProfilePage() {
             id="fullName"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+            className="h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
             placeholder={user?.full_name ?? "Your full name"}
           />
         </div>

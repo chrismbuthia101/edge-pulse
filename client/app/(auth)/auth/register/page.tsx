@@ -181,10 +181,10 @@ export default function RegisterPage() {
             className="w-full max-w-105 mx-auto"
           >
             <div className="mb-7">
-              <h1 className="text-3xl font-display font-bold text-white mb-2">
+              <h1 className="text-3xl font-display font-bold text-foreground dark:text-white mb-2">
                 Create your account
               </h1>
-              <p className="text-slate-400 text-sm">
+              <p className="text-muted-foreground dark:text-slate-400 text-sm">
                 Join EdgePulse — secure your infrastructure from day one
               </p>
             </div>
@@ -194,20 +194,20 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <Label
                   htmlFor="name"
-                  className="text-sm font-medium text-slate-200"
+                  className="text-sm font-medium text-foreground dark:text-slate-200"
                 >
                   Full name
                 </Label>
                 <div className="relative">
                   <User
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "name" ? "text-cyan-400" : nameError ? "text-red-400" : "text-slate-500"}`}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "name" ? "text-cyan-400" : nameError ? "text-red-400" : "text-muted-foreground dark:text-slate-500"}`}
                   />
                   <Input
                     id="name"
                     name="name"
                     type="text"
                     placeholder="Jane Smith"
-                    className={`pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${nameError ? "border-red-500/50" : ""}`}
+                    className={`pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${nameError ? "border-red-500/50" : ""}`}
                     required
                     onFocus={() => setFocusedField("name")}
                     onBlur={(e) => {
@@ -235,20 +235,20 @@ export default function RegisterPage() {
               <div className="space-y-1.5">
                 <Label
                   htmlFor="email"
-                  className="text-sm font-medium text-slate-200"
+                  className="text-sm font-medium text-foreground dark:text-slate-200"
                 >
                   Email address
                 </Label>
                 <div className="relative">
                   <Mail
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-cyan-400" : emailError ? "text-red-400" : "text-slate-500"}`}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "email" ? "text-cyan-400" : emailError ? "text-red-400" : "text-muted-foreground dark:text-slate-500"}`}
                   />
                   <Input
                     id="email"
                     name="email"
                     type="email"
                     placeholder="you@company.com"
-                    className={`pl-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${emailError ? "border-red-500/50" : ""}`}
+                    className={`pl-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${emailError ? "border-red-500/50" : ""}`}
                     required
                     onFocus={() => setFocusedField("email")}
                     onBlur={(e) => {
@@ -274,16 +274,16 @@ export default function RegisterPage() {
 
               {/* Password */}
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-slate-200">
+                <Label className="text-sm font-medium text-foreground dark:text-slate-200">
                   Password
                 </Label>
                 <div className="relative">
                   <Lock
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : passwordError ? "text-red-400" : "text-slate-500"}`}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200 ${focusedField === "password" ? "text-cyan-400" : passwordError ? "text-red-400" : "text-muted-foreground dark:text-slate-500"}`}
                   />
                   <Input
                     type={showPassword ? "text" : "password"}
-                    className={`pl-10 pr-10 h-11 bg-white/3 border-white/10 text-white placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${passwordError ? "border-red-500/50" : ""}`}
+                    className={`pl-10 pr-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20 ${passwordError ? "border-red-500/50" : ""}`}
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -299,7 +299,7 @@ export default function RegisterPage() {
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                     onClick={() => setShowPassword((p) => !p)}
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
@@ -331,7 +331,7 @@ export default function RegisterPage() {
 
               {/* Confirm password */}
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-slate-200">
+                <Label className="text-sm font-medium text-foreground dark:text-slate-200">
                   Confirm password
                 </Label>
                 <div className="relative">
@@ -343,17 +343,17 @@ export default function RegisterPage() {
                           ? "text-emerald-400"
                           : passwordsMismatch
                             ? "text-red-400"
-                            : "text-slate-500"
+                            : "text-muted-foreground dark:text-slate-500"
                     }`}
                   />
                   <Input
                     type={showConfirmPassword ? "text" : "password"}
-                    className={`pl-10 pr-10 h-11 bg-white/3 text-white placeholder:text-slate-500 transition-colors ${
+                    className={`pl-10 pr-10 h-11 bg-background dark:bg-white/3 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 transition-colors ${
                       passwordsMatch
                         ? "border-emerald-500/50 focus-visible:border-emerald-400"
                         : passwordsMismatch
                           ? "border-red-500/50 focus-visible:border-red-400"
-                          : "border-white/10 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                          : "border-border dark:border-white/10 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
                     }`}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -364,7 +364,7 @@ export default function RegisterPage() {
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
                     onClick={() => setShowConfirmPassword((p) => !p)}
                     aria-label={
                       showConfirmPassword ? "Hide password" : "Show password"
@@ -397,7 +397,7 @@ export default function RegisterPage() {
                 )}
               </Button>
 
-              <p className="text-center text-xs text-slate-500">
+              <p className="text-center text-xs text-muted-foreground dark:text-slate-500">
                 By creating an account you agree to our{" "}
                 <Link
                   href="/terms"
@@ -415,7 +415,7 @@ export default function RegisterPage() {
                 .
               </p>
 
-              <p className="text-center text-sm text-slate-400 pt-1">
+              <p className="text-center text-sm text-muted-foreground dark:text-slate-400 pt-1">
                 Have an account?{" "}
                 <Link
                   href="/auth/login"
