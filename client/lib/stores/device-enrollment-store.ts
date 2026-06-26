@@ -22,7 +22,6 @@ interface TokenSecret {
 const initialState = {
   tokens: [] as EnrollmentToken[],
   tokenSecrets: {} as Record<string, string>,
-  organizationId: null as string | null,
   status: "idle" as Status,
   creating: false,
   error: null as string | null,
@@ -72,12 +71,19 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>()(
           return null;
         }
 
+        const activeOrganizationId = useAuthStore.getState().activeOrganizationId;
+        if (!activeOrganizationId) {
+          toast.error("You must belong to an organization to create enrollment tokens");
+          set({ creating: false });
+          return null;
+        }
+
         set({ creating: true, error: null });
 
         const result = await deviceEnrollmentService.createToken(authUser.id, {
           name,
           maxUses,
-          organizationId: get().organizationId ?? undefined,
+          organizationId: activeOrganizationId,
         });
 
         if (!result.success) {

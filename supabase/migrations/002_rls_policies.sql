@@ -67,7 +67,7 @@ ALTER ROLE postgres SET pgrst.db_schemas TO 'public, graphql_public, organizatio
 
 CREATE OR REPLACE FUNCTION internal.current_organization_id()
 RETURNS UUID
-LANGUAGE plpgsql STABLE SECURITY INVOKER
+LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE
@@ -94,7 +94,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.is_platform_admin()
 RETURNS BOOLEAN
-LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;
@@ -112,7 +112,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION internal.is_org_admin()
 RETURNS BOOLEAN
-LANGUAGE plpgsql STABLE SECURITY INVOKER
+LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, public, internal, organization
 AS $$
 DECLARE result BOOLEAN;

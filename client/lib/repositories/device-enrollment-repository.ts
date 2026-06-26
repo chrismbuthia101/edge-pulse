@@ -89,23 +89,27 @@ export class DeviceEnrollmentRepository {
     options: CreateTokenData,
   ): Promise<{ data: EnrollmentToken | null; error: Error | null }> {
     try {
-      const { maxUses, name, expiresDays = 30, organizationId = "" } = options;
+      const { maxUses, name, expiresDays = 30, organizationId = null } = options;
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expiresDays);
 
+      const payload: Record<string, unknown> = {
+        name: name || null,
+        token_hash: tokenHash,
+        created_by: createdBy,
+        max_uses: maxUses,
+        current_uses: 0,
+        expires_at: expiresAt.toISOString(),
+      };
+      if (organizationId) {
+        payload.organization_id = organizationId;
+      }
+
       const { data, error } = await this.supabaseClient
         .schema(this.schema)
         .from(this.tableName)
-        .insert({
-          name: name || null,
-          token_hash: tokenHash,
-          created_by: createdBy,
-          max_uses: maxUses,
-          current_uses: 0,
-          expires_at: expiresAt.toISOString(),
-          organization_id: organizationId,
-        })
+        .insert(payload)
         .select()
         .single();
 
