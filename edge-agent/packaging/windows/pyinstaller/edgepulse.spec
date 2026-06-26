@@ -7,7 +7,7 @@ REPO_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..', '..'))  # .../edg
 SRC_ROOT  = os.path.join(REPO_ROOT, 'src')      # .../edge-agent/src
 
 datas = [
-    (os.path.join(SRC_ROOT, 'data', 'schema.sql'), 'data'),
+    (os.path.join(SRC_ROOT, 'edgepulse', 'data', 'schema.sql'), 'data'),
     (os.path.join(REPO_ROOT, '.env.example'), '.'),
     (os.path.join(SRC_ROOT, 'models'), 'models'),
     (os.path.join(REPO_ROOT, 'packaging', 'agent_config.json'), '.'),
