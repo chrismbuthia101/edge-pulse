@@ -104,6 +104,8 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+Environment="EDGE_PULSE_DATA_DIR=/var/lib/edgepulse"
+Environment="MPLCONFIGDIR=/var/lib/edgepulse/.matplotlib"
 ExecStart=/opt/edgepulse/bin/edge-agent run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=/var/lib/edgepulse
 RuntimeDirectory=edgepulse

@@ -132,8 +132,10 @@ class AgentSettings(BaseSettings):
         for key, value in overrides.items():
             if key not in merged:
                 continue
+            if value is None:
+                continue
             if isinstance(value, dict) and isinstance(merged[key], dict):
-                merged[key].update(value)
+                merged[key].update({k: v for k, v in value.items() if v is not None})
             else:
                 merged[key] = value
 

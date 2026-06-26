@@ -75,6 +75,7 @@ def _build_unit_file(python_exe: Optional[str] = None, user_mode: bool = False) 
         main = _service_main_path()
         exec_args = f"{main} --service-mode"
 
+    _data_dir = Path("/var/lib/edgepulse")
     hardening = (
         ""
         if user_mode
@@ -84,10 +85,10 @@ def _build_unit_file(python_exe: Optional[str] = None, user_mode: bool = False) 
             NoNewPrivileges=true
             ProtectSystem=strict
             ProtectHome=read-only
-            ReadWritePaths={} {} {} {}
+            ReadWritePaths={} {} {} {} {}
             PrivateTmp=true
             """.format(
-                _BASE_DIR, _LOG_DIR, _RUN_DIR, _CONFIG_DIR
+                _BASE_DIR, _LOG_DIR, _RUN_DIR, _CONFIG_DIR, _data_dir
             )
         )
     )
@@ -104,6 +105,8 @@ def _build_unit_file(python_exe: Optional[str] = None, user_mode: bool = False) 
 
         [Service]
         Type=simple
+        Environment="EDGE_PULSE_DATA_DIR={_data_dir}"
+        Environment="MPLCONFIGDIR={_data_dir}/.matplotlib"
         ExecStart={exe} {exec_args}
         WorkingDirectory={_BASE_DIR}
         Restart=on-failure

@@ -1,5 +1,4 @@
 {
-  "device_id": null,
   "environment": "production",
   "api": {
     "enabled": true,

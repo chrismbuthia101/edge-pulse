@@ -167,8 +167,18 @@ class CredentialManager:
             data_dir = _safe_program_data()
         else:
             data_dir = Path.home() / ".edgepulse"
+            try:
+                data_dir.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                from edgepulse.platform._paths import _CONFIG_DIR
+
+                data_dir = _CONFIG_DIR / "credentials"
+                data_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(
+                    "Falling back to system config dir for credential storage: %s",
+                    data_dir,
+                )
         data_dir = data_dir.resolve()
-        data_dir.mkdir(parents=True, exist_ok=True)
         path = data_dir / "credentials.enc"
         logger.info("Using encrypted file for credential storage: %s", path)
         return EncryptedFileStore(path)
