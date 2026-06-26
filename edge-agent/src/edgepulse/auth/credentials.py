@@ -80,26 +80,111 @@ class KeyringStore(CredentialStore):
             return False
 
 
+@dataclass
+class CredentialLocation:
+    """Resolved credential storage location, with the writable fallback chain."""
+
+    primary: Path
+    fallback: Optional[Path] = None
+
+
+def _try_mkdir(path: Path) -> bool:
+    """Create ``path`` if possible; return False on permission errors."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _resolve_credential_dirs() -> CredentialLocation:
+    """Pick a writable directory for the encrypted credential store.
+
+    Order on Linux/system installs:
+      1. ``$EDGE_PULSE_CREDENTIALS_DIR`` (explicit override, e.g. from systemd).
+      2. ``$XDG_CONFIG_HOME/edgepulse`` (defaults to ``~/.config/edgepulse``).
+      3. ``/var/lib/edgepulse/.credentials`` (always writable under hardened
+         systemd units — this is where we land on read-only ``$HOME``).
+      4. ``$HOME/.edgepulse`` (last resort; works for plain user runs).
+    """
+    if _stdlib_platform.system() == "Windows":
+        from edgepulse.platform._paths import _safe_program_data
+
+        return CredentialLocation(primary=_safe_program_data())
+
+    candidates: list[Path] = []
+    override = os.environ.get("EDGE_PULSE_CREDENTIALS_DIR")
+    if override:
+        candidates.append(Path(override))
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    candidates.append(Path(xdg) / "edgepulse" if xdg else Path.home() / ".config" / "edgepulse")
+    candidates.append(Path("/var/lib/edgepulse/.credentials"))
+    candidates.append(Path.home() / ".edgepulse")
+
+    writable: Optional[Path] = None
+    fallback: Optional[Path] = None
+    for cand in candidates:
+        if _try_mkdir(cand):
+            if writable is None:
+                writable = cand
+            elif fallback is None:
+                fallback = cand
+
+    if writable is None:
+        # Nothing was writable — last-ditch, try /tmp so we still degrade
+        # gracefully instead of crashing. Caller logs a warning.
+        writable = Path("/tmp/edgepulse/.credentials")
+        writable.mkdir(parents=True, exist_ok=True)
+
+    return CredentialLocation(primary=writable, fallback=fallback)
+
+
 class EncryptedFileStore(CredentialStore):
     """Encrypted JSON file fallback for platforms without a keyring."""
 
     def __init__(self, path: Path):
         self._path = path
+        self._fallback: Optional[Path] = None
         self._key = self._get_or_create_key(path)
+
+    @staticmethod
+    def _safe_write(target: Path, data: bytes) -> bool:
+        """Atomically write ``data`` to ``target``, falling back to the parent
+        directory if ``target``'s parent is read-only."""
+        try:
+            tmp = target.with_suffix(".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(target)
+            if _stdlib_platform.system() != "Windows":
+                try:
+                    target.chmod(0o600)
+                except OSError:
+                    pass
+            return True
+        except OSError as exc:
+            logger.warning("encrypted_file_write_failed", target=str(target), error=str(exc))
+            return False
 
     @staticmethod
     def _get_or_create_key(path: Path) -> bytes:
         key_file = path.parent / ".machine_key"
         if key_file.exists():
-            raw = key_file.read_bytes()
-        else:
-            raw = os.urandom(32)
-            tmp = key_file.with_suffix(".tmp")
-            tmp.write_bytes(raw)
-            tmp.replace(key_file)
-            if _stdlib_platform.system() != "Windows":
-                key_file.chmod(0o600)
-        return base64.urlsafe_b64encode(raw)
+            try:
+                raw = key_file.read_bytes()
+                return base64.urlsafe_b64encode(raw)
+            except OSError:
+                pass
+
+        raw = os.urandom(32)
+        if EncryptedFileStore._safe_write(key_file, raw):
+            return base64.urlsafe_b64encode(raw)
+
+        alt = path.parent.parent / ".machine_key"
+        if EncryptedFileStore._safe_write(alt, raw):
+            logger.warning("machine_key_written_to_fallback", path=str(alt))
+            return base64.urlsafe_b64encode(raw)
+
+        raise OSError(f"Cannot persist machine key: {key_file} and fallback {alt} are read-only")
 
     def _encrypt(self, data: str) -> bytes:
         return Fernet(self._key).encrypt(data.encode())
@@ -119,15 +204,27 @@ class EncryptedFileStore(CredentialStore):
     def _save_all(self, data: Dict[str, str]) -> bool:
         try:
             encrypted = self._encrypt(json.dumps(data))
-            tmp = self._path.with_suffix(".tmp")
-            tmp.write_bytes(encrypted)
-            tmp.replace(self._path)
-            if _stdlib_platform.system() != "Windows":
-                self._path.chmod(0o600)
-            return True
         except Exception as e:
-            logger.error("file_store_save_failed", path=str(self._path), error=str(e))
+            logger.error("file_store_encrypt_failed", error=str(e))
             return False
+        if EncryptedFileStore._safe_write(self._path, encrypted):
+            return True
+        # Try the fallback dir if the primary isn't writable.
+        if self._fallback is None:
+            locations = _resolve_credential_dirs()
+            self._fallback = locations.fallback
+            self._path = locations.primary
+        if self._fallback is not None:
+            alt = self._fallback / self._path.name
+            if EncryptedFileStore._safe_write(alt, encrypted):
+                logger.warning(
+                    "credentials_saved_to_fallback",
+                    primary=str(self._path),
+                    fallback=str(alt),
+                )
+                self._path = alt
+                return True
+        return False
 
     def get(self, key: str) -> Optional[str]:
         return self._load_all().get(key)
@@ -161,27 +258,14 @@ class CredentialManager:
 
     @staticmethod
     def _create_file_store() -> EncryptedFileStore:
-        if _stdlib_platform.system() == "Windows":
-            from edgepulse.platform._paths import _safe_program_data
-
-            data_dir = _safe_program_data()
-        else:
-            data_dir = Path.home() / ".edgepulse"
-            try:
-                data_dir.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                from edgepulse.platform._paths import _CONFIG_DIR
-
-                data_dir = _CONFIG_DIR / "credentials"
-                data_dir.mkdir(parents=True, exist_ok=True)
-                logger.info(
-                    "Falling back to system config dir for credential storage: %s",
-                    data_dir,
-                )
-        data_dir = data_dir.resolve()
-        path = data_dir / "credentials.enc"
+        location = _resolve_credential_dirs()
+        path = location.primary / "credentials.enc"
         logger.info("Using encrypted file for credential storage: %s", path)
-        return EncryptedFileStore(path)
+        if location.fallback and location.fallback != location.primary:
+            logger.info("Encrypted credential fallback location: %s", location.fallback)
+        store = EncryptedFileStore(path)
+        store._fallback = location.fallback
+        return store
 
     def get_device_credentials(self) -> Optional[DeviceCredentials]:
         device_id = self._store.get(DEVICE_ID_KEY)

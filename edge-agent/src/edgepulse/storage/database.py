@@ -1,5 +1,6 @@
 import aiosqlite
 import hashlib
+import importlib.resources
 import json
 import re
 import uuid
@@ -20,7 +21,28 @@ from edgepulse.models import (
 
 logger = get_logger(__name__)
 
-_SCHEMA_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "schema.sql"
+
+def _resolve_schema_file() -> Path:
+
+    try:
+        resource = importlib.resources.files("edgepulse.data").joinpath("schema.sql")
+        if resource.is_file():
+            with importlib.resources.as_file(resource) as resolved:
+                return Path(resolved)
+    except (ModuleNotFoundError, AttributeError):
+        pass
+
+    here = Path(__file__).resolve()
+
+    for ancestor in here.parents:
+        candidate = ancestor / "data" / "schema.sql"
+        if candidate.is_file():
+            return candidate
+
+    return here.parent.parent.parent / "data" / "schema.sql"
+
+
+_SCHEMA_FILE = _resolve_schema_file()
 
 
 class Database:
@@ -34,7 +56,18 @@ class Database:
 
     @staticmethod
     def _load_schema() -> Tuple[Dict[str, str], List[str]]:
-        content = _SCHEMA_FILE.read_text(encoding="utf-8")
+        try:
+            content = _SCHEMA_FILE.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            try:
+                resource = importlib.resources.files("edgepulse.data").joinpath("schema.sql")
+                content = resource.read_text(encoding="utf-8")
+            except (ModuleNotFoundError, AttributeError, FileNotFoundError) as exc:
+                raise FileNotFoundError(
+                    "Could not locate edgepulse data/schema.sql. "
+                    "Ensure 'src/edgepulse/data/*.sql' is included in the wheel build "
+                    "(see pyproject.toml [tool.poetry] include)."
+                ) from exc
         content = re.sub(r"--.*$", "", content, flags=re.MULTILINE)
 
         statements = []

@@ -387,6 +387,56 @@ This was a bug in the original `installer.nsi`. The corrected version adds
 This was a bug in the original `edgepulse.spec`. The corrected version
 removes that reference — `DatabaseManager` uses inline SQL, not a `.sql` file.
 
+### systemd service fails with `FileNotFoundError: .../site-packages/data/schema.sql`
+
+The `.deb` build installs a Python wheel into `/opt/edgepulse/venv/`, and the
+runtime needs the SQL schema bundled inside that wheel. The wheel must ship
+`edgepulse/data/schema.sql`.
+
+**Verification:** `unzip -l dist/edge_agent-*.whl | grep schema.sql` should
+show a single entry `edgepulse/data/schema.sql`. If you see `src/data/schema.sql`
+instead, the `pyproject.toml` include path is wrong — it must point at
+`src/edgepulse/data/*.sql` (inside the package source tree), not
+`src/data/*.sql`.
+
+```toml
+# edge-agent/pyproject.toml
+[tool.poetry]
+packages = [{include = "edgepulse", from = "src"}]
+include = [
+    {path = "src/edgepulse/data/*.sql", format = ["sdist", "wheel"]},
+]
+```
+
+`Database` (`edgepulse/storage/database.py`) resolves the schema at runtime via
+`importlib.resources.files("edgepulse.data")`, with a source-tree fallback so
+dev checkouts still work.
+
+### systemd service warns `Read-only file system: '/root/.edgepulse/.machine_key.tmp'`
+
+The hardened systemd unit (`ProtectSystem=strict`, `ProtectHome=read-only`) makes
+`/root` read-only. The encrypted credential store now resolves its directory
+from this ordered chain, picking the first writable one:
+
+1. `$EDGE_PULSE_CREDENTIALS_DIR` (the systemd unit sets this to
+   `/var/lib/edgepulse/.credentials`)
+2. `$XDG_CONFIG_HOME/edgepulse`
+3. `/var/lib/edgepulse/.credentials`
+4. `~/.edgepulse`
+
+The systemd unit exports both `XDG_CONFIG_HOME` and
+`EDGE_PULSE_CREDENTIALS_DIR`, so the service lands on
+`/var/lib/edgepulse/.credentials`. The `.deb` postinst creates the directory
+with mode `750`.
+
+### pydantic_settings warns `A custom validator is returning a value other than self`
+
+`AgentSettings._apply_config_file` previously called
+`self.__class__.model_validate(merged)` and returned the new instance. With
+pydantic-settings ≥ 2.x this triggers a `UserWarning` and the validator is
+ignored during `__init__`. The fixed version mutates `self` in place (rebuilding
+nested `BaseModel` subfields via their annotation) and returns `self`.
+
 ### Windows Service won't start after install
 
 Check the Event Viewer under **Windows Logs → Application** for errors from

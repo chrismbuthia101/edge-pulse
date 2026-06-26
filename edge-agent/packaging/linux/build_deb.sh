@@ -148,6 +148,8 @@ StartLimitBurst=3
 Type=simple
 Environment="EDGE_PULSE_DATA_DIR=/var/lib/edgepulse"
 Environment="MPLCONFIGDIR=/var/lib/edgepulse/.matplotlib"
+Environment="XDG_CONFIG_HOME=/var/lib/edgepulse/.config"
+Environment="EDGE_PULSE_CREDENTIALS_DIR=/var/lib/edgepulse/.credentials"
 ExecStart=${INSTALL_PREFIX}/bin/edge-agent run --config /etc/edgepulse/agent_config.json
 WorkingDirectory=${VAR_DIR}
 RuntimeDirectory=edgepulse
@@ -188,6 +190,9 @@ echo ""
 for dir in /var/lib/edgepulse \
            /var/lib/edgepulse/models \
            /var/lib/edgepulse/data \
+           /var/lib/edgepulse/.matplotlib \
+           /var/lib/edgepulse/.config \
+           /var/lib/edgepulse/.credentials \
            /var/log/edgepulse \
            /run/edgepulse \
            /etc/edgepulse; do

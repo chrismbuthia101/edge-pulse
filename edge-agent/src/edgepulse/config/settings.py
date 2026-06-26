@@ -114,6 +114,7 @@ class AgentSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _apply_config_file(self) -> "AgentSettings":
+
         if self.config_path is None:
             return self
 
@@ -128,18 +129,20 @@ class AgentSettings(BaseSettings):
         except Exception as exc:
             raise ValueError(f"Cannot parse config file {path}: {exc}") from exc
 
-        merged = self.model_dump()
+        current = self.model_dump()
         for key, value in overrides.items():
-            if key not in merged:
+            if key not in current or value is None:
                 continue
-            if value is None:
-                continue
-            if isinstance(value, dict) and isinstance(merged[key], dict):
-                merged[key].update({k: v for k, v in value.items() if v is not None})
+            if isinstance(value, dict) and isinstance(current[key], dict):
+                annotation = self.__class__.model_fields[key].annotation
+                if not callable(annotation):
+                    continue
+                merged_dict = {**current[key], **{k: v for k, v in value.items() if v is not None}}
+                setattr(self, key, annotation(**merged_dict))
             else:
-                merged[key] = value
+                setattr(self, key, value)
 
-        return self.__class__.model_validate(merged)
+        return self
 
     def should_enable_sync(self) -> bool:
         url = self.sync.supabase_url or ""

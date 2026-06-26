@@ -38,6 +38,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 packages = [{include = "edgepulse", from = "src"}]
+include = [
+    {path = "src/edgepulse/data/*.sql", format = ["sdist", "wheel"]},
+]
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.0.0"
