@@ -33,6 +33,13 @@ export default function AcceptInvitePage() {
   useEffect(() => {
     const checkSession = async () => {
       const store = useAuthStore.getState();
+
+      const hash = window.location.hash;
+      if (hash && hash.includes("access_token")) {
+        sessionStorage.setItem("edgepulse_invite_tokens", hash.substring(1));
+        history.replaceState(null, "", window.location.pathname);
+      }
+
       await store.initialize();
       const currentUser = store.user;
 

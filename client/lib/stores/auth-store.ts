@@ -21,13 +21,22 @@ type AuthSubscription = {
   };
 };
 
-const supabase = createClient();
-const authService = new AuthService(new AuthRepository(supabase));
-const storageRepo = new StorageRepository(supabase);
-const userService = new UserService(new UserRepository(supabase), storageRepo);
-const orgProfileService = new OrgProfileService(
-  new OrgProfileRepository(supabase),
-);
+let supabase: ReturnType<typeof createClient>;
+let authService: AuthService;
+let storageRepo: StorageRepository;
+let userService: UserService;
+let orgProfileService: OrgProfileService;
+
+function initServices() {
+  if (supabase) return;
+  supabase = createClient();
+  authService = new AuthService(new AuthRepository(supabase));
+  storageRepo = new StorageRepository(supabase);
+  userService = new UserService(new UserRepository(supabase), storageRepo);
+  orgProfileService = new OrgProfileService(
+    new OrgProfileRepository(supabase),
+  );
+}
 
 export interface AuthUser extends User {
   profiles: OrganizationProfile[];
@@ -96,6 +105,7 @@ const initialState: AuthState = {
 };
 
 async function fetchProfiles(userId: string): Promise<OrganizationProfile[]> {
+  initServices();
   try {
     const result = await orgProfileService.getProfilesByUserId(userId);
     if (!result.success) {
@@ -195,6 +205,24 @@ export const useAuthStore = create<AuthStore>()(
       ...initialState,
 
       initialize: async () => {
+        initServices();
+
+        if (typeof window !== "undefined") {
+          const storedHash = sessionStorage.getItem("edgepulse_invite_tokens");
+          if (storedHash) {
+            sessionStorage.removeItem("edgepulse_invite_tokens");
+            const params = new URLSearchParams(storedHash);
+            const accessToken = params.get("access_token");
+            const refreshToken = params.get("refresh_token");
+            if (accessToken) {
+              await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || "",
+              });
+            }
+          }
+        }
+
         const sessionResult = await authService.getSession();
         if (!sessionResult.success) {
           set(
@@ -268,6 +296,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setSession: async (user, session) => {
+        initServices();
         if (!user) {
           set(
             { ...initialState, status: "unauthenticated" },
@@ -308,6 +337,7 @@ export const useAuthStore = create<AuthStore>()(
       clearError: () => set({ error: null }, undefined, "auth/clearError"),
 
       signIn: async (email, password) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -353,6 +383,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       signInWithGoogle: async (redirectTo) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -372,6 +403,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       signInWithOAuth: async (provider, redirectTo) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -395,6 +427,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       signUp: async (email, password, fullName, redirectTo) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -454,6 +487,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       resetPassword: async (email, redirectTo) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -475,6 +509,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       updatePassword: async (password) => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -496,6 +531,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       signOut: async () => {
+        initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
@@ -533,6 +569,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       updateProfile: async (userId, data) => {
+        initServices();
         const result = await userService.updateUser(userId, {
           full_name: data.full_name,
           username: data.username,
@@ -560,6 +597,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       activateProfile: async (userId) => {
+        initServices();
         const result = await orgProfileService.activateProfile(userId);
 
         if (result.success) {
@@ -583,6 +621,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       getProfileStatus: async (userId) => {
+        initServices();
         const result = await orgProfileService.getProfileStatus(userId);
         return result.success
           ? result.data
@@ -590,6 +629,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       switchOrganization: async (organizationId) => {
+        initServices();
         const currentUser = get().user;
         if (!currentUser) {
           return { success: false, error: "Not authenticated" };
@@ -626,6 +666,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       refreshSession: async () => {
+        initServices();
         const sessionResult = await authService.getSession();
         if (!sessionResult.success) return;
 

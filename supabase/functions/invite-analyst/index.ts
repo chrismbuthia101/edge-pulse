@@ -1,6 +1,5 @@
 // EdgePulse Invite Analyst Function v1.1.0
 import { serve } from "std/http/server.ts";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseContext } from "@supabase/server";
 
 const corsHeaders = {
@@ -26,7 +25,6 @@ interface InviteResult {
   email: string;
   success: boolean;
   user_id?: string;
-  invite_link?: string;
   error?: string;
 }
 
@@ -121,17 +119,16 @@ serve(async (req: Request) => {
 
     const authResults = await Promise.allSettled(
       invitesToProcess.map(async (invite) => {
-        const { data, error } = await supabase.auth.admin.generateLink({
-          type: "invite",
-          email: invite.email,
-          options: {
-            redirectTo: `${appUrl}/accept-invite`,
+        const { data, error } = await supabase.auth.admin.inviteUserByEmail(
+          invite.email,
+          {
+            redirectTo: `${appUrl}/auth/accept-invite`,
             data: {
               invited_by: user.id,
               organization_id: inviterProfile.organization_id,
             },
           },
-        });
+        );
         if (error || !data.user) {
           return {
             email: invite.email,
@@ -143,7 +140,6 @@ serve(async (req: Request) => {
           email: invite.email,
           full_name: invite.full_name,
           userId: data.user.id,
-          inviteLink: data.properties?.action_link,
         };
       }),
     );
@@ -152,7 +148,6 @@ serve(async (req: Request) => {
       email: string;
       full_name: string;
       userId: string;
-      inviteLink?: string;
     }> = [];
     const phaseResults: InviteResult[] = [];
 
@@ -163,7 +158,6 @@ serve(async (req: Request) => {
             email: result.value.email,
             full_name: result.value.full_name,
             userId: result.value.userId,
-            inviteLink: result.value.inviteLink,
           });
         } else {
           phaseResults.push({
@@ -220,7 +214,6 @@ serve(async (req: Request) => {
         return {
           email: entry.email,
           userId: entry.userId,
-          inviteLink: entry.inviteLink,
           success: true as const,
         };
       }),
@@ -229,7 +222,6 @@ serve(async (req: Request) => {
     const auditEntries: Array<{
       email: string;
       userId: string;
-      inviteLink?: string;
     }> = [];
 
     for (const result of profileResults) {
@@ -238,13 +230,11 @@ serve(async (req: Request) => {
           auditEntries.push({
             email: result.value.email,
             userId: result.value.userId,
-            inviteLink: result.value.inviteLink,
           });
           phaseResults.push({
             email: result.value.email,
             success: true,
             user_id: result.value.userId,
-            invite_link: result.value.inviteLink,
           });
         } else {
           phaseResults.push({

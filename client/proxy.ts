@@ -47,9 +47,7 @@ export async function proxy(req: NextRequest) {
     "/auth/register",
     "/auth/forgot-password",
   ].includes(pathname);
-  const isResetPage = pathname === "/auth/reset-password";
-
-  if (!user && (pathname.startsWith("/dashboard") || isResetPage)) {
+  if (!user && pathname.startsWith("/dashboard")) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
     redirectUrl.searchParams.set("next", pathname);
