@@ -29,3 +29,19 @@ jobs:
       - run: poetry install --extras "linux" --with dev
       - run: pip install pip-audit -q
       - run: pip-audit --requirement <(poetry export --without-hashes)
+
+  client:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ./client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: ./client/pnpm-lock.yaml
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint 'app/' 'components/' 'lib/'",
+    "lint:fix": "eslint 'app/' 'components/' 'lib/' --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm lint && pnpm typecheck"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
