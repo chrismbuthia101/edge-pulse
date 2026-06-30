@@ -68,7 +68,8 @@ export function useNotifications() {
     init();
     fetchSyncQueue();
 
-    const syncChannel = supabaseRef.current
+    const supabase = supabaseRef.current;
+    const syncChannel = supabase
       .channel("realtime-sync-queue")
       .on(
         "postgres_changes",
@@ -96,7 +97,7 @@ export function useNotifications() {
 
     return () => {
       mounted = false;
-      supabaseRef.current.removeChannel(syncChannel);
+      supabase.removeChannel(syncChannel);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
