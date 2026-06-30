@@ -505,6 +505,18 @@ CREATE POLICY "platform_admins: manage profiles" ON organization.profiles FOR AL
     )
 );
 
+CREATE POLICY "users: update own profile" ON organization.profiles FOR
+UPDATE USING (
+        user_id = (
+            SELECT auth.uid ()
+        )
+    )
+WITH CHECK (
+        user_id = (
+            SELECT auth.uid ()
+        )
+    );
+
 -- ── devices ─────────────────────────────────────────────────────────────────
 CREATE POLICY "devices: read own" ON public.devices FOR
 SELECT USING (

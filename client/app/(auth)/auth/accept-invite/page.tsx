@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { redeemInviteHash } from "@/lib/auth/redeem-invite-hash";
 import { toast } from "sonner";
 import {
   AuthBrandMark,
@@ -24,28 +25,34 @@ export default function AcceptInvitePage() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [accepted, setAccepted] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const passwordStrength = getPasswordStrength(password);
 
   useEffect(() => {
     const checkSession = async () => {
-      const store = useAuthStore.getState();
-
-      const hash = window.location.hash;
-      if (hash && hash.includes("access_token")) {
-        sessionStorage.setItem("edgepulse_invite_tokens", hash.substring(1));
-        history.replaceState(null, "", window.location.pathname);
+      const redeem = await redeemInviteHash();
+      if (redeem.error && !redeem.redeemed) {
+        console.warn("redeemInviteHash:", redeem.error);
       }
 
-      await store.initialize();
-      const currentUser = store.user;
+      await useAuthStore.getState().initialize();
+      const currentUser = useAuthStore.getState().user;
 
       if (currentUser) {
-        const { account_status } = await store.getProfileStatus(currentUser.id);
+        const statusResult = await useAuthStore.getState().getProfileStatus(currentUser.id);
+        if (!statusResult.success) {
+          setInviteError(statusResult.error ?? "Profile not found");
+          setChecking(false);
+          return;
+        }
 
+        const { account_status } = statusResult.data;
         if (account_status === "PENDING") {
           setAccepted(true);
         } else if (account_status === "ACTIVE") {
@@ -76,8 +83,9 @@ export default function AcceptInvitePage() {
             Invalid or Expired Invite
           </h1>
           <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">
-            This invitation link is invalid or has expired. Please contact your
-            administrator for a new invitation.
+            {inviteError
+              ? inviteError
+              : "This invitation link is invalid or has expired. Please contact your administrator for a new invitation."}
           </p>
           <Button
             onClick={() => router.push("/auth/login")}
@@ -161,8 +169,49 @@ export default function AcceptInvitePage() {
                     )}
                   </button>
                 </div>
-                <PasswordStrength password={password} confirmPassword="" />
+                <PasswordStrength
+                  password={password}
+                  confirmPassword={confirmPassword}
+                />
               </div>
+
+              {password.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="confirm-password"
+                    className="text-sm font-medium text-foreground dark:text-slate-200"
+                  >
+                    Confirm Password
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-slate-500" />
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10 h-11 bg-background dark:bg-white/3 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus-visible:border-cyan-400/60 focus-visible:ring-cyan-400/20"
+                      placeholder="Confirm your password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300 transition-colors"
+                      onClick={() => setShowConfirmPassword((p) => !p)}
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <Button
                 onClick={async () => {
@@ -171,16 +220,20 @@ export default function AcceptInvitePage() {
                     return;
                   }
 
+                  if (password !== confirmPassword) {
+                    toast.error("Passwords do not match");
+                    return;
+                  }
+
                   setIsSubmitting(true);
                   try {
-                    const store = useAuthStore.getState();
-                    const passwordResult = await store.updatePassword(password);
+                    const passwordResult = await useAuthStore.getState().updatePassword(password);
                     if (!passwordResult.success)
                       throw new Error(passwordResult.error);
 
-                    const currentUser = store.user;
+                    const currentUser = useAuthStore.getState().user;
                     if (currentUser) {
-                      await store.activateProfile(currentUser.id);
+                      await useAuthStore.getState().activateProfile(currentUser.id);
                     }
 
                     toast.success(
@@ -200,7 +253,11 @@ export default function AcceptInvitePage() {
                     setIsSubmitting(false);
                   }
                 }}
-                disabled={isSubmitting || passwordStrength < 3}
+                disabled={
+                  isSubmitting ||
+                  passwordStrength < 3 ||
+                  password !== confirmPassword
+                }
                 className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200 disabled:opacity-40 disabled:shadow-none"
               >
                 {isSubmitting ? (

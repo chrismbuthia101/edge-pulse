@@ -15,16 +15,18 @@ import { StorageRepository } from "@/lib/repositories/storage-repository";
 import { validateFile } from "@/lib/utils/file-validation";
 import { toast } from "sonner";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 const storageRepository = new StorageRepository(createClient());
 
 export default function SetupProfilePage() {
   const router = useRouter();
-  const { user, loading, refreshSession } = useAuth();
+  const { user, session, loading, refreshSession } = useAuth();
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarTempPath, setAvatarTempPath] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function SetupProfilePage() {
 
     try {
       const ext = file.name.split(".").pop() || "png";
-      const filePath = `avatars/${user!.id}/${crypto.randomUUID()}.${ext}`;
+      const filePath = `temp/${user!.id}/${crypto.randomUUID()}.${ext}`;
 
       const { path, error: uploadError } = await storageRepository.uploadFile(
         "avatars",
@@ -64,8 +66,7 @@ export default function SetupProfilePage() {
         return;
       }
 
-      const publicUrl = storageRepository.getPublicUrl("avatars", path!);
-      setAvatarUrl(publicUrl);
+      setAvatarTempPath(path!);
     } catch {
       setAvatarError("Upload failed. You can continue without an avatar.");
     } finally {
@@ -83,19 +84,41 @@ export default function SetupProfilePage() {
 
     setIsSubmitting(true);
     try {
-      const profileResult = await useAuthStore
-        .getState()
-        .updateProfile(user!.id, {
-          full_name: fullName.trim() || user?.full_name || undefined,
-          username: username.trim(),
-          avatar_url: avatarUrl,
-        });
-
-      if (!profileResult.success) {
-        throw new Error(profileResult.error);
+      if (!supabaseUrl) {
+        toast.error("Configuration error. Please refresh.");
+        return;
       }
 
-      await useAuthStore.getState().activateProfile(user!.id);
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        toast.error("Session not available. Please refresh.");
+        return;
+      }
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/setup-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            username: username.trim(),
+            full_name: fullName.trim() || user?.full_name || "",
+            ...(avatarTempPath ? { avatar_temp_path: avatarTempPath } : {}),
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || result.message || "Failed to set up profile",
+        );
+      }
+
       await refreshSession();
       toast.success("Profile setup complete!");
       const {
@@ -166,7 +189,7 @@ export default function SetupProfilePage() {
                 onClick={() => {
                   setAvatarFile(null);
                   setAvatarPreview(null);
-                  setAvatarUrl(null);
+                  setAvatarTempPath(null);
                   setAvatarError(null);
                 }}
                 className="absolute -top-1 -right-1 rounded-full bg-red-500/80 text-white p-0.5 shadow-sm hover:bg-red-500 transition-colors"
@@ -188,7 +211,7 @@ export default function SetupProfilePage() {
           {avatarError && (
             <p className="text-sm text-red-400 text-center">{avatarError}</p>
           )}
-          {avatarUrl && !avatarError && (
+          {avatarTempPath && !avatarError && (
             <p className="text-sm text-emerald-400 flex items-center gap-1.5 justify-center">
               <CheckCircle2 className="h-3 w-3" />
               Avatar uploaded

@@ -83,6 +83,34 @@ SELECT USING (
         AND auth.role () = 'authenticated'
     );
 
+-- Allow users to upload a temp avatar during onboarding (before profile is active)
+CREATE POLICY "users: upload temp avatar"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
+CREATE POLICY "users: select own temp avatars"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
+CREATE POLICY "users: delete own temp avatars"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = 'temp'
+    AND auth.uid()::text = (storage.foldername(name))[2]
+  );
+
 CREATE POLICY "users: insert own avatar"
   ON storage.objects FOR INSERT
   WITH CHECK (

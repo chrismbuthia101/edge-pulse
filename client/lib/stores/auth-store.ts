@@ -81,7 +81,7 @@ interface AuthActions {
   activateProfile: (userId: string) => Promise<Result<void>>;
   getProfileStatus: (
     userId: string,
-  ) => Promise<{ account_status: AccountStatus }>;
+  ) => Promise<Result<{ account_status: AccountStatus }>>;
   switchOrganization: (organizationId: string) => Promise<Result<void>>;
   refreshSession: () => Promise<void>;
   hasRole: (roles: string[]) => boolean;
@@ -206,22 +206,6 @@ export const useAuthStore = create<AuthStore>()(
 
       initialize: async () => {
         initServices();
-
-        if (typeof window !== "undefined") {
-          const storedHash = sessionStorage.getItem("edgepulse_invite_tokens");
-          if (storedHash) {
-            sessionStorage.removeItem("edgepulse_invite_tokens");
-            const params = new URLSearchParams(storedHash);
-            const accessToken = params.get("access_token");
-            const refreshToken = params.get("refresh_token");
-            if (accessToken) {
-              await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken || "",
-              });
-            }
-          }
-        }
 
         const sessionResult = await authService.getSession();
         if (!sessionResult.success) {
@@ -622,10 +606,7 @@ export const useAuthStore = create<AuthStore>()(
 
       getProfileStatus: async (userId) => {
         initServices();
-        const result = await orgProfileService.getProfileStatus(userId);
-        return result.success
-          ? result.data
-          : { account_status: "PENDING" as AccountStatus };
+        return await orgProfileService.getProfileStatus(userId);
       },
 
       switchOrganization: async (organizationId) => {

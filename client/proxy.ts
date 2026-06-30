@@ -10,6 +10,7 @@ export const config = {
     "/auth/register",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/auth/accept-invite/:path*",
   ],
 };
 
@@ -47,6 +48,7 @@ export async function proxy(req: NextRequest) {
     "/auth/register",
     "/auth/forgot-password",
   ].includes(pathname);
+  const isAcceptInvite = pathname.startsWith("/auth/accept-invite");
   if (!user && pathname.startsWith("/dashboard")) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
@@ -63,7 +65,7 @@ export async function proxy(req: NextRequest) {
       .maybeSingle();
 
     if (!profileError && profile) {
-      if (profile.account_status === "PENDING") {
+      if (profile.account_status === "PENDING" && !isAcceptInvite) {
         if (profile.role === "ORG_ADMIN") {
           const { data: orgData } = await supabase
             .schema("organization")
@@ -85,6 +87,12 @@ export async function proxy(req: NextRequest) {
       }
 
       if (isAuthPage) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/dashboard";
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      if (isAcceptInvite && profile.account_status === "ACTIVE") {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/dashboard";
         return NextResponse.redirect(redirectUrl);

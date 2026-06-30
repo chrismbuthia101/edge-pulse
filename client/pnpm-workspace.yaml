@@ -1,2 +1,5 @@
 allowBuilds:
+  core-js: set this to true or false
+  msw: set this to true or false
   sharp: true
+  unrs-resolver: set this to true or false
