@@ -34,7 +34,7 @@ const initialState = {
 };
 
 type UserStore = typeof initialState & {
-  initialize: (supabaseClient?: SupabaseClient) => void;
+  initialize: (supabaseClient?: SupabaseClient, organizationId?: string) => void;
   setSearchTerm: (term: string) => void;
   setFilterRole: (role: UserRole | "all") => void;
   setFilterStatus: (status: "all" | "active" | "inactive") => void;
@@ -48,29 +48,29 @@ export const useUserStore = create<UserStore>()(
     (set) => ({
       ...initialState,
 
-      initialize: (supabaseClient) => {
-        if (supabaseClient) {
-          orgProfileService = new OrgProfileService(
-            new OrgProfileRepository(supabaseClient),
-          );
-        }
-        set({ status: "loading", error: null, loading: true });
+  initialize: (supabaseClient?: SupabaseClient, organizationId?: string) => {
+    if (supabaseClient) {
+      orgProfileService = new OrgProfileService(
+        new OrgProfileRepository(supabaseClient),
+      );
+    }
+    set({ status: "loading", error: null, loading: true });
 
-        orgProfileService.getProfilesWithUsers({}).then((result) => {
-          if (!result.success) {
-            set({ error: result.error, status: "error", loading: false });
-            return;
-          }
-          const users = result.data.map((p) => ({
-            id: p.user_id,
-            full_name: p.user?.full_name ?? "Unknown",
-            role: p.role,
-            account_status: p.account_status,
-            created_at: p.joined_at,
-          }));
-          set({ users, status: "success", loading: false });
-        });
-      },
+    orgProfileService.getProfilesWithUsers(organizationId ? { organizationId } : {}).then((result) => {
+      if (!result.success) {
+        set({ error: result.error, status: "error", loading: false });
+        return;
+      }
+      const users = result.data.map((p) => ({
+        id: p.user_id,
+        full_name: p.user?.full_name ?? "Unknown",
+        role: p.role,
+        account_status: p.account_status,
+        created_at: p.joined_at,
+      }));
+      set({ users, status: "success", loading: false });
+    });
+  },
 
       setSearchTerm: (searchTerm) => set({ searchTerm }),
 

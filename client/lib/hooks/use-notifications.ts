@@ -193,6 +193,8 @@ export function useNotifications() {
     router.push("/dashboard/notifications");
   }, [router]);
 
+  const avatarUrl = authUser?.avatar_url ?? null;
+
   return {
     user: authUser
       ? {
@@ -202,6 +204,7 @@ export function useNotifications() {
       : null,
     initials,
     displayName,
+    avatarUrl,
 
     connStatus,
     queuedCount,

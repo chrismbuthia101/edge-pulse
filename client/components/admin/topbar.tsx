@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
+import Image from "next/image";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -57,6 +58,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
   const {
     initials,
     displayName,
+    avatarUrl,
 
     notifOpen,
     toggleNotifications,
@@ -301,12 +303,22 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-muted/40 transition-colors"
           aria-label="User menu"
         >
-          <div
-            className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
-            aria-label={`User: ${displayName}`}
-          >
-            <span className="text-xs font-bold text-primary-foreground">{initials}</span>
-          </div>
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={displayName}
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
+              aria-label={`User: ${displayName}`}
+            >
+              <span className="text-xs font-bold text-primary-foreground">{initials}</span>
+            </div>
+          )}
           <div className="hidden md:block min-w-0 text-left">
             <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
               {displayName}

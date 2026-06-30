@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DynamicBreadcrumb } from "@/components/dashboard/dynamic-breadcrumb";
+import Image from "next/image";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import type { ConnStatus } from "@/lib/hooks/use-notifications";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -119,6 +120,7 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const {
     initials,
     displayName,
+    avatarUrl,
 
     connStatus,
     queuedCount,
@@ -482,12 +484,22 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps) {
           className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-muted/60 transition-colors"
           aria-label="User menu"
         >
-          <div
-            className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
-            aria-label={`User: ${displayName}`}
-          >
-            <span className="text-xs font-bold text-primary">{initials}</span>
-          </div>
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={displayName}
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-full bg-linear-to-br from-primary to-violet-500 border border-primary/20 flex items-center justify-center shrink-0"
+              aria-label={`User: ${displayName}`}
+            >
+              <span className="text-xs font-bold text-primary">{initials}</span>
+            </div>
+          )}
           <div className="hidden md:block min-w-0 text-left">
             <p className="text-xs font-medium text-foreground leading-none mb-0.5 truncate">
               {displayName}

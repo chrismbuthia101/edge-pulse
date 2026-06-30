@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Network,
   Building2,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,10 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { useOrganizationStore } from "@/lib/stores/organization-store";
+import {
+  useOrganizationStore,
+  organizationService,
+} from "@/lib/stores/organization-store";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
 import { createClient } from "@/lib/config/client";
@@ -142,9 +146,35 @@ export default function SettingsPage() {
   const [orgSlug, setOrgSlug] = useState("");
   const [orgDomain, setOrgDomain] = useState("");
   const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [orgLogoUploading, setOrgLogoUploading] = useState(false);
   const [planTier, setPlanTier] = useState("");
   const [billingCycle, setBillingCycle] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const orgId = profiles[0]?.organization_id;
+    if (!orgId) {
+      toast.error("Unable to determine organization");
+      return;
+    }
+
+    setOrgLogoUploading(true);
+    try {
+      const result = await organizationService.uploadLogo(orgId, file);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to upload logo");
+      }
+      setOrgLogoUrl(result.data);
+      toast.success("Logo uploaded successfully");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Failed to upload logo");
+    } finally {
+      setOrgLogoUploading(false);
+    }
+  };
 
   useEffect(() => {
     const loadOrgData = async () => {
@@ -705,10 +735,10 @@ export default function SettingsPage() {
                     placeholder="example.com"
                   />
                 </div>
-                {orgLogoUrl && (
-                  <div className="space-y-1.5">
-                    <Label>Logo</Label>
-                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <div className="space-y-1.5">
+                  <Label>Logo</Label>
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                    {orgLogoUrl ? (
                       <div className="w-12 h-12 rounded-md overflow-hidden bg-background flex items-center justify-center border border-border/50">
                         <Image
                           src={orgLogoUrl}
@@ -718,15 +748,41 @@ export default function SettingsPage() {
                           height={48}
                         />
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        <p className="font-medium text-foreground">
-                          {orgName} Logo
-                        </p>
-                        <p>Uploaded during organization setup</p>
+                    ) : (
+                      <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center border border-border/50">
+                        <Building2 className="h-6 w-6 text-muted-foreground" />
                       </div>
+                    )}
+                    <div className="flex-1 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">
+                        {orgName} Logo
+                      </p>
+                      <p>{orgLogoUrl ? "Uploaded during organization setup" : "No logo uploaded"}</p>
                     </div>
+                    <input
+                      type="file"
+                      id="logo-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                      disabled={orgLogoUploading}
+                    />
+                    <label htmlFor="logo-upload">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={orgLogoUploading}
+                        asChild
+                      >
+                        <span>
+                          <Upload className="h-3.5 w-3.5 mr-1.5" />
+                          {orgLogoUploading ? "Uploading..." : "Upload"}
+                        </span>
+                      </Button>
+                    </label>
                   </div>
-                )}
+                </div>
               </div>
               <div className="pt-4 border-t border-border space-y-4">
                 <div>

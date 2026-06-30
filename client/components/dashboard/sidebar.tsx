@@ -105,7 +105,7 @@ const navItems: NavGroup[] = [
     ],
   },
   {
-    group: "Org-admin",
+    group: "Management",
     items: [
       {
         icon: Users,

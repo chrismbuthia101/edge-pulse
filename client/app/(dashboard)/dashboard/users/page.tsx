@@ -35,6 +35,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useAuth } from "@/lib/auth/useAuth";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { InviteAnalystDialog } from "@/components/dashboard/invite-analyst-dialog";
 import { UserRole } from "@/lib/types/shared";
 
@@ -51,6 +52,8 @@ const statusColors: Record<string, string> = {
 
 export default function UsersPage() {
   const { user: currentUser, hasRole } = useAuth();
+  const profiles = useAuthStore((s) => s.profiles);
+  const activeOrganizationId = useAuthStore((s) => s.activeOrganizationId);
   const {
     users,
     searchTerm,
@@ -61,12 +64,15 @@ export default function UsersPage() {
     setFilterRole,
     setFilterStatus,
     toggleUserStatus,
+    error,
   } = useUserStore();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    const orgId =
+  activeOrganizationId ?? profiles[0]?.organization_id ?? undefined;
+    initialize(undefined, orgId);
+  }, [initialize, activeOrganizationId, profiles]);
 
   const status = useUserStore((s) => s.status);
   const isLoading = status === "loading";
@@ -185,6 +191,11 @@ export default function UsersPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="mx-6 mb-4 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {error}
+              </div>
+            )}
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
