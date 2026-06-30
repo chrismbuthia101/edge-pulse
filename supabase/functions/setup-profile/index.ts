@@ -47,29 +47,21 @@ serve(async (req: Request) => {
     const user = { id: ctx.userClaims!.id!, email: ctx.userClaims!.email! };
     supabase = ctx.supabaseAdmin;
 
-    const { data: existingProfile, error: profileError } = await supabase
+    const { data: pendingProfiles, error: profileError } = await supabase
       .schema("organization")
       .from("profiles")
-      .select("organization_id, account_status")
+      .select("id, organization_id, account_status")
       .eq("user_id", user.id)
-      .maybeSingle();
+      .eq("account_status", "PENDING");
 
-    if (profileError || !existingProfile) {
+    if (profileError || !pendingProfiles || pendingProfiles.length === 0) {
       return new Response(
-        JSON.stringify({ success: false, error: "Profile not found" }),
+        JSON.stringify({ success: false, error: "No pending profile found" }),
         { status: 404, headers: corsHeaders },
       );
     }
 
-    if (existingProfile.account_status === "ACTIVE") {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Profile is already active",
-        }),
-        { status: 400, headers: corsHeaders },
-      );
-    }
+    const pendingProfile = pendingProfiles[0];
 
     const { username, full_name, avatar_temp_path }: SetupProfileRequest =
       await req.json();
@@ -162,7 +154,7 @@ serve(async (req: Request) => {
       .schema("organization")
       .from("profiles")
       .update({ account_status: "ACTIVE" })
-      .eq("user_id", user.id);
+      .eq("id", pendingProfile.id);
 
     if (activateError) {
       console.error("Profile activation error:", activateError);
@@ -185,7 +177,7 @@ serve(async (req: Request) => {
         resource_id: user.id,
         new_values: { full_name, username, avatar_url },
         severity: "INFO",
-        organization_id: existingProfile.organization_id,
+        organization_id: pendingProfile.organization_id,
       });
 
     return new Response(

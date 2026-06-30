@@ -231,11 +231,6 @@ export default function AcceptInvitePage() {
                     if (!passwordResult.success)
                       throw new Error(passwordResult.error);
 
-                    const currentUser = useAuthStore.getState().user;
-                    if (currentUser) {
-                      await useAuthStore.getState().activateProfile(currentUser.id);
-                    }
-
                     toast.success(
                       "Password set successfully! Redirecting to setup...",
                     );
