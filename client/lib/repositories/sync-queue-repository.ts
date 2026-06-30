@@ -1,5 +1,6 @@
 import type {
   SupabaseClient,
+  RealtimeChannel,
   RealtimePostgresChangesPayload,
 } from "@supabase/supabase-js";
 import type { SyncQueueEntry, DeviceSyncQueueSummary } from "@/lib/types/sync";
@@ -31,6 +32,8 @@ const TABLE_NAME = "sync_queue";
 const SCHEMA = "internal";
 
 export class SyncQueueRepository {
+  private readonly channels = new Map<string, RealtimeChannel>();
+
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
   public async findSyncQueueItems(
@@ -201,10 +204,16 @@ export class SyncQueueRepository {
     callbacks: SyncQueueSubscriptionCallbacks = {},
   ): { data: string | null; error: Error | null } {
     try {
-      const channelName = `realtime-sync-queue-${Date.now()}`;
+      const channelName = "realtime-sync-queue";
       const filterString = this.buildFilterString(filters);
 
-      this.supabaseClient
+      const existing = this.channels.get(channelName);
+      if (existing) {
+        this.supabaseClient.removeChannel(existing);
+        this.channels.delete(channelName);
+      }
+
+      const channel = this.supabaseClient
         .channel(channelName)
         .on(
           "postgres_changes",
@@ -239,6 +248,7 @@ export class SyncQueueRepository {
         )
         .subscribe();
 
+      this.channels.set(channelName, channel);
       return { data: channelName, error: null };
     } catch (error) {
       return {
@@ -256,11 +266,11 @@ export class SyncQueueRepository {
     error: Error | null;
   } {
     try {
-      const channel = this.supabaseClient
-        .getChannels()
-        .find((c) => c.topic === channelName);
+      const name = channelName ?? "realtime-sync-queue";
+      const channel = this.channels.get(name);
       if (channel) {
         this.supabaseClient.removeChannel(channel);
+        this.channels.delete(name);
       }
       return { data: null, error: null };
     } catch (error) {

@@ -1,9 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import type { Device, DeviceQueryOptions, DeviceSubscriptionCallbacks } from "@/lib/types/devices";
 import type { RealtimeDevicePayload } from "@/lib/types/realtime";
 
 export class DeviceRepository {
   private readonly tableName = "devices";
+  private readonly channels = new Map<string, RealtimeChannel>();
 
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
@@ -317,7 +318,15 @@ export class DeviceRepository {
   public subscribeToDeviceUpdates(
     callbacks: DeviceSubscriptionCallbacks = {},
   ): string {
-    const channel = this.supabaseClient.channel("realtime-devices");
+    const channelName = "realtime-devices";
+
+    const existing = this.channels.get(channelName);
+    if (existing) {
+      this.supabaseClient.removeChannel(existing);
+      this.channels.delete(channelName);
+    }
+
+    const channel = this.supabaseClient.channel(channelName);
 
     channel.on(
       "postgres_changes",
@@ -348,17 +357,16 @@ export class DeviceRepository {
       }
     });
 
-    return channel.topic;
+    this.channels.set(channelName, channel);
+    return channelName;
   }
 
   public unsubscribeFromDeviceUpdates(channelName?: string): void {
-    const topic = channelName ?? "realtime-devices";
-    const channel = this.supabaseClient
-      .getChannels()
-      .find((c) => c.topic === topic);
-
+    const name = channelName ?? "realtime-devices";
+    const channel = this.channels.get(name);
     if (channel) {
       this.supabaseClient.removeChannel(channel);
+      this.channels.delete(name);
     }
   }
 }

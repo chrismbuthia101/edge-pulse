@@ -10,7 +10,7 @@ import { createClient } from "@/lib/config/client";
 type Status = "idle" | "loading" | "success" | "error";
 
 let syncQueueService: SyncQueueService | null = null;
-function getSyncQueueService(): SyncQueueService {
+export function getSyncQueueService(): SyncQueueService {
   if (!syncQueueService) {
     syncQueueService = new SyncQueueService(createClient());
   }

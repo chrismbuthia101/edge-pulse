@@ -6,6 +6,7 @@ import { createClient } from "@/lib/config/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useAlertStore } from "@/lib/stores/alert-store";
 import { useDeviceStore } from "@/lib/stores/device-store";
+import { getSyncQueueService } from "@/lib/stores/sync-queue-store";
 
 export type ConnStatus = "live" | "offline" | "syncing";
 
@@ -68,21 +69,23 @@ export function useNotifications() {
     init();
     fetchSyncQueue();
 
-    const supabase = supabaseRef.current;
-    const syncChannel = supabase
-      .channel("realtime-sync-queue")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "internal", table: "sync_queue" },
-        () => {
-          if (!mounted) return;
-          setConnStatus("syncing");
-          fetchSyncQueue().then(() => {
-            if (mounted) setConnStatus("live");
-          });
-        },
-      )
-      .subscribe();
+    const handleSyncChange = () => {
+      if (!mounted) return;
+      setConnStatus("syncing");
+      fetchSyncQueue().then(() => {
+        if (mounted) setConnStatus("live");
+      });
+    };
+
+    const syncQueueService = getSyncQueueService();
+    syncQueueService.subscribeToSyncQueue({
+      onNewItem: handleSyncChange,
+      onItemUpdated: handleSyncChange,
+      onItemDeleted: handleSyncChange,
+      onError: (error) => {
+        console.error("[useNotifications] Sync queue error:", error);
+      },
+    });
 
     const handleOnline = () => {
       setConnStatus("syncing");
@@ -97,7 +100,7 @@ export function useNotifications() {
 
     return () => {
       mounted = false;
-      supabase.removeChannel(syncChannel);
+      syncQueueService.unsubscribeFromSyncQueue();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };

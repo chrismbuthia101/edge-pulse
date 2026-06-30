@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import type {
   DeviceHealthSnapshot,
   DeviceHealthRow,
@@ -8,6 +8,8 @@ import type {
 const TABLE_NAME = "device_health";
 
 export class HealthRepository {
+  private readonly channels = new Map<string, RealtimeChannel>();
+
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
   public async getDeviceHealth(options?: {
@@ -246,7 +248,15 @@ export class HealthRepository {
     onUpdate?: (device: DeviceHealthSnapshot) => void;
     onError?: (error: unknown) => void;
   }): string {
-    const channel = this.supabaseClient.channel("realtime-health");
+    const channelName = "realtime-health";
+
+    const existing = this.channels.get(channelName);
+    if (existing) {
+      this.supabaseClient.removeChannel(existing);
+      this.channels.delete(channelName);
+    }
+
+    const channel = this.supabaseClient.channel(channelName);
 
     channel.on(
       "postgres_changes",
@@ -275,17 +285,16 @@ export class HealthRepository {
       }
     });
 
-    return channel.topic;
+    this.channels.set(channelName, channel);
+    return channelName;
   }
 
   public unsubscribeFromHealthUpdates(channelName?: string): void {
-    const topic = channelName ?? "realtime-health";
-    const channel = this.supabaseClient
-      .getChannels()
-      .find((c) => c.topic === topic);
-
+    const name = channelName ?? "realtime-health";
+    const channel = this.channels.get(name);
     if (channel) {
       this.supabaseClient.removeChannel(channel);
+      this.channels.delete(name);
     }
   }
 }

@@ -30,6 +30,7 @@ export class LiveRepository {
   private readonly eventsTable = "events";
   private readonly alertsSchema = "public";
   private readonly telemetrySchema = "telemetry";
+  private readonly channels = new Map<string, RealtimeChannel>();
 
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
@@ -163,6 +164,12 @@ export class LiveRepository {
 
     try {
       const alertChannelName = "live-feed-alerts";
+      const existingAlert = this.channels.get(alertChannelName);
+      if (existingAlert) {
+        this.supabaseClient.removeChannel(existingAlert);
+        this.channels.delete(alertChannelName);
+      }
+
       const alertChannel: RealtimeChannel = this.supabaseClient
         .channel(alertChannelName)
         .on(
@@ -191,8 +198,15 @@ export class LiveRepository {
             onStatusChange?.(status === "SUBSCRIBED");
           }
         });
+      this.channels.set(alertChannelName, alertChannel);
 
       const telemetryChannelName = "live-feed-telemetry";
+      const existingTelemetry = this.channels.get(telemetryChannelName);
+      if (existingTelemetry) {
+        this.supabaseClient.removeChannel(existingTelemetry);
+        this.channels.delete(telemetryChannelName);
+      }
+
       const telemetryChannel: RealtimeChannel = this.supabaseClient
         .channel(telemetryChannelName)
         .on(
@@ -217,6 +231,7 @@ export class LiveRepository {
           },
         )
         .subscribe();
+      this.channels.set(telemetryChannelName, telemetryChannel);
 
       return {
         data: {
@@ -237,10 +252,12 @@ export class LiveRepository {
   }
 
   public unsubscribeFromLiveFeed(handles: LiveSubscriptionHandles): void {
-    const channels = this.supabaseClient.getChannels();
     for (const handle of Object.values(handles)) {
-      const channel = channels.find((c) => c.topic === handle);
-      if (channel) this.supabaseClient.removeChannel(channel);
+      const channel = this.channels.get(handle);
+      if (channel) {
+        this.supabaseClient.removeChannel(channel);
+        this.channels.delete(handle);
+      }
     }
   }
 }
