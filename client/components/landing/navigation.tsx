@@ -11,10 +11,12 @@ import {
 import { Menu, X, Zap } from "lucide-react";
 
 const navItems = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Security", href: "#security" },
-  { label: "About", href: "#about" },
+  { label: "Features", href: "/#features" },
+  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Security", href: "/#security" },
+  { label: "About", href: "/#about" },
+  { label: "Documentation", href: "/docs" },
+  { label: "Downloads", href: "/downloads" },
 ];
 
 const itemVariants = {
@@ -31,12 +33,6 @@ export function Navigation() {
   useEffect(() => {
     return scrollY.on("change", (v) => setScrolled(v > 60));
   }, [scrollY]);
-
-  const handleNavClick = (href: string) => {
-    const el = document.querySelector(href);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    setMobileOpen(false);
-  };
 
   return (
     <nav
@@ -72,14 +68,14 @@ export function Navigation() {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-1" role="menubar">
             {navItems.map((item) => (
-              <button
+              <Link
                 key={item.href}
+                href={item.href}
                 role="menuitem"
-                onClick={() => handleNavClick(item.href)}
                 className="px-4 py-2 text-sm font-medium text-(--landing-text-secondary) hover:text-(--landing-text) rounded-lg hover:bg-(--landing-card-hover) transition-all duration-200 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 {item.label}
-              </button>
+              </Link>
             ))}
           </div>
 
@@ -137,12 +133,13 @@ export function Navigation() {
                   key={item.href}
                   variants={prefersReducedMotion ? {} : itemVariants}
                 >
-                  <button
-                    onClick={() => handleNavClick(item.href)}
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
                     className="block w-full text-left px-4 py-3 text-sm text-(--landing-text-secondary) hover:text-(--landing-text) hover:bg-(--landing-card-hover) rounded-lg transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
                   >
                     {item.label}
-                  </button>
+                  </Link>
                 </motion.div>
               ))}
               <div className="pt-3 border-t border-(--landing-border) flex flex-col gap-2">

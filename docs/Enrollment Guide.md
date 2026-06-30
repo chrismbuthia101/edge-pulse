@@ -15,7 +15,7 @@ Device enrollment registers an EdgePulse agent with the EdgePulse cloud backend.
 
 ### Quick Start (Recommended)
 
-If `supabase_url` was baked in at build time:
+Obtain an enrollment token from **Dashboard → Devices → Enroll Device**:
 
 ```bash
 sudo edge-agent enroll <ENROLLMENT_TOKEN>
@@ -85,7 +85,7 @@ sudo systemctl status edgepulse-agent
 ## Unenrollment
 
 1. Stop the agent: `sudo systemctl stop edgepulse-agent`
-2. Delete stored credentials: `sudo rm -f ~/.edgepulse/credentials.enc`
+2. Delete stored credentials: `sudo rm -f /var/lib/edgepulse/.credentials/credentials.enc`
 3. The device can be re-enrolled with a new token
 
 ## Configuration Files

@@ -42,12 +42,12 @@ const socialLinks = [
       </svg>
     ),
     label: "Follow us on GitHub",
-    href: "https://github.com/edgepulse",
+    href: "https://github.com/chrismbuthia101/edge-pulse",
   },
   {
     icon: X,
     label: "Follow us on Twitter",
-    href: "https://twitter.com/edgepulse",
+    href: "https://x.com/chris_waigi",
   },
   {
     icon: () => (
@@ -56,7 +56,7 @@ const socialLinks = [
       </svg>
     ),
     label: "Follow us on LinkedIn",
-    href: "https://linkedin.com/company/edgepulse",
+    href: "https://www.linkedin.com/in/christopher-mbuthia-mboyi/",
   },
 ];
 

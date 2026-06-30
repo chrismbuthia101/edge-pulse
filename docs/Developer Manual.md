@@ -2,10 +2,10 @@
 
 ## Architecture Overview
 
-EdgePulse is a Next.js 16 (App Router) frontend backed by Supabase (Postgres + Auth + Realtime). A Python edge agent runs on monitored devices, syncs telemetry and anomaly scores, and communicates via Supabase REST/Realtime. All auth is handled by Supabase Auth with optional Google OAuth.
+EdgePulse is a Next.js 16 (App Router) frontend backed by Supabase (Postgres + Auth + Realtime). A Python edge agent runs on monitored devices, collects system signals, runs ML anomaly detection, and syncs alerts via Supabase REST/Realtime.
 
 ```
-Browser (Next.js)
+Browser (Next.js 16)
     ↕ Supabase JS SDK
 Supabase (Auth · Postgres · Realtime · Edge Functions)
     ↕ REST / webhook
@@ -17,71 +17,68 @@ Python Edge Agent (device-side ML inference)
 ## Repository Structure
 
 ```
-edge-agent/          Python agent (collection, detection, logging)
+edge-agent/          Python agent (collection, detection, sync)
   src/
-    edgepulse/       Main package
-      alerts/        Alert management
+    edgepulse/
+      agent/         Agent orchestration
       analysis/      Analysis utilities
-      api/           API server
-      auth/          Authentication
-      collectors/    Data collectors
-      config/        Configuration management
-      core/          Core utilities
-      detectors/     Anomaly detectors
+      api/           FastAPI-based API server (port 8080)
+      auth/          Device authentication
+      config/        Pydantic-settings based configuration
+      data/          SQL schema files
+      detectors/     Anomaly detectors (Isolation Forest, Autoencoder)
       features/      Feature engineering
-      platform/      Platform-specific code
-      shared/        Shared components
-      storage/       Data persistence
-      sync/          Sync mechanisms
+      models/        ML model artifacts
+      pipeline/      Collection pipeline
+      platform/      Platform-specific code (Linux, Windows)
+      registry/      Device registry
+      storage/       Persistent storage (SQLite via aiosqlite)
+      sync/          Cloud sync to Supabase
       utils/         General utilities
-    data/            Data files
-    models/          ML model files
-  packaging/         Distribution packaging
-    linux/           Debian/RPM builds
-    windows/         Windows installer
+    models/          Pre-trained model file
+  packaging/
+    linux/           Debian/RPM build scripts
+    windows/         NSIS installer and PyInstaller spec
 
-client/              Next.js frontend
+client/              Next.js 16 frontend
   app/
     (auth)/          Login, register, forgot/reset password
     (dashboard)/     All dashboard pages
       dashboard/
-        alerts/      Alert management
-        assignments/ Device assignments
-        cases/       Incident cases
-        devices/     Device management
-        explainability/ ML explainability
-        health/      System health
-        insights/    ML insights (admin only)
-        integrity/   Log integrity
-        live/        Real-time monitoring
-        logs/        Tamper-evident logs
-        notifications/ Notification settings
-        reports/     Reports generation
-        resilience/  System resilience
-        settings/    User settings
+        alerts/      Alert management + detail view
+        assignments/ Device-to-analyst assignments
+        audit-log/   Tamper-evident log viewer
+        devices/     Device fleet management + detail view
+        live/        Real-time event feed
+        ml-insights/ ML model performance (admin only)
+        notifications/ Notification center
+        reports/     Report generation hub (6 sub-reports)
+        settings/    User settings (8 tabs)
         users/       User management (admin only)
+        xai/         Explainable AI comparison
+    (onboarding)/    Organization setup flows
+    admin/           Super-admin pages
+    docs/            Documentation pages
+    downloads/       Downloads page with dynamic release data
   components/
-    charts/          Chart components (ShapChart.tsx)
-    dashboard/       Feature components (sidebar, topbar, charts, panels)
+    charts/          Chart components (ShapChart.tsx, etc.)
+    dashboard/       Sidebar, topbar, charts, panels
+    docs/            Documentation page components
     landing/         Marketing page components
     ui/              shadcn/ui primitives + custom components
   lib/
-    auth/            useAuth hook
-    config/          Configuration files
-    hooks/           use-alerts, use-measure, use-notifications, etc.
+    auth/            useAuth hook, AuthBootstrap
+    hooks/           Custom React hooks
     repositories/    Data access layer (one file per domain)
-    services/        Business logic (one file per domain)
-    supabase/        client.ts, server.ts, type definitions
-  stores/            Zustand stores (one per domain)
-
-docs/                Documentation
-  Enrollment Guide.md
-  Packaging Guide.md
-  Developer Manual.md
+    services/        Business logic layer
+    stores/          Zustand stores (one per domain)
+    supabase/        Client/server config + types
 
 supabase/            Supabase configuration
-  functions/         Edge functions
-  migrations/          Database migrations
+  functions/         8 Edge Functions (Deno)
+  migrations/        3 migration files
+
+docs/                Documentation (markdown)
 ```
 
 ---
@@ -94,11 +91,11 @@ supabase/            Supabase configuration
 | Styling | Tailwind CSS v4, CSS variables for theming |
 | Components | shadcn/ui (Radix primitives) |
 | Animation | Framer Motion |
-| State | Zustand (one store per domain) |
+| State | Zustand (one store per domain, ~17 stores) |
 | Backend | Supabase (Auth, Postgres, Realtime) |
 | Charts | Recharts |
 | Toasts | Sonner |
-| Fonts | Syne (display), IBM Plex Sans, IBM Plex Mono |
+| Fonts | Plus Jakarta Sans, IBM Plex Mono |
 
 ---
 
@@ -106,9 +103,10 @@ supabase/            Supabase configuration
 
 ### Prerequisites
 
-- Node.js 16+
+- Node.js 18+
 - pnpm (package manager)
 - A Supabase project
+- Docker (for local Supabase)
 
 ### Install & run
 
@@ -128,44 +126,105 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
 ---
 
-## Authentication
+## Authentication & Authorization
 
-Auth is fully Supabase-backed. The flow is:
+Auth is fully Supabase-backed with hCaptcha bot protection.
 
-1. `supabase.auth.signInWithPassword` / `signInWithOAuth` in `login/page.tsx`
-2. OAuth callback handled by `app/(auth)/auth/callback/route.ts` — exchanges the code for a session, then redirects to `next` param or `/dashboard`
-3. Session state is read in `lib/auth/useAuth.tsx` and exposed app-wide
-4. Role (`ADMINISTRATOR` / `ANALYST`) is stored in the `analyst_users` table and read via `useAuthStore`
+### Auth Flow
+
+1. `supabase.auth.signInWithPassword` / `signInWithOAuth({ provider: "google" })` in `login/page.tsx`
+2. OAuth callback handled by `app/(auth)/auth/callback/route.ts` — exchanges code for a session, redirects to `/auth/resolve`
+3. Session state is read in `lib/auth/useAuth.tsx` and exposed app-wide via `AuthBootstrap`
+4. Role (`ORG_ADMIN` / `ORG_ANALYST`) is stored in the `analyst_users` table and read into `auth-store`
 5. New users land in a **Pending** state until an admin approves them in `/dashboard/users`
 
-Route protection lives in `dashboard/layout.tsx`: unapproved users see a "Pending Approval" screen instead of the dashboard.
+### Roles
+
+| Role | Access |
+|------|--------|
+| `ORG_ADMIN` | Full system access — all devices, all alerts, ML Insights, user management, system settings, device assignments |
+| `ORG_ANALYST` | Scoped to assigned devices only — can investigate alerts, view SHAP explanations, access audit log |
+
+Route protection lives in `dashboard/layout.tsx`: unauthenticated users are redirected to login; unapproved users see a "Pending Approval" screen.
+
+---
+
+## Dashboard Routes Reference
+
+### Overview Group
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard` | Main dashboard with stat cards, 24h anomaly chart, resolution gauge, severity distribution, priority alert feed |
+| `/dashboard/live` | Real-time event feed with filtering, pause/resume, CSV export |
+
+### Detection Group
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard/alerts` | Alert management with search, filtering, bulk actions, SHAP explainability |
+| `/dashboard/alerts/[alert_id]` | Individual alert detail with full SHAP feature attribution |
+| `/dashboard/devices` | Device fleet management with states, risk levels, enrollment, isolation |
+| `/dashboard/devices/[id]` | Individual device detail |
+
+### Intelligence Group (role-gated)
+
+| Route | Roles | Description |
+|-------|-------|-------------|
+| `/dashboard/ml-insights` | ORG_ADMIN | Model performance, SHAP importance, real-time model health |
+| `/dashboard/xai` | ORG_ADMIN, ORG_ANALYST | XAI comparison (SHAP, LIME, Isolation Forest) |
+
+### System Group
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard/audit-log` | Tamper-evident log viewer with hash-chain verification |
+| `/dashboard/notifications` | Notification center with unread tracking |
+
+### Administration Group (ORG_ADMIN only)
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard/users` | User management with invites, role assignment, status toggling |
+| `/dashboard/assignments` | Device-to-analyst assignment management |
+| `/dashboard/reports` | Report generation hub with 6 sub-reports |
+| `/dashboard/settings` | User settings with 8 tabs |
+
+### Report Sub-Routes
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard/reports/alert-analysis` | Alert analysis with severity breakdown, time-series, PDF export |
+| `/dashboard/reports/device-fleet` | OS distribution, risk profile, online/offline stats |
+| `/dashboard/reports/executive-summary` | Key metrics, incidents, resolution rates, PDF/CSV export |
+| `/dashboard/reports/integrity-audit` | Hash chain verification, integrity check timeline |
+| `/dashboard/reports/ml-performance` | Accuracy/precision/recall/f1, confusion matrix, feature importance |
+| `/dashboard/reports/user-management` | Active/inactive counts, role distribution, recent activity |
 
 ---
 
 ## State Management
 
-Each domain has its own Zustand store in `stores/`:
+Each domain has its own Zustand store in `stores/`. Stores call services/repositories directly.
 
 | Store | Purpose |
 |-------|---------|
+| `admin-store` | Admin view data |
 | `alert-store` | Alerts list, pending count, bulk actions |
+| `anomaly-store` | Anomaly data |
 | `auth-store` | Current user, role |
-| `case-store` | Incident cases and notes |
+| `device-assignment-store` | Device-assignment mappings |
 | `device-enrollment-store` | Device enrollment state |
 | `device-store` | Device fleet, isolation, refresh |
 | `health-store` | System health metrics |
 | `live-store` | Real-time event feed |
-| `log-integrity-store` | Log integrity verification |
 | `logs-store` | Tamper-evident log entries |
-| `privacy-store` | Privacy mode settings |
+| `notification-store` | Notifications |
+| `organization-store` | Organization settings |
 | `report-store` | Report generation state |
-| `retention-store` | Data retention settings |
 | `sync-queue-store` | Sync queue management |
-| `threshold-store` | Detection thresholds |
-| `ui-store` | UI state |
-| `user-store` | User management state |
-
-Stores call repositories directly for data access and expose methods that components call. Components should **not** call repositories directly.
+| `ui-store` | UI state (sidebar, theme, etc.) |
+| `user-store` | User management |
 
 ---
 
@@ -175,234 +234,52 @@ Stores call repositories directly for data access and expose methods that compon
 Component → Store → Service → Repository → Supabase
 ```
 
-- **Repository** (`lib/repositories/`) — raw Supabase queries, returns typed data
-- **Service** (`lib/services/`) — business logic, orchestrates repositories
-- **Store** (`stores/`) — holds UI state, calls services/repos, exposes actions
+- **Repository** (`lib/repositories/`) — raw Supabase queries, returns typed data (19 files)
+- **Service** (`lib/services/`) — business logic, orchestrates repositories (19 files)
+- **Store** (`stores/`) — holds UI state, calls services/repos, exposes actions (17 files)
 - **Component** — subscribes to store, calls store actions
-
-### Repository Files
-
-- `alert-repository.ts` — Alert queries and mutations
-- `anomaly-repository.ts` — Anomaly data access
-- `auth-repository.ts` — Authentication queries
-- `base-repository.ts` — Base repository class
-- `case-repository.ts` — Case management
-- `device-assignment-repository.ts` — Device assignments
-- `device-data-repository.ts` — Device telemetry data
-- `device-enrollment-repository.ts` — Device enrollment
-- `device-repository.ts` — Device CRUD operations
-- `forensic-repository.ts` — Forensic data export
-- `health-repository.ts` — System health data
-- `live-repository.ts` — Real-time data
-- `logs-repository.ts` — Tamper-evident logs
-- `privacy-repository.ts` — Privacy settings
-- `report-repository.ts` — Reports
-- `retention-repository.ts` — Data retention
-- `sync-queue-repository.ts` — Sync queue
-- `threshold-repository.ts` — Threshold management
-- `user-repository.ts` — User management
-
-### Service Files
-
-- `alert-service.ts` — Alert business logic
-- `anomaly-service.ts` — Anomaly processing
-- `auth-service.ts` — Authentication logic
-- `case-service.ts` — Case workflows
-- `device-data-service.ts` — Device data processing
-- `device-enrollment-service.ts` — Enrollment flows
-- `device-service.ts` — Device management
-- `forensic-service.ts` — Forensic exports
-- `health-service.ts` — Health monitoring
-- `live-service.ts` — Real-time updates
-- `log-integrity-service.ts` — Log verification
-- `logs-service.ts` — Log management
-- `privacy-service.ts` — Privacy controls
-- `report-service.ts` — Report generation
-- `retention-service.ts` — Retention policies
-- `sync-queue-service.ts` — Queue processing
-- `telemetry-service.ts` — Telemetry handling
-- `threshold-service.ts` — Threshold logic
-- `user-service.ts` — User operations
-
----
-
-## Adding a New Page
-
-1. Create `app/(dashboard)/dashboard/your-page/page.tsx`
-2. Add a nav entry in `components/dashboard/sidebar.tsx` under `navItems` (include `roles` array if restricted)
-3. Add a breadcrumb entry in `components/dashboard/dynamic-breadcrumb.tsx` if needed
-4. Create a Zustand store in `stores/your-store.ts` if the page has its own data
-5. Create repository/service files if new Supabase tables are involved
-
----
-
-## Roles & Access Control
-
-Roles are checked with the `hasRole(roles[])` helper from `useAuth`. Use it in:
-- Sidebar nav items (`roles` field filters items per user)
-- Page-level guards (`if (!hasRole(['ADMINISTRATOR'])) return <AccessDenied />`)
-- Conditional UI (e.g., showing admin-only buttons)
-
-Roles are stored in `analyst_users.role` and read after login.
-
-### Role Definitions
-
-**ADMINISTRATOR:**
-- Full system access
-- Can see all devices (assigned/unassigned)
-- Can see all alerts across all devices
-- Can manage device assignments
-- Can access ML Insights
-- Can manage users and system settings
-- Can view all telemetry and forensic data
-
-**ANALYST:**
-- Scoped access to assigned devices only
-- Can only see alerts from assigned devices
-- Cannot access ML Insights (admin-only feature)
-- Cannot manage users or system settings
-- Can view telemetry and forensic data for assigned devices only
-- Can create and manage cases for assigned devices
-
----
-
-## Theming
-
-CSS variables are defined in `app/globals.css` under `:root` (light) and `.dark`. The variable naming follows shadcn/ui conventions (`--primary`, `--muted`, `--destructive`, etc.). Custom additions include `--grid-light` / `--grid-dark` for the background grid pattern and `--alert-*` for severity colors.
-
-The `ThemeProvider` from `next-themes` wraps the app in `layout.tsx`.
-
----
-
-## Key Components
-
-### `AlertFeed` (`components/dashboard/alert-feed.tsx`)
-Subscribes to `useAlerts` hook. Renders a filterable, expandable list with inline resolve/dismiss actions. Uses `AnimatePresence` for animated entry/exit.
-
-### `AlertRow` (`components/dashboard/alert-row.tsx`)
-Individual alert row component with expand/collapse, SHAP visualization, and action buttons.
-
-### `ShapPanel` (`components/dashboard/shap-panel.tsx`)
-Reads the latest alert with `explanation_json.features` from the alert store. Renders feature attribution bars using Framer Motion. Positive contributions (red) increase the anomaly score; negative (blue) decrease it.
-
-### `Sidebar` (`components/dashboard/sidebar.tsx`)
-Collapsible (68px / 240px). State persisted to `localStorage`. Mobile overlay handled via `mobileSidebarOpen` prop. Filters nav items by user role.
-
-### `Topbar` (`components/dashboard/topbar.tsx`)
-Header with notifications, user menu, theme toggle, and search functionality.
-
-### `DynamicBreadcrumb` (`components/dashboard/dynamic-breadcrumb.tsx`)
-Context-aware breadcrumb navigation based on current route.
-
-### `ThreatChart` (`components/dashboard/threat-chart.tsx`)
-Falls back to static datasets if the alert store is empty. Builds a live 24h bucket chart from store alerts using `useMemo`.
-
-### `SystemHealth` (`components/dashboard/system-health.tsx`)
-Real-time system health monitoring with status indicators.
-
-### `DeviceEnrollment` (`components/dashboard/device-enrollment.tsx`)
-Device onboarding and enrollment management UI.
-
-### `SyncQueuePanel` (`components/dashboard/sync-queue-panel.tsx`)
-Displays pending sync operations and queue status.
-
-### `LogIntegrityPanel` (`components/dashboard/log-integrity-panel.tsx`)
-Shows tamper-evident log verification status.
-
----
-
-## Hooks
-
-Custom hooks in `lib/hooks/`:
-
-- `use-alerts.ts` — Alert data fetching and real-time updates
-- `use-measure.ts` — DOM element measurement
-- `use-notifications.ts` — Notification management
-- `use-page-visibility.ts` — Page visibility API wrapper
-- `use-reduced-motion.ts` — Accessibility preference detection
-
----
-
-## UI Components
-
-### Dashboard Components
-
-- `agent-performance.tsx` — Agent performance metrics
-- `attack-category-chart.tsx` — Attack categorization visualization
-- `detection-threshold-slider.tsx` — Threshold adjustment UI
-- `device-assignment-manager.tsx` — Device assignment interface
-- `dynamic-threat-level.tsx` — Threat level indicator
-- `forensic-export.tsx` — Forensic data export UI
-- `model-performance.tsx` — ML model metrics
-- `network-topology.tsx` — Network visualization
-- `online-offline-detection.tsx` — Device connectivity status
-- `privacy-mode-indicator.tsx` — Privacy mode status
-- `purge-device-data.tsx` — Data purging interface
-- `sync-queue-status.tsx` — Sync status display
-- `telemetry-retention.tsx` — Retention policy UI
-
-### Chart Components
-
-- `ShapChart.tsx` — SHAP value visualization using Recharts
-
----
-
-## ML & Explainability
-
-The Python agent runs an Isolation Forest model locally. SHAP values are computed per-inference and stored as `explanation_json` on alert records. The `ShapPanel`, `ExplainabilityPage`, and `InsightsPage` all consume this field.
-
-The model file lives at `edge-agent/src/models/edgepulse_primary_isolation_forest.joblib`.
-
-The `ShapChart` component (`components/charts/ShapChart.tsx`) renders a horizontal Recharts `BarChart` coloured by `contribution_type`.
 
 ---
 
 ## Edge Agent Development
 
-### Setup
+### Agent Setup
 
 ```bash
 cd edge-agent
-
-# Install dependencies
-make install          # Core dependencies
-make install-all      # All optional extras
-
-# Create environment file
-cp .env.example .env
+make install              # Core dependencies
+cp .env.example .env      # Create environment file
 ```
 
 ### Running
 
 ```bash
-# Development mode with debug logging
-make dev
+make dev   # Development mode with DEBUG logging
+make run   # Production mode with INFO logging
 
-# Production mode
-make run
-
-# Or using Poetry directly
-poetry run edge-agent run --verbose
+# Or using Python directly
+python -m edgepulse run --verbose
 ```
 
 ### Quality Commands
 
 ```bash
 make test        # Run test suite
-make lint        # Run black (check) + mypy
-make fmt         # Auto-format with black
+make lint        # black (check) + ruff + mypy
+make fmt         # Auto-format with black + ruff
 make typecheck   # mypy only
 make clean       # Remove cache files
+make audit       # pip-audit on dependencies
 ```
 
 ### Service Management
 
 ```bash
-make service-install   # Install as system service
+make service-install   # Install as systemd service
 make service-start     # Start the service
 make service-stop      # Stop the service
-make service-status    # Show service status
-make service-logs      # Tail service logs
+make service-status    # Show status
+make service-logs      # Tail logs
 ```
 
 ### Enrollment
@@ -415,12 +292,12 @@ make enroll        # Enroll device with EdgePulse backend
 
 ## Packaging the Agent
 
-| Target | Command |
-|--------|---------|
-| Python wheel | `make wheel` |
-| Debian .deb | `make deb` |
-| RPM .rpm | `make rpm` |
-| Windows .exe | `make windows` |
+| Target | Command | Output |
+|--------|---------|--------|
+| Python wheel | `make wheel` | `dist/edge_agent-*.whl` |
+| Debian .deb | `make deb` | `packaging/dist/edgepulse-agent_*_amd64.deb` |
+| RPM .rpm | `make rpm` | `packaging/dist/edgepulse-agent-*.x86_64.rpm` |
+| Windows .exe | `make windows` | `packaging/dist/EdgePulse-Agent-Setup-*.exe` |
 
 See `docs/Packaging Guide.md` for full details.
 
@@ -431,8 +308,9 @@ See `docs/Packaging Guide.md` for full details.
 ```bash
 # Frontend
 cd client
-pnpm lint
-pnpm build      # catches type errors
+pnpm lint         # ESLint
+pnpm typecheck    # TypeScript check
+pnpm build        # Full production build
 
 # Agent
 cd edge-agent
@@ -445,11 +323,11 @@ make lint
 
 ## Common Pitfalls
 
-- **`useAlertStore.getState()`** is used inside event handlers and non-hook contexts (e.g., `handleResolve`). This is intentional — do not convert these to hook calls inside callbacks.
 - **Supabase client vs server**: `lib/supabase/client.ts` is for client components; `lib/supabase/server.ts` uses `cookies()` for server components and route handlers.
-- **`explanation_json` is sometimes stringified**: The alert detail page double-parses it (`JSON.parse(JSON.stringify(...))`) — be careful not to double-serialize when writing new code.
-- **pnpm workspace**: The project uses pnpm. Use `pnpm install` instead of `npm install`.
-- **Role checking**: Always use `hasRole()` from `useAuth` for role checks, not direct role string comparison.
+- **`useAlertStore.getState()`** is used inside event handlers and non-hook contexts — this is intentional, do not convert to hook calls inside callbacks.
+- **`explanation_json` is sometimes stringified**: The alert detail page double-parses it (`JSON.parse(JSON.stringify(...))`) — avoid double-serializing.
+- **pnpm workspace**: Always use `pnpm install`, never `npm install`.
+- **Role checking**: Use `hasRole()` from `useAuth` — never direct role string comparison.
 
 ---
 
@@ -457,14 +335,25 @@ make lint
 
 ### Edge Agent
 
-| Variable | Description |
-|----------|-------------|
-| `DEVICE_ID` | Unique device identifier |
-| `API__PORT` | API server port (default: 8080) |
-| `COLLECTION_INTERVAL` | Data collection interval in seconds |
-| `DETECTION__THRESHOLD` | Anomaly detection sensitivity (0.0-1.0) |
-| `SYNC__ENABLED` | Enable cloud sync to Supabase |
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEVICE_ID` | auto | Unique device identifier |
+| `SUPABASE_URL` | — | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | Service role key for sync |
+| `API__PORT` | 8080 | Local API server port |
+| `COLLECTION__INTERVAL` | 60 | Collection interval (seconds) |
+| `FEATURES__FEATURE_DIMENSION` | 50 | Feature vector dimension |
+| `FEATURES__HISTORY_RETENTION_HOURS` | 24 | Feature history window |
+| `DETECTION__USE_ENSEMBLE` | true | Use ensemble of detectors |
+| `DETECTION__ISOLATION_FOREST_N_ESTIMATORS` | 100 | Number of Isolation Forest trees |
+| `ALERTING__MIN_SEVERITY` | medium | Minimum severity to alert |
+| `ALERTING__CORRELATION_WINDOW` | 300 | Alert correlation window (seconds) |
+| `SYNC__BATCH_SIZE` | 50 | Sync batch size |
+| `SYNC__OFFLINE_QUEUE_MAX` | 10000 | Max offline queue entries |
+| `SYNC__RETRY_MAX_ATTEMPTS` | 5 | Max retry attempts |
+| `PRIVACY__DATA_RETENTION_DAYS` | 30 | Local data retention (days) |
+| `LOG__LEVEL` | INFO | Logging level |
+| `METRICS__COLLECTION_INTERVAL` | 30 | Metrics interval (seconds) |
 
 ### Client
 

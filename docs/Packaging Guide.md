@@ -68,7 +68,7 @@ git-ignored and is created automatically by each build script.
 
 ### Common (all platforms)
 
-- **Python 3.9–3.12** with `pip` ≥ 23
+- **Python 3.11–3.13** with `pip` ≥ 23
 - **Make** — standard on Linux/macOS, install via `choco install make` on Windows
 
 ### Wheel only
@@ -238,7 +238,7 @@ overrides the default without causing a "macro already defined" compile error.
 1. **Update the version** in `edge-agent/pyproject.toml`:
 
    ```toml
-   [tool.poetry]
+   [project]
    version = "1.2.3"
    ```
 
@@ -401,11 +401,11 @@ instead, the `pyproject.toml` include path is wrong — it must point at
 
 ```toml
 # edge-agent/pyproject.toml
-[tool.poetry]
-packages = [{include = "edgepulse", from = "src"}]
-include = [
-    {path = "src/edgepulse/data/*.sql", format = ["sdist", "wheel"]},
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+edgepulse = ["data/*.sql"]
 ```
 
 `Database` (`edgepulse/storage/database.py`) resolves the schema at runtime via
