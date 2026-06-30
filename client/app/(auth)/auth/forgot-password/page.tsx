@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Mail, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
@@ -21,13 +22,18 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [focusedField, setFocusedField] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
 
     const redirectTo = `${window.location.origin}/auth/reset-password`;
-    const result = await useAuthStore.getState().resetPassword(email, redirectTo);
+    const result = await useAuthStore.getState().resetPassword(email, redirectTo, captchaToken ?? undefined);
+
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
 
     if (!result.success) {
       toast.error(result.error ?? "Failed to send reset email");
@@ -117,10 +123,16 @@ export default function ForgotPasswordPage() {
                     </p>
                     </div>
 
+                    <HCaptcha
+                      ref={captchaRef}
+                      sitekey={process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY!}
+                      onVerify={(token) => setCaptchaToken(token)}
+                    />
+
                     <Button
                       type="submit"
                       className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200"
-                      disabled={isLoading || !email}
+                      disabled={isLoading || !email || !captchaToken}
                     >
                       {isLoading ? (
                         <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

@@ -59,7 +59,7 @@ interface AuthState {
 
 interface AuthActions {
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<Result<void>>;
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<Result<void>>;
   signInWithGoogle: (redirectTo?: string) => Promise<Result<void>>;
   signInWithOAuth: (
     provider: Provider,
@@ -70,8 +70,9 @@ interface AuthActions {
     password: string,
     fullName: string,
     redirectTo?: string,
+    captchaToken?: string,
   ) => Promise<Result<void>>;
-  resetPassword: (email: string, redirectTo?: string) => Promise<Result<void>>;
+  resetPassword: (email: string, redirectTo?: string, captchaToken?: string) => Promise<Result<void>>;
   updatePassword: (password: string) => Promise<Result<void>>;
   signOut: () => Promise<Result<void>>;
   updateProfile: (
@@ -320,14 +321,14 @@ export const useAuthStore = create<AuthStore>()(
 
       clearError: () => set({ error: null }, undefined, "auth/clearError"),
 
-      signIn: async (email, password) => {
+      signIn: async (email, password, captchaToken?) => {
         initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
           "auth/signIn/start",
         );
-        const result = await authService.signIn(email, password);
+        const result = await authService.signIn(email, password, captchaToken);
 
         if (!result.success) {
           set(
@@ -410,14 +411,14 @@ export const useAuthStore = create<AuthStore>()(
           : { success: false, error: result.error };
       },
 
-      signUp: async (email, password, fullName, redirectTo) => {
+      signUp: async (email, password, fullName, redirectTo, captchaToken?) => {
         initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
           "auth/signUp/start",
         );
-        const result = await authService.signUp(email, password, fullName, redirectTo);
+        const result = await authService.signUp(email, password, fullName, redirectTo, captchaToken);
 
         if (!result.success) {
           set(
@@ -470,14 +471,14 @@ export const useAuthStore = create<AuthStore>()(
         return { success: true, data: undefined };
       },
 
-      resetPassword: async (email, redirectTo) => {
+      resetPassword: async (email, redirectTo, captchaToken?) => {
         initServices();
         set(
           { status: "loading", loading: true, error: null },
           undefined,
           "auth/resetPassword/start",
         );
-        const result = await authService.resetPassword(email, redirectTo);
+        const result = await authService.resetPassword(email, redirectTo, captchaToken);
 
         set(
           {

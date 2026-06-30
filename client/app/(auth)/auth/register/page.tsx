@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,6 +42,8 @@ export default function RegisterPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
 
   const passwordStrength = getPasswordStrength(password);
   const passwordsMatch =
@@ -87,8 +90,10 @@ export default function RegisterPage() {
     const redirectTo = `${window.location.origin}/auth/login`;
     const result = await useAuthStore
       .getState()
-      .signUp(email, password, fullName, redirectTo);
+      .signUp(email, password, fullName, redirectTo, captchaToken ?? undefined);
 
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
     setIsLoading(false);
 
     if (!result.success) {
@@ -379,12 +384,19 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              {/* CAPTCHA */}
+              <HCaptcha
+                ref={captchaRef}
+                sitekey={process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY!}
+                onVerify={(token) => setCaptchaToken(token)}
+              />
+
               {/* Submit */}
               <Button
                 type="submit"
                 className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200 disabled:opacity-40 disabled:shadow-none"
                 disabled={
-                  isLoading || passwordsMismatch || passwordStrength < 3
+                  isLoading || passwordsMismatch || passwordStrength < 3 || !captchaToken
                 }
               >
                 {isLoading ? (

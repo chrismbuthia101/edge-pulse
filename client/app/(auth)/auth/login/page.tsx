@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useRef, Suspense } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,8 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,7 +39,10 @@ export function LoginPage() {
     const email = form.get("email") as string;
     const password = form.get("password") as string;
 
-    const result = await useAuthStore.getState().signIn(email, password);
+    const result = await useAuthStore.getState().signIn(email, password, captchaToken ?? undefined);
+
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
 
     if (!result.success) {
       toast.error(result.error ?? "Failed to sign in");
@@ -249,11 +255,18 @@ export function LoginPage() {
                 </Label>
               </div>
 
+              {/* CAPTCHA */}
+              <HCaptcha
+                ref={captchaRef}
+                sitekey={process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY!}
+                onVerify={(token) => setCaptchaToken(token)}
+              />
+
               {/* Submit */}
               <Button
                 type="submit"
                 className="w-full h-11 gap-2 bg-linear-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:brightness-110 transition-all duration-200"
-                disabled={isLoading}
+                disabled={isLoading || !captchaToken}
               >
                 {isLoading ? (
                   <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

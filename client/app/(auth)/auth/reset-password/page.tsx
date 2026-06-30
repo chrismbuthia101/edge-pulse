@@ -56,6 +56,8 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    await useAuthStore.getState().signOut();
+
     setSuccess(true);
     toast.success("Password updated successfully!");
     setTimeout(() => {

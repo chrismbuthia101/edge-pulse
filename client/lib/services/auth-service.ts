@@ -8,8 +8,9 @@ export class AuthService {
   public async signIn(
     email: string,
     password: string,
+    captchaToken?: string,
   ): Promise<Result<{ user: User; session: Session }>> {
-    const result = await this.repository.signInWithPassword(email, password);
+    const result = await this.repository.signInWithPassword(email, password, captchaToken);
     if (result.error) return { success: false, error: result.error.message };
     if (!result.user || !result.session) {
       return { success: false, error: "No user returned" };
@@ -44,8 +45,9 @@ export class AuthService {
     password: string,
     fullName: string,
     redirectTo?: string,
+    captchaToken?: string,
   ): Promise<Result<{ user: User | null; session: Session | null }>> {
-    const result = await this.repository.signUp(email, password, fullName, redirectTo);
+    const result = await this.repository.signUp(email, password, fullName, redirectTo, captchaToken);
     if (result.error) return { success: false, error: result.error.message };
     return {
       success: true,
@@ -56,8 +58,9 @@ export class AuthService {
   public async resetPassword(
     email: string,
     redirectTo?: string,
+    captchaToken?: string,
   ): Promise<Result<void>> {
-    const { error } = await this.repository.resetPassword(email, redirectTo);
+    const { error } = await this.repository.resetPassword(email, redirectTo, captchaToken);
     if (error) return { success: false, error: error.message };
     return { success: true, data: undefined };
   }

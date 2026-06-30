@@ -12,6 +12,7 @@
     "check": "pnpm lint && pnpm typecheck"
   },
   "dependencies": {
+    "@hcaptcha/react-hcaptcha": "^2.0.2",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.109.0",
     "@vercel/speed-insights": "^2.0.0",

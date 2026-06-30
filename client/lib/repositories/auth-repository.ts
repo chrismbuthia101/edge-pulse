@@ -11,6 +11,7 @@ export class AuthRepository {
   public async signInWithPassword(
     email: string,
     password: string,
+    captchaToken?: string,
   ): Promise<{
     user: User | null;
     session: Session | null;
@@ -21,6 +22,7 @@ export class AuthRepository {
         {
           email,
           password,
+          options: { captchaToken },
         },
       );
       if (error) throw error;
@@ -60,6 +62,7 @@ export class AuthRepository {
     password: string,
     fullName: string,
     redirectTo?: string,
+    captchaToken?: string,
   ): Promise<{
     user: User | null;
     session: Session | null;
@@ -72,6 +75,7 @@ export class AuthRepository {
         options: {
           data: { full_name: fullName },
           emailRedirectTo: redirectTo,
+          captchaToken,
         },
       });
       
@@ -89,12 +93,14 @@ export class AuthRepository {
   public async resetPassword(
     email: string,
     redirectTo?: string,
+    captchaToken?: string,
   ): Promise<{ error: Error | null }> {
     try {
       const { error } = await this.supabaseClient.auth.resetPasswordForEmail(
         email,
         {
           redirectTo,
+          captchaToken,
         },
       );
       if (error) throw error;
