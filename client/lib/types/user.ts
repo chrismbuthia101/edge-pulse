@@ -16,6 +16,8 @@ export interface OrganizationProfile {
   role: UserRole;
   account_status: AccountStatus;
   job_title: string | null;
+  mfa_enrolled: boolean;
+  mfa_enrolled_at: string | null;
   joined_at: string;
   updated_at: string;
 }

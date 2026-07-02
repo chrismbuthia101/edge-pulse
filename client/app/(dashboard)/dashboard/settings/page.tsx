@@ -28,13 +28,14 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { createClient } from "@/lib/config/client";
+import Link from "next/link";
 import {
   useOrganizationStore,
   organizationService,
 } from "@/lib/stores/organization-store";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
-import { createClient } from "@/lib/config/client";
 
 type Tab =
   | "profile"
@@ -103,7 +104,7 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
-  const { hasRole, user } = useAuth();
+  const { hasRole, user, mfaEnrolled, role } = useAuth();
   const authUser = useAuthStore((s) => s.user);
   const profiles = useAuthStore((s) => s.profiles);
 
@@ -423,9 +424,10 @@ export default function SettingsPage() {
                   Security Settings
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Change your password and session settings
+                  Manage your account security preferences
                 </p>
               </div>
+
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="currentPassword">Current Password</Label>
@@ -487,33 +489,79 @@ export default function SettingsPage() {
                     special character.
                   </p>
                 </div>
-                <div className="pt-4 border-t border-border space-y-3">
-                  <p className="text-sm font-medium text-foreground">
-                    Session Settings
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-foreground">
-                        Auto-logout after inactivity
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Automatically sign out after 30 minutes
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
+              </div>
+
+              <div className="pt-4 border-t border-border space-y-3">
+                <p className="text-sm font-medium text-foreground">
+                  Session Settings
+                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-foreground">
+                      Auto-logout after inactivity
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically sign out after 30 minutes
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-foreground">
-                        Two-factor authentication
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Require 2FA for sensitive operations
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
+                  <Switch defaultChecked />
                 </div>
+              </div>
+
+              <div className="pt-4 border-t border-border space-y-3">
+                <p className="text-sm font-medium text-foreground">
+                  Two-Factor Authentication (MFA)
+                </p>
+                {mfaEnrolled ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-foreground">
+                        Authenticator app
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Enabled &mdash; you&apos;ll be prompted for a code on sign in
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const result = await useAuthStore
+                          .getState()
+                          .unenrollMFA();
+                        if (result.success) {
+                          await useAuthStore
+                            .getState()
+                            .syncMFAStatusToProfile(false);
+                          toast.success("MFA disabled");
+                        } else {
+                          toast.error(result.error ?? "Failed to disable MFA");
+                        }
+                      }}
+                      className="text-red-500 border-red-500/30 hover:bg-red-500/10"
+                    >
+                      Disable
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-foreground">
+                        Not enabled
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {role === "ORG_ADMIN"
+                          ? "Required for organization admins"
+                          : "Add an extra layer of security to your account"}
+                      </p>
+                    </div>
+                    <Link href="/auth/mfa/enroll">
+                      <Button variant="outline" size="sm">
+                        Enable
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           )}

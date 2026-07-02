@@ -18,6 +18,12 @@ interface AuthContextType {
   activeOrganizationId: string | null;
   hasMultipleOrganizations: boolean;
   switchOrganization: (organizationId: string) => Promise<void>;
+  mfaRequired: boolean;
+  mfaEnrolled: boolean;
+  challengeMFA: () => Promise<void>;
+  verifyMFA: (code: string) => Promise<void>;
+  enrollMFA: () => Promise<void>;
+  unenrollMFA: () => Promise<void>;
 }
 
 export function useAuth(): AuthContextType {
@@ -49,6 +55,32 @@ export function useAuth(): AuthContextType {
       const result = await store.switchOrganization(organizationId);
       if (!result.success) {
         toast.error(result.error ?? "Failed to switch organization");
+      }
+    },
+    mfaRequired: store.mfaRequired,
+    mfaEnrolled: store.mfaEnrolled,
+    challengeMFA: async () => {
+      const result = await store.challengeMFA();
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to start MFA challenge");
+      }
+    },
+    verifyMFA: async (code) => {
+      const result = await store.verifyMFA(code);
+      if (!result.success) {
+        toast.error(result.error ?? "Invalid verification code");
+      }
+    },
+    enrollMFA: async () => {
+      const result = await store.enrollMFA();
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to start MFA enrollment");
+      }
+    },
+    unenrollMFA: async () => {
+      const result = await store.unenrollMFA();
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to unenroll MFA");
       }
     },
   };

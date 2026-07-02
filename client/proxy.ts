@@ -8,6 +8,7 @@ export const config = {
     "/dashboard/:path*",
     "/auth/reset-password",
     "/auth/accept-invite/:path*",
+    "/auth/mfa/:path*",
   ],
 };
 
@@ -57,7 +58,7 @@ export async function proxy(req: NextRequest) {
     const { data: profile, error: profileError } = await supabase
       .schema("organization")
       .from("profiles")
-      .select("account_status, role")
+      .select("account_status, role, mfa_enrolled")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -115,6 +116,27 @@ export async function proxy(req: NextRequest) {
           redirectUrl.pathname = "/auth/login";
           return NextResponse.redirect(redirectUrl);
         }
+      }
+
+      const isMfaEnrollPage = pathname === "/auth/mfa/enroll";
+      const isMfaVerifyPage = pathname === "/auth/mfa/verify";
+
+      if (
+        profile.role === "ORG_ADMIN" &&
+        !profile.mfa_enrolled &&
+        !isMfaEnrollPage &&
+        !isMfaVerifyPage &&
+        profile.account_status === "ACTIVE"
+      ) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/auth/mfa/enroll";
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      if (isMfaEnrollPage && profile.mfa_enrolled) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/dashboard";
+        return NextResponse.redirect(redirectUrl);
       }
     }
   }

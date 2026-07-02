@@ -21,6 +21,50 @@ export class AuthService {
     };
   }
 
+  public async getMFAFactors(): Promise<Result<{
+    all: Array<{ id: string; factor_type: string; status: string; created_at: string; updated_at: string; friendly_name?: string; last_challenged_at?: string }>;
+    totp: Array<{ id: string; factor_type: string; status: string; created_at: string; updated_at: string; friendly_name?: string; last_challenged_at?: string }>;
+  }>> {
+    const result = await this.repository.mfaListFactors();
+    if (result.error) return { success: false, error: result.error.message };
+    if (!result.data) return { success: false, error: "No factors returned" };
+    return { success: true, data: result.data };
+  }
+
+  public async enrollMFA(): Promise<Result<{
+    id: string;
+    totp: { qr_code: string; secret: string; uri: string };
+  }>> {
+    const result = await this.repository.mfaEnroll();
+    if (result.error) return { success: false, error: result.error.message };
+    if (!result.data) return { success: false, error: "No enrollment data returned" };
+    return { success: true, data: result.data };
+  }
+
+  public async challengeMFA(factorId: string): Promise<Result<{ id: string }>> {
+    const result = await this.repository.mfaChallenge(factorId);
+    if (result.error) return { success: false, error: result.error.message };
+    if (!result.data) return { success: false, error: "No challenge data returned" };
+    return { success: true, data: result.data };
+  }
+
+  public async verifyMFA(
+    factorId: string,
+    challengeId: string,
+    code: string,
+  ): Promise<Result<{ user: import("@supabase/supabase-js").User }>> {
+    const result = await this.repository.mfaVerify(factorId, challengeId, code);
+    if (result.error) return { success: false, error: result.error.message };
+    if (!result.data) return { success: false, error: "No verification data returned" };
+    return { success: true, data: result.data };
+  }
+
+  public async unenrollMFA(factorId: string): Promise<Result<void>> {
+    const result = await this.repository.mfaUnenroll(factorId);
+    if (result.error) return { success: false, error: result.error.message };
+    return { success: true, data: undefined };
+  }
+
   public async signInWithOAuth(
     provider: Provider,
     options?: { redirectTo?: string },

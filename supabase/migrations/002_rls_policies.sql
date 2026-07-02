@@ -127,6 +127,24 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION internal.is_org_admin_without_mfa()
+RETURNS BOOLEAN
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public, internal, organization
+AS $$
+DECLARE result BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM organization.profiles
+        WHERE user_id        = (SELECT auth.uid())
+          AND role           = 'ORG_ADMIN'
+          AND account_status = 'ACTIVE'
+          AND mfa_enrolled   = FALSE
+    ) INTO result;
+    RETURN result;
+END;
+$$;
+
 -- ─── Platform Infrastructure Views (zero-trust aggregates) ───────────────────────
 -- These views check is_platform_admin() internally, exposing only aggregate
 -- statistics — never individual tenant rows. This enforces zero-trust:
@@ -980,6 +998,8 @@ REVOKE EXECUTE ON FUNCTION internal.is_platform_admin () FROM PUBLIC;
 
 REVOKE EXECUTE ON FUNCTION internal.is_org_admin () FROM PUBLIC;
 
+REVOKE EXECUTE ON FUNCTION internal.is_org_admin_without_mfa () FROM PUBLIC;
+
 REVOKE EXECUTE ON FUNCTION rls_helpers.is_authenticated_device ()
 FROM PUBLIC;
 
@@ -1017,6 +1037,8 @@ GRANT EXECUTE ON FUNCTION internal.current_device_id () TO authenticated;
 GRANT EXECUTE ON FUNCTION internal.is_platform_admin() TO authenticated;
 
 GRANT EXECUTE ON FUNCTION internal.is_org_admin() TO authenticated;
+
+GRANT EXECUTE ON FUNCTION internal.is_org_admin_without_mfa() TO authenticated;
 
 GRANT EXECUTE ON FUNCTION internal.current_organization_id() TO authenticated;
 

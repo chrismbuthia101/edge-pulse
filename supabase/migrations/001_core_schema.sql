@@ -98,6 +98,8 @@ CREATE TABLE organization.profiles (
     role user_role NOT NULL DEFAULT 'ORG_ANALYST',
     account_status account_status NOT NULL DEFAULT 'PENDING',
     job_title TEXT,
+    mfa_enrolled BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_enrolled_at TIMESTAMPTZ,
     joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
     UNIQUE (user_id, organization_id)
@@ -514,6 +516,7 @@ CREATE TABLE internal.audit_logs (
     ip_address INET,
     user_agent TEXT,
     organization_id UUID REFERENCES organization.organizations (id) ON DELETE CASCADE,
+    metadata JSONB DEFAULT '{}',
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW ()
 );
 
@@ -699,6 +702,43 @@ CREATE TRIGGER tr_sync_queue_updated
 CREATE TRIGGER tr_retention_settings_updated
     BEFORE UPDATE ON public.retention_settings
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ─── MFA Enrollment Audit Trigger ──────────────────────────────────────────
+CREATE OR REPLACE FUNCTION internal.log_mfa_enrollment_change()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    IF OLD.mfa_enrolled IS DISTINCT FROM NEW.mfa_enrolled THEN
+        INSERT INTO internal.audit_logs (
+            user_id,
+            action,
+            resource_type,
+            resource_id,
+            old_values,
+            new_values,
+            severity,
+            organization_id,
+            metadata
+        ) VALUES (
+            NEW.user_id,
+            CASE WHEN NEW.mfa_enrolled THEN 'mfa.enrolled' ELSE 'mfa.unenrolled' END,
+            'organization.profiles',
+            NEW.id,
+            jsonb_build_object('mfa_enrolled', OLD.mfa_enrolled),
+            jsonb_build_object('mfa_enrolled', NEW.mfa_enrolled),
+            'INFO',
+            NEW.organization_id,
+            jsonb_build_object('profile_id', NEW.id)
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tr_mfa_enrollment_audit
+    AFTER UPDATE OF mfa_enrolled ON organization.profiles
+    FOR EACH ROW EXECUTE FUNCTION internal.log_mfa_enrollment_change();
 
 -- ─── Monthly Partition Auto-Creation ──────────────────────────────────────────
 CREATE OR REPLACE FUNCTION internal.create_monthly_partition()

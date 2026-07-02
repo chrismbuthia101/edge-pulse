@@ -55,6 +55,12 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   profileFetchFailed: boolean;
+  mfaRequired: boolean;
+  mfaPendingSession: Session | null;
+  mfaFactors: { all: Array<{ id: string; factor_type: string; status: string; created_at: string; updated_at: string; friendly_name?: string; last_challenged_at?: string }>; totp: Array<{ id: string; factor_type: string; status: string; created_at: string; updated_at: string; friendly_name?: string; last_challenged_at?: string }> };
+  mfaEnrollmentData: { id: string; qr_code: string; secret: string; uri: string } | null;
+  mfaChallenge: { factorId: string; challengeId: string } | null;
+  mfaEnrolled: boolean;
 }
 
 interface AuthActions {
@@ -89,6 +95,13 @@ interface AuthActions {
   hasMultipleOrganizations: () => boolean;
   clearError: () => void;
   setSession: (user: User | null, session: Session | null) => Promise<void>;
+  checkMFAStatus: () => Promise<void>;
+  challengeMFA: () => Promise<Result<void>>;
+  verifyMFA: (code: string) => Promise<Result<void>>;
+  enrollMFA: () => Promise<Result<{ qr_code: string; secret: string; uri: string }>>;
+  confirmMFAEnrollment: (code: string) => Promise<Result<void>>;
+  unenrollMFA: () => Promise<Result<void>>;
+  syncMFAStatusToProfile: (enrolled: boolean) => Promise<void>;
 }
 
 type AuthStore = AuthState & AuthActions;
@@ -103,6 +116,12 @@ const initialState: AuthState = {
   loading: false,
   error: null,
   profileFetchFailed: false,
+  mfaRequired: false,
+  mfaPendingSession: null,
+  mfaFactors: { all: [], totp: [] },
+  mfaEnrollmentData: null,
+  mfaChallenge: null,
+  mfaEnrolled: false,
 };
 
 async function fetchProfiles(userId: string): Promise<OrganizationProfile[]> {
@@ -233,6 +252,7 @@ export const useAuthStore = create<AuthStore>()(
           : null;
         const user = enrichUser(authUser, profiles, userProfile);
         const activeProfile = deriveActiveProfile(profiles, null);
+        const mfaEnrolled = profiles.some((p) => p.mfa_enrolled === true);
 
         set(
           {
@@ -242,6 +262,9 @@ export const useAuthStore = create<AuthStore>()(
             activeOrganizationId: activeProfile?.organization_id ?? null,
             status: "authenticated",
             loading: false,
+            mfaRequired: false,
+            mfaPendingSession: null,
+            mfaEnrolled,
           },
           undefined,
           "auth/initialize/success",
@@ -303,6 +326,7 @@ export const useAuthStore = create<AuthStore>()(
           profiles,
           get().activeOrganizationId,
         );
+        const mfaEnrolled = profiles.some((p) => p.mfa_enrolled === true);
 
         set(
           {
@@ -313,6 +337,9 @@ export const useAuthStore = create<AuthStore>()(
               activeProfile?.organization_id ?? get().activeOrganizationId,
             status: "authenticated",
             loading: false,
+            mfaRequired: false,
+            mfaPendingSession: null,
+            mfaEnrolled,
           },
           undefined,
           "auth/setSession/authenticated",
@@ -340,6 +367,29 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         const { user: authUser, session } = result.data;
+
+        const factorsResult = await authService.getMFAFactors();
+        const hasVerifiedFactors = factorsResult.success &&
+          factorsResult.data.all.some((f) => f.status === "verified");
+        const alreadyTrusted = factorsResult.success &&
+          factorsResult.data.totp.length > 0;
+
+        if (hasVerifiedFactors && !alreadyTrusted) {
+          set(
+            {
+              status: "unauthenticated",
+              loading: false,
+              mfaRequired: true,
+              mfaPendingSession: session,
+              mfaFactors: factorsResult.data,
+              error: null,
+            },
+            undefined,
+            "auth/signIn/mfaRequired",
+          );
+          return { success: true, data: undefined };
+        }
+
         const [profiles, userProfileResult] = await Promise.all([
           fetchProfiles(authUser.id),
           userService.getUserById(authUser.id),
@@ -349,6 +399,7 @@ export const useAuthStore = create<AuthStore>()(
           : null;
         const user = enrichUser(authUser, profiles, userProfile);
         const activeProfile = deriveActiveProfile(profiles, null);
+        const mfaEnrolled = profiles.some((p) => p.mfa_enrolled === true);
 
         set(
           {
@@ -359,6 +410,9 @@ export const useAuthStore = create<AuthStore>()(
             status: "authenticated",
             loading: false,
             error: null,
+            mfaRequired: false,
+            mfaPendingSession: null,
+            mfaEnrolled,
           },
           undefined,
           "auth/signIn/success",
@@ -695,6 +749,232 @@ export const useAuthStore = create<AuthStore>()(
         return (
           get().profiles.filter((p) => p.organization_id !== null).length > 1
         );
+      },
+
+      // ─── MFA actions ──────────────────────────────────────────────────────
+
+      checkMFAStatus: async () => {
+        initServices();
+        const factorsResult = await authService.getMFAFactors();
+        if (factorsResult.success) {
+          set(
+            { mfaFactors: factorsResult.data },
+            undefined,
+            "auth/checkMFAStatus",
+          );
+        }
+      },
+
+      challengeMFA: async () => {
+        initServices();
+        const factors = get().mfaFactors;
+        const verifiedFactor = factors.all.find((f) => f.status === "verified");
+        if (!verifiedFactor) {
+          return { success: false, error: "No verified MFA factors found" };
+        }
+
+        const result = await authService.challengeMFA(verifiedFactor.id);
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+
+        set(
+          {
+            mfaChallenge: {
+              factorId: verifiedFactor.id,
+              challengeId: result.data.id,
+            },
+          },
+          undefined,
+          "auth/challengeMFA/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      verifyMFA: async (code) => {
+        initServices();
+        const challenge = get().mfaChallenge;
+        if (!challenge) {
+          return { success: false, error: "No active MFA challenge" };
+        }
+
+        const result = await authService.verifyMFA(
+          challenge.factorId,
+          challenge.challengeId,
+          code,
+        );
+
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+
+        const pendingSession = get().mfaPendingSession;
+        if (pendingSession?.user) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(pendingSession.user.id),
+            userService.getUserById(pendingSession.user.id),
+          ]);
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
+          const user = enrichUser(pendingSession.user, profiles, userProfile);
+          const activeProfile = deriveActiveProfile(profiles, null);
+          const mfaEnrolled = profiles.some((p) => p.mfa_enrolled === true);
+
+          set(
+            {
+              user,
+              session: pendingSession,
+              profiles,
+              activeOrganizationId:
+                activeProfile?.organization_id ?? null,
+              status: "authenticated",
+              loading: false,
+              mfaRequired: false,
+              mfaPendingSession: null,
+              mfaChallenge: null,
+              mfaEnrolled,
+            },
+            undefined,
+            "auth/verifyMFA/success",
+          );
+        }
+
+        return { success: true, data: undefined };
+      },
+
+      enrollMFA: async () => {
+        initServices();
+        const result = await authService.enrollMFA();
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+
+        set(
+          {
+            mfaEnrollmentData: {
+              id: result.data.id,
+              qr_code: result.data.totp.qr_code,
+              secret: result.data.totp.secret,
+              uri: result.data.totp.uri,
+            },
+          },
+          undefined,
+          "auth/enrollMFA/success",
+        );
+
+        return {
+          success: true,
+          data: {
+            qr_code: result.data.totp.qr_code,
+            secret: result.data.totp.secret,
+            uri: result.data.totp.uri,
+          },
+        };
+      },
+
+      confirmMFAEnrollment: async (code) => {
+        initServices();
+        const enrollmentData = get().mfaEnrollmentData;
+        if (!enrollmentData) {
+          return { success: false, error: "No active enrollment" };
+        }
+
+        const challengeResult = await authService.challengeMFA(enrollmentData.id);
+        if (!challengeResult.success) {
+          return { success: false, error: challengeResult.error };
+        }
+
+        const verifyResult = await authService.verifyMFA(
+          enrollmentData.id,
+          challengeResult.data.id,
+          code,
+        );
+
+        if (!verifyResult.success) {
+          return { success: false, error: verifyResult.error };
+        }
+
+        set(
+          {
+            mfaEnrollmentData: null,
+            mfaChallenge: null,
+          },
+          undefined,
+          "auth/confirmMFAEnrollment/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      unenrollMFA: async () => {
+        initServices();
+        const factors = get().mfaFactors;
+        const verifiedFactor = factors.all.find((f) => f.status === "verified");
+        if (!verifiedFactor) {
+          return { success: false, error: "No verified MFA factors found" };
+        }
+
+        const result = await authService.unenrollMFA(verifiedFactor.id);
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+
+        const updatedFactors = get().mfaFactors;
+        const stillHasFactor = updatedFactors.all.length > 0;
+        const mfaEnrolled = stillHasFactor;
+
+        set(
+          {
+  mfaFactors: { all: [], totp: [] },
+            mfaChallenge: null,
+            mfaEnrollmentData: null,
+            mfaEnrolled,
+          },
+          undefined,
+          "auth/unenrollMFA/success",
+        );
+
+        return { success: true, data: undefined };
+      },
+
+      syncMFAStatusToProfile: async (enrolled) => {
+        initServices();
+        const currentUser = get().user;
+        if (!currentUser) return;
+
+        try {
+          const userId = currentUser.id;
+          const profiles = get().profiles;
+          const activeProfile = deriveActiveProfile(
+            profiles,
+            get().activeOrganizationId,
+          );
+          const orgId = activeProfile?.organization_id;
+
+          if (orgId) {
+            await supabase
+              .schema("organization")
+              .from("profiles")
+              .update({
+                mfa_enrolled: enrolled,
+                mfa_enrolled_at: enrolled
+                  ? new Date().toISOString()
+                  : null,
+              })
+              .eq("user_id", userId)
+              .eq("organization_id", orgId);
+          }
+
+          set(
+            { mfaEnrolled: enrolled },
+            undefined,
+            "auth/syncMFAStatus",
+          );
+        } catch {
+          // Silently fail — profile update is best-effort
+        }
       },
     }),
     { name: "auth-store" },
