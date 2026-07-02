@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import Image from "next/image";
 import { Save, CheckCircle2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import { validateFile } from "@/lib/utils/file-validation";
 import { toast } from "sonner";
 
 export default function AdminProfilePage() {
-  const { user: authUser, role } = useAuth();
+  const { role } = useAuth();
   const authStoreUser = useAuthStore((s) => s.user);
 
   useEffect(() => {

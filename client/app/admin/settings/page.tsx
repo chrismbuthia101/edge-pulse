@@ -36,7 +36,7 @@ const tabs: { id: Tab; label: string; icon: typeof User }[] = [
 ];
 
 export default function AdminSettingsPage() {
-  const { user: authUser, role, mfaEnrolled } = useAuth();
+  const { role, mfaEnrolled } = useAuth();
   const authStoreUser = useAuthStore((s) => s.user);
   const { setTheme, theme } = useTheme();
 
