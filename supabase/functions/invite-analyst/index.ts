@@ -9,6 +9,21 @@ const corsHeaders = {
 };
 
 const MAX_INVITES = 100;
+const RATE_LIMIT_MAX_REQUESTS = 5;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(callerId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitStore.get(callerId);
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(callerId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX_REQUESTS) return false;
+  return true;
+}
 
 interface SingleInvite {
   email: string;
@@ -82,6 +97,13 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ success: false, error: "No organization associated" }),
         { status: 400, headers: corsHeaders },
+      );
+    }
+
+    if (!checkRateLimit(inviterProfile.user_id)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Too many requests. Try again later." }),
+        { status: 429, headers: corsHeaders },
       );
     }
 

@@ -34,6 +34,7 @@ type DeviceEnrollmentStore = typeof initialState & {
   deleteToken: (tokenId: string) => Promise<void>;
   setTokens: (tokens: EnrollmentToken[]) => void;
   clearError: () => void;
+  clearTokenSecret: (tokenId: string) => void;
   getTokenSecret: (tokenId: string) => string | undefined;
 };
 
@@ -134,6 +135,13 @@ export const useDeviceEnrollmentStore = create<DeviceEnrollmentStore>()(
 
       setTokens: (tokens) => set({ tokens }),
       clearError: () => set({ error: null }),
+      clearTokenSecret: (tokenId: string) => {
+        set((state) => {
+          const rest = { ...state.tokenSecrets };
+          delete rest[tokenId];
+          return { tokenSecrets: rest };
+        });
+      },
       getTokenSecret: (tokenId: string) => get().tokenSecrets[tokenId],
     }),
     { name: "DeviceEnrollmentStore" },

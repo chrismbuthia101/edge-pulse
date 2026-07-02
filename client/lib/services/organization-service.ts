@@ -110,6 +110,9 @@ export class OrganizationService {
         return { error: "Supabase URL not configured" };
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+
       const response = await fetch(
         `${supabaseUrl}/functions/v1/setup-organization`,
         {
@@ -119,9 +122,11 @@ export class OrganizationService {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify(data),
+          signal: controller.signal,
         },
       );
 
+      clearTimeout(timeout);
       const result = await response.json();
 
       if (!response.ok) {
@@ -151,6 +156,9 @@ export class OrganizationService {
         return { result: null, error: "Supabase URL not configured" };
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+
       const response = await fetch(
         `${supabaseUrl}/functions/v1/invite-analyst`,
         {
@@ -160,9 +168,11 @@ export class OrganizationService {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify(data),
+          signal: controller.signal,
         },
       );
 
+      clearTimeout(timeout);
       const result = await response.json();
 
       if (!response.ok) {

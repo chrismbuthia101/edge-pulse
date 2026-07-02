@@ -4,6 +4,22 @@ import { crypto } from "std/crypto/mod.ts";
 import { createClient } from "@supabase/supabase-js";
 import { encodeBase64 } from "std/encoding/base64.ts";
 
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(clientIp: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitStore.get(clientIp);
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) return false;
+  return true;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -35,6 +51,14 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ success: false, error: "Method not allowed" }),
         { status: 405, headers: corsHeaders },
+      );
+    }
+
+    const clientIp = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown";
+    if (!checkRateLimit(clientIp)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Too many attempts. Try again later." }),
+        { status: 429, headers: corsHeaders },
       );
     }
 

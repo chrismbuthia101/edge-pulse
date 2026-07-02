@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { SkipToContent } from "@/components/ui/skip-to-content";
 import AuthBootstrap from "@/lib/auth/AuthBootstrap";
+import SessionTimeout from "@/lib/auth/session-timeout";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -48,6 +49,7 @@ export default function RootLayout({
           <TooltipProvider>
             <SkipToContent />
             <AuthBootstrap />
+            <SessionTimeout />
             {children}
             <Toaster />
           </TooltipProvider>

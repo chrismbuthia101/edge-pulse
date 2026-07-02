@@ -101,7 +101,9 @@ serve(async (req: Request) => {
 
     let query = supabase.from("retention_settings").select("*");
 
-    if (filters.organization_id) {
+    if (effectiveOrgId) {
+      query = query.eq("organization_id", effectiveOrgId);
+    } else if (filters.organization_id) {
       query = query.eq("organization_id", filters.organization_id);
     }
     if (filters.device_id) {
