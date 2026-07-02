@@ -6,7 +6,7 @@ const csp = [
   "frame-src https://hcaptcha.com https://*.hcaptcha.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://*.supabase.co https://api.github.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com https://*.hcaptcha.com",
   "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",

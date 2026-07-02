@@ -116,7 +116,7 @@ CREATE POLICY "users: insert own avatar"
   WITH CHECK (
     bucket_id = 'avatars'
     AND auth.role() = 'authenticated'
-    AND auth.uid()::text = (storage.foldername(name))[1]
+    AND auth.uid()::text = (storage.foldername(name))[2]
   );
 
 CREATE POLICY "users: update own avatar"
@@ -124,7 +124,7 @@ CREATE POLICY "users: update own avatar"
   USING (
     bucket_id = 'avatars'
     AND auth.role() = 'authenticated'
-    AND auth.uid()::text = (storage.foldername(name))[1]
+    AND auth.uid()::text = (storage.foldername(name))[2]
   );
 
 CREATE POLICY "users: delete own avatar"
@@ -132,5 +132,5 @@ CREATE POLICY "users: delete own avatar"
   USING (
     bucket_id = 'avatars'
     AND auth.role() = 'authenticated'
-    AND auth.uid()::text = (storage.foldername(name))[1]
+    AND auth.uid()::text = (storage.foldername(name))[2]
   );

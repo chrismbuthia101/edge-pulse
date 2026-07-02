@@ -180,7 +180,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           {notifOpen && (
             <>
               <div
-                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40"
+                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40 top-16"
                 onClick={closeNotifications}
               />
 
@@ -338,7 +338,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           {avatarMenuOpen && (
             <>
               <div
-                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40"
+                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40 top-16"
                 onClick={() => setAvatarMenuOpen(false)}
               />
               <motion.div

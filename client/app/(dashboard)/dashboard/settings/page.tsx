@@ -412,22 +412,35 @@ export default function SettingsPage() {
                     disabled={avatarUploading}
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <p className="text-sm font-medium text-foreground">
                     {authUser?.user_metadata?.full_name as string || "User"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     PNG or JPEG. Max 2MB.
                   </p>
-                  {avatarUrl && (
-                    <button
-                      onClick={handleAvatarRemove}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
                       disabled={avatarUploading}
-                      className="text-xs text-destructive hover:underline"
+                      className="gap-1.5"
                     >
-                      Remove avatar
-                    </button>
-                  )}
+                      <Upload className="h-3.5 w-3.5" />
+                      {avatarUploading ? "Uploading..." : avatarUrl ? "Change Photo" : "Upload Photo"}
+                    </Button>
+                    {avatarUrl && (
+                      <button
+                        onClick={handleAvatarRemove}
+                        disabled={avatarUploading}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -50,17 +50,19 @@ export function LoginPage() {
       return;
     }
 
+    const state = useAuthStore.getState();
+    if (state.mfaRequired) {
+      setIsLoading(false);
+      router.push("/auth/mfa/verify");
+      return;
+    }
+
     const next = searchParams.get("next") ?? undefined;
-    const {
-      profiles: currentProfiles,
-      activeOrganizationId: currentOrgId,
-      profileFetchFailed,
-    } = useAuthStore.getState();
     const destination = resolvePostLoginRoute(
-      currentProfiles,
-      currentOrgId,
+      state.profiles,
+      state.activeOrganizationId,
       next,
-      profileFetchFailed,
+      state.profileFetchFailed,
     );
 
     setIsLoading(false);
