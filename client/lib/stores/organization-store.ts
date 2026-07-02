@@ -8,6 +8,7 @@ import { OrganizationRepository } from "@/lib/repositories/organization-reposito
 import { StorageRepository } from "@/lib/repositories/storage-repository";
 import { createClient } from "@/lib/config/client";
 import type { Organization, Billing } from "@/lib/types/organization";
+import type { Result } from "@/lib/types/shared";
 
 interface InviteResult {
   result: unknown;
@@ -26,6 +27,8 @@ interface OrganizationStore {
   fetchOrganizationById: (id: string) => Promise<void>;
   fetchBilling: (orgId: string) => Promise<void>;
   updateOrganizationData: (orgId: string, data: Partial<Organization>) => Promise<void>;
+  uploadOrganizationLogo: (orgId: string, file: File) => Promise<Result<string>>;
+  deleteOrganizationLogo: (orgId: string) => Promise<Result<void>>;
   setupOrganization: (
     data: SetupOrganizationData,
     accessToken: string,
@@ -116,6 +119,38 @@ export const useOrganizationStore = create<OrganizationStore>((set) => ({
         error: error instanceof Error ? error.message : "Failed to update organization",
       });
     }
+  },
+
+  uploadOrganizationLogo: async (orgId, file) => {
+    set({ loading: true, error: null });
+    const result = await organizationService.uploadLogo(orgId, file);
+    if (result.success) {
+      try {
+        const org = await organizationService.findById(orgId);
+        set({ currentOrganization: org, loading: false });
+      } catch {
+        set({ loading: false });
+      }
+    } else {
+      set({ loading: false, error: result.error ?? "Failed to upload logo" });
+    }
+    return result;
+  },
+
+  deleteOrganizationLogo: async (orgId) => {
+    set({ loading: true, error: null });
+    const result = await organizationService.deleteLogo(orgId);
+    if (result.success) {
+      try {
+        const org = await organizationService.findById(orgId);
+        set({ currentOrganization: org, loading: false });
+      } catch {
+        set({ loading: false });
+      }
+    } else {
+      set({ loading: false, error: result.error ?? "Failed to delete logo" });
+    }
+    return result;
   },
 
   inviteAnalyst: async (data, accessToken) => {

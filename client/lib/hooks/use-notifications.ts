@@ -10,8 +10,9 @@ import { getSyncQueueService } from "@/lib/stores/sync-queue-store";
 
 export type ConnStatus = "live" | "offline" | "syncing";
 
-export function useNotifications() {
+export function useNotifications(options?: { notificationsPath?: string }) {
   const router = useRouter();
+  const notificationsPath = options?.notificationsPath ?? "/dashboard/notifications";
 
   const authUser = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.loading);
@@ -190,8 +191,8 @@ export function useNotifications() {
 
   const handleViewAllNotifications = useCallback(() => {
     setNotifOpen(false);
-    router.push("/dashboard/notifications");
-  }, [router]);
+    router.push(notificationsPath);
+  }, [router, notificationsPath]);
 
   const avatarUrl = authUser?.avatar_url ?? null;
 

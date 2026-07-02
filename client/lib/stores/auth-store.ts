@@ -81,6 +81,8 @@ interface AuthActions {
   resetPassword: (email: string, redirectTo?: string, captchaToken?: string) => Promise<Result<void>>;
   updatePassword: (password: string) => Promise<Result<void>>;
   signOut: () => Promise<Result<void>>;
+  uploadAvatar: (userId: string, file: File) => Promise<Result<string>>;
+  deleteAvatar: (userId: string) => Promise<Result<void>>;
   updateProfile: (
     userId: string,
     data: { full_name?: string; username?: string; avatar_url?: string | null },
@@ -605,6 +607,46 @@ export const useAuthStore = create<AuthStore>()(
         );
 
         return { success: true, data: undefined };
+      },
+
+      uploadAvatar: async (userId, file) => {
+        initServices();
+        const result = await userService.uploadAvatar(userId, file);
+        if (result.success) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(userId),
+            userService.getUserById(userId),
+          ]);
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
+          const currentUser = get().user;
+          if (currentUser) {
+            const user = enrichUser(currentUser, profiles, userProfile);
+            set({ user, profiles }, undefined, "auth/uploadAvatar/success");
+          }
+        }
+        return result;
+      },
+
+      deleteAvatar: async (userId) => {
+        initServices();
+        const result = await userService.deleteAvatar(userId);
+        if (result.success) {
+          const [profiles, userProfileResult] = await Promise.all([
+            fetchProfiles(userId),
+            userService.getUserById(userId),
+          ]);
+          const userProfile = userProfileResult.success
+            ? userProfileResult.data
+            : null;
+          const currentUser = get().user;
+          if (currentUser) {
+            const user = enrichUser(currentUser, profiles, userProfile);
+            set({ user, profiles }, undefined, "auth/deleteAvatar/success");
+          }
+        }
+        return result;
       },
 
       updateProfile: async (userId, data) => {

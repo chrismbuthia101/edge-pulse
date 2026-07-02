@@ -11,6 +11,7 @@ import {
   Building2,
   LogOut,
   User,
+  Settings,
   Shield,
   X,
 } from "lucide-react";
@@ -69,7 +70,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
     handleNotificationClick,
     handleNotificationKeyDown,
     handleViewAllNotifications,
-  } = useNotifications();
+  } = useNotifications({ notificationsPath: "/admin/notifications" });
 
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-2 lg:gap-4 sticky top-0 z-30 dark:border-white/10 dark:bg-[#0a0f1d]/80 shadow-sm shadow-black/5 dark:shadow-black/20">
@@ -179,7 +180,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           {notifOpen && (
             <>
               <div
-                className="fixed inset-0 z-40"
+                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40"
                 onClick={closeNotifications}
               />
 
@@ -337,7 +338,7 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
           {avatarMenuOpen && (
             <>
               <div
-                className="fixed inset-0 z-40"
+                className="fixed inset-0 z-40 bg-blue-50/30 dark:bg-blue-950/40"
                 onClick={() => setAvatarMenuOpen(false)}
               />
               <motion.div
@@ -350,12 +351,21 @@ export function AdminTopBar({ onMobileMenuToggle }: TopBarProps) {
                 <div className="p-2 space-y-0.5">
                   <button
                     onClick={() => {
-                      window.location.href = "/dashboard/settings";
+                      window.location.href = "/admin/profile";
                     }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
                   >
                     <User className="h-4 w-4 text-muted-foreground" />
-                    Profile & Settings
+                    Profile
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.location.href = "/admin/settings";
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted/60 transition-colors"
+                  >
+                    <Settings className="h-4 w-4 text-muted-foreground" />
+                    Settings
                   </button>
                   {hasMultipleOrgs && (
                     <button

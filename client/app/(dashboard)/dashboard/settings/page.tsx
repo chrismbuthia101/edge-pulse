@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import {
@@ -32,10 +32,11 @@ import { createClient } from "@/lib/config/client";
 import Link from "next/link";
 import {
   useOrganizationStore,
-  organizationService,
 } from "@/lib/stores/organization-store";
 import { DeviceEnrollment } from "@/components/dashboard/device-enrollment";
 import { NetworkTopology } from "@/components/dashboard/network-topology";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { validateFile } from "@/lib/utils/file-validation";
 
 type Tab =
   | "profile"
@@ -152,6 +153,11 @@ export default function SettingsPage() {
   const [billingCycle, setBillingCycle] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
 
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(authUser?.avatar_url ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const orgLogoFileInputRef = useRef<HTMLInputElement>(null);
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -164,16 +170,58 @@ export default function SettingsPage() {
 
     setOrgLogoUploading(true);
     try {
-      const result = await organizationService.uploadLogo(orgId, file);
+      const result = await useOrganizationStore.getState().uploadOrganizationLogo(orgId, file);
       if (!result.success) {
         throw new Error(result.error ?? "Failed to upload logo");
       }
-      setOrgLogoUrl(result.data);
+      const org = useOrganizationStore.getState().currentOrganization;
+      setOrgLogoUrl(org?.logo_url ?? result.data);
       toast.success("Logo uploaded successfully");
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Failed to upload logo");
     } finally {
       setOrgLogoUploading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const error = await validateFile(file);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const result = await useAuthStore.getState().uploadAvatar(authUser!.id, file);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to upload avatar");
+      }
+      setAvatarUrl(result.data);
+      toast.success("Avatar updated");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Failed to upload avatar");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    setAvatarUploading(true);
+    try {
+      const result = await useAuthStore.getState().deleteAvatar(authUser!.id);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to remove avatar");
+      }
+      setAvatarUrl(null);
+      toast.success("Avatar removed");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Failed to remove avatar");
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
@@ -324,55 +372,116 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">
-                  Profile Information
+                  Avatar
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Update your account details
+                  Click the avatar to upload a photo
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="h-9"
+
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="cursor-pointer group"
+                  >
+                    <Avatar size="lg" className="w-20 h-20 ring-2 ring-border ring-offset-2 ring-offset-card">
+                      {avatarUrl ? (
+                        <AvatarImage src={avatarUrl} alt="Avatar" />
+                      ) : null}
+                      <AvatarFallback className="text-lg font-bold bg-muted">
+                        {(() => {
+                          const name = authUser?.user_metadata?.full_name as string | undefined;
+                          if (name) {
+                            return name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+                          }
+                          return authUser?.email?.[0]?.toUpperCase() ?? "U";
+                        })()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Upload className="h-5 w-5 text-white" />
+                    </div>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={avatarUploading}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="jobTitle">Job Title</Label>
-                  <Input
-                    id="jobTitle"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="org">Organization</Label>
-                  <Input
-                    id="org"
-                    value={org}
-                    onChange={(e) => setOrg(e.target.value)}
-                    className="h-9"
-                  />
+                  <p className="text-sm font-medium text-foreground">
+                    {authUser?.user_metadata?.full_name as string || "User"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PNG or JPEG. Max 2MB.
+                  </p>
+                  {avatarUrl && (
+                    <button
+                      onClick={handleAvatarRemove}
+                      disabled={avatarUploading}
+                      className="text-xs text-destructive hover:underline"
+                    >
+                      Remove avatar
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Role</Label>
-                <div className="h-9 px-3 flex items-center bg-muted/50 border border-border rounded-md text-sm text-muted-foreground">
-                  {user?.role || "—"}
+
+              <div className="pt-6 border-t border-border">
+                <h2 className="text-base font-semibold text-foreground mb-1">
+                  Profile Information
+                </h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Update your account details
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <Input
+                      id="fullName"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="jobTitle">Job Title</Label>
+                    <Input
+                      id="jobTitle"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="org">Organization</Label>
+                    <Input
+                      id="org"
+                      value={org}
+                      onChange={(e) => setOrg(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Role</Label>
+                  <div className="h-9 px-3 flex items-center bg-muted/50 border border-border rounded-md text-sm text-muted-foreground">
+                    {user?.role || "—"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -785,50 +894,72 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Logo</Label>
-                  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-                    {orgLogoUrl ? (
-                      <div className="w-12 h-12 rounded-md overflow-hidden bg-background flex items-center justify-center border border-border/50">
-                        <Image
-                          src={orgLogoUrl}
-                          alt={`${orgName} logo`}
-                          className="w-full h-full object-contain"
-                          width={48}
-                          height={48}
-                        />
+                  <div className="flex items-center gap-4 p-4 rounded-xl border border-border bg-muted/30">
+                    <div className="relative">
+                      <div
+                        onClick={() => orgLogoFileInputRef.current?.click()}
+                        className="cursor-pointer group"
+                      >
+                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-background flex items-center justify-center border border-border/50 ring-2 ring-border ring-offset-2 ring-offset-card">
+                          {orgLogoUrl ? (
+                            <Image
+                              src={orgLogoUrl}
+                              alt={`${orgName} logo`}
+                              className="w-full h-full object-contain"
+                              width={64}
+                              height={64}
+                            />
+                          ) : (
+                            <Building2 className="h-7 w-7 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="absolute inset-0 rounded-xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Upload className="h-5 w-5 text-white" />
+                        </div>
                       </div>
-                    ) : (
-                      <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center border border-border/50">
-                        <Building2 className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="flex-1 text-xs text-muted-foreground">
-                      <p className="font-medium text-foreground">
+                      <input
+                        ref={orgLogoFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        className="hidden"
+                        onChange={handleLogoUpload}
+                        disabled={orgLogoUploading}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium text-foreground">
                         {orgName} Logo
                       </p>
-                      <p>{orgLogoUrl ? "Uploaded during organization setup" : "No logo uploaded"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {orgLogoUrl ? "Click to replace" : "Click to upload a logo"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PNG or JPEG. Max 2MB.
+                      </p>
+                      {orgLogoUrl && (
+                        <button
+                          onClick={async () => {
+                            const orgId = profiles[0]?.organization_id;
+                            if (!orgId) return;
+                            setOrgLogoUploading(true);
+                            try {
+                              const result = await useOrganizationStore.getState().deleteOrganizationLogo(orgId);
+                              if (!result.success) throw new Error(result.error);
+                              setOrgLogoUrl(null);
+                              toast.success("Logo removed");
+                            } catch {
+                              toast.error("Failed to remove logo");
+                            } finally {
+                              setOrgLogoUploading(false);
+                            }
+                          }}
+                          disabled={orgLogoUploading}
+                          className="text-xs text-destructive hover:underline"
+                        >
+                          Remove logo
+                        </button>
+                      )}
                     </div>
-                    <input
-                      type="file"
-                      id="logo-upload"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleLogoUpload}
-                      disabled={orgLogoUploading}
-                    />
-                    <label htmlFor="logo-upload">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={orgLogoUploading}
-                        asChild
-                      >
-                        <span>
-                          <Upload className="h-3.5 w-3.5 mr-1.5" />
-                          {orgLogoUploading ? "Uploading..." : "Upload"}
-                        </span>
-                      </Button>
-                    </label>
                   </div>
                 </div>
               </div>
