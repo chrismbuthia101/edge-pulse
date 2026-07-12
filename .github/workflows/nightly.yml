@@ -4,7 +4,7 @@ on:
     - cron: "0 3 * * *"
 jobs:
   audit:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: ./edge-agent
@@ -18,7 +18,7 @@ jobs:
       - run: pip-audit --requirement <(poetry export --without-hashes)
 
   container-scan:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: aquasecurity/trivy-action@master
